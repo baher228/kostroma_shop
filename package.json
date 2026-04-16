@@ -6,9 +6,20 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "backend:docker:up": "docker compose up -d --build postgres backend",
+    "backend:docker:down": "docker compose down",
+    "backend:docker:logs": "docker compose logs -f backend postgres",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:build": "npm --prefix backend run build",
+    "backend:start": "npm --prefix backend run start",
+    "backend:typecheck": "npm --prefix backend run typecheck",
+    "backend:db:migrate": "npm --prefix backend run db:migrate"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.33",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",

@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kgb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kgb
+      POSTGRES_USER: kgb
+      POSTGRES_PASSWORD: kgb_dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kgb -d kgb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kgb-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      JWT_SECRET: localhost_dev_secret_7f4a6f9d20e34a77b4c1a092f6e18c75
+      CORS_ORIGIN: "*"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: kgb
+      POSTGRES_PASSWORD: kgb_dev_password
+      POSTGRES_DB: kgb
+      POSTGRES_SSL: "false"
+    ports:
+      - "4000:4000"
+
+volumes:
+  postgres_data:

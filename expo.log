@@ -1,0 +1,7 @@
+env: load .env
+env: export EXPO_PUBLIC_API_URL
+Starting project at C:\Users\1\kgb
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+Logs for your project will appear below.

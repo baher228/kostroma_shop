@@ -42,6 +42,8 @@ export const TasksPanel = ({ session, fullHeight = false }: TasksPanelProps) => 
   const [title, setTitle] = useState('');
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const [savingTask, setSavingTask] = useState(false);
+  const [deadlineAt, setDeadlineAt] = useState('');
+  const [requiresPhotoConfirmation, setRequiresPhotoConfirmation] = useState(false);
   const [pendingTaskIds, setPendingTaskIds] = useState<Record<string, boolean>>({});
 
   const canManage = session.user.role === 'manager';
@@ -89,9 +91,17 @@ export const TasksPanel = ({ session, fullHeight = false }: TasksPanelProps) => 
     }
     try {
       setSavingTask(true);
-      const created = await tasksApi.create(session.token, normalizedTitle, selectedWorkerId);
+      const created = await tasksApi.create(
+        session.token,
+        normalizedTitle,
+        selectedWorkerId,
+        deadlineAt.trim() || null,
+        requiresPhotoConfirmation,
+      );
       setTasks((current) => [created, ...current]);
       setTitle('');
+      setDeadlineAt('');
+      setRequiresPhotoConfirmation(false);
       setError('');
     } catch (createError) {
       setError(errorMessage(createError));
@@ -158,6 +168,21 @@ export const TasksPanel = ({ session, fullHeight = false }: TasksPanelProps) => 
             placeholderTextColor="#7a8b7f"
             maxLength={240}
           />
+          <TextInput
+            value={deadlineAt}
+            onChangeText={setDeadlineAt}
+            style={styles.titleInput}
+            placeholder="Дедлайн ISO (например 2026-04-20T12:00:00.000Z)"
+            placeholderTextColor="#7a8b7f"
+          />
+          <Pressable
+            style={[styles.workerChip, requiresPhotoConfirmation && styles.workerChipActive]}
+            onPress={() => setRequiresPhotoConfirmation((current) => !current)}
+          >
+            <Text style={[styles.workerChipText, requiresPhotoConfirmation && styles.workerChipTextActive]}>
+              Фото-подтверждение {requiresPhotoConfirmation ? 'обязательно' : 'необязательно'}
+            </Text>
+          </Pressable>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workerList}>
             {workers.map((worker) => {
               const active = selectedWorkerId === worker.id;
@@ -198,6 +223,10 @@ export const TasksPanel = ({ session, fullHeight = false }: TasksPanelProps) => 
                   {statusLabel(task.status)}
                 </Text>
                 <Text style={styles.taskDate}>Создана: {formatDate(task.createdAt)}</Text>
+                {!!task.deadlineAt && <Text style={styles.taskDate}>Дедлайн: {formatDate(task.deadlineAt)}</Text>}
+                {!!task.completedAt && <Text style={styles.taskDate}>Выполнена: {formatDate(task.completedAt)}</Text>}
+                {task.overdue && <Text style={styles.error}>Просрочена</Text>}
+                {task.requiresPhotoConfirmation && <Text style={styles.taskMeta}>Требуется фото-подтверждение</Text>}
                 <View style={styles.taskActions}>
                   {canManage ? (
                     <>
@@ -257,10 +286,10 @@ const styles = StyleSheet.create({
     color: '#1f2f26',
   },
   refreshButton: {
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: '#dbe4dc',
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   refreshButtonText: {
     color: '#294033',
@@ -287,12 +316,12 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   workerChip: {
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: '#edf3ee',
     borderWidth: 1,
     borderColor: '#c8d3ca',
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 10,
   },
   workerChipActive: {
     backgroundColor: '#2f6f4f',
@@ -307,9 +336,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   createButton: {
-    borderRadius: 11,
+    borderRadius: 12,
     backgroundColor: '#2f6f4f',
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   createButtonDisabled: {
@@ -377,7 +406,7 @@ const styles = StyleSheet.create({
   actionButton: {
     borderRadius: 9,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 10,
   },
   statusButton: {
     backgroundColor: '#2f6f4f',

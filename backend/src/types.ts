@@ -43,4 +43,33 @@ export type Task = {
   status: TaskStatus;
   createdAt: string;
   completedAt: string | null;
+  deadlineAt: string | null;
+  requiresPhotoConfirmation: boolean;
+  photoConfirmationUrl: string | null;
+  photoConfirmedAt: string | null;
+  overdue: boolean;
+};
+
+export type SupportCategory = 'technical_failure' | 'suppliers_failure' | 'client_conflict';
+export type SupportThreadStatus = 'open' | 'resolved';
+
+export type SupportMessage = {
+  id: string;
+  threadId: string;
+  authorId: string;
+  authorDisplayName: string;
+  body: string;
+  createdAt: string;
+};
+
+export type SupportThread = {
+  id: string;
+  category: SupportCategory;
+  subject: string;
+  createdById: string;
+  createdByDisplayName: string;
+  status: SupportThreadStatus;
+  createdAt: string;
+  updatedAt: string;
+  messages: SupportMessage[];
 };

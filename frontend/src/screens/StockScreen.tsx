@@ -16,11 +16,12 @@ import {
 import { stockApi } from '../api/stock';
 import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
+import { SupportPanel } from '../components/SupportPanel';
 import { COLUMNS, STOCK_KEYS } from '../constants/table';
 import { ColumnType, Session, StockRow } from '../types/models';
 
 type SortMode = 'manual' | 'name' | 'critical';
-type ScreenTab = 'stock' | 'tasks' | 'users';
+type ScreenTab = 'stock' | 'tasks' | 'support' | 'users';
 
 type StockScreenProps = {
   session: Session;
@@ -290,6 +291,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         </View>
       );
     }
+    if (activeTab === 'support') {
+      return (
+        <View style={styles.tabContentWrap}>
+          <SupportPanel session={session} />
+        </View>
+      );
+    }
     if (activeTab === 'users') {
       return (
         <View style={styles.tabContentWrap}>
@@ -313,11 +321,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     ? [
         { key: 'stock', label: 'Остатки' },
         { key: 'tasks', label: 'Задачи' },
+        { key: 'support', label: 'Поддержка' },
+        { key: 'support', label: 'Поддержка' },
         { key: 'users', label: 'Пользователи' },
       ]
     : [
         { key: 'stock', label: 'Остатки' },
         { key: 'tasks', label: 'Задачи' },
+        { key: 'support', label: 'Поддержка' },
       ];
 
   return (
@@ -431,7 +442,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2f6f4f',
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 14,
   },
   primaryButtonText: {
     color: '#ffffff',
@@ -442,7 +453,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d5ddd5',
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 14,
   },
   secondaryButtonText: {
     color: '#213125',
@@ -505,7 +516,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d9d3a4',
     borderBottomWidth: 1,
     borderBottomColor: '#95a596',
-    paddingVertical: 10,
+    paddingVertical: 14,
     paddingHorizontal: 14,
   },
   categoryText: {
@@ -610,7 +621,7 @@ const styles = StyleSheet.create({
   },
   bottomTabs: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     borderWidth: 1,
     borderColor: '#c8d4cb',
     borderRadius: 14,
@@ -618,6 +629,7 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   bottomTabButton: {
+    minHeight: 56,
     flex: 1,
     borderRadius: 10,
     alignItems: 'center',

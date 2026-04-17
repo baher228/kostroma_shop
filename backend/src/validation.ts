@@ -5,6 +5,8 @@ const numericValue = z
   .string()
   .regex(/^\d{0,5}$/, 'Поле должно содержать до 5 цифр.');
 
+const dateTimeString = z.string().datetime().optional().nullable();
+
 const columnKeys: [ColumnKey, ...ColumnKey[]] = [
   'packCount',
   'stockTue',
@@ -48,10 +50,13 @@ export const idParamSchema = z.object({
 export const createTaskSchema = z.object({
   title: z.string().trim().min(2).max(240),
   assigneeId: z.string().trim().min(1).max(100),
+  deadlineAt: dateTimeString,
+  requiresPhotoConfirmation: z.boolean().optional().default(false),
 });
 
 export const updateTaskStatusSchema = z.object({
   status: z.enum(['open', 'done']),
+  photoConfirmationUrl: z.string().trim().url().optional().nullable(),
 });
 
 export const createUserSchema = z.object({
@@ -63,4 +68,14 @@ export const createUserSchema = z.object({
   displayName: z.string().trim().min(2).max(80),
   password: z.string().min(6).max(200),
   role: z.enum(['manager', 'worker']).default('worker'),
+});
+
+export const createSupportThreadSchema = z.object({
+  category: z.enum(['technical_failure', 'suppliers_failure', 'client_conflict']),
+  subject: z.string().trim().min(2).max(240),
+  body: z.string().trim().min(2).max(2000),
+});
+
+export const createSupportMessageSchema = z.object({
+  body: z.string().trim().min(1).max(2000),
 });

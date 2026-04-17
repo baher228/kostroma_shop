@@ -11,19 +11,25 @@ type TaskDbRow = {
   status: TaskStatus;
   created_at: Date | string;
   completed_at: Date | string | null;
+  deadline_at: Date | string | null;
+  requires_photo_confirmation: boolean;
+  photo_confirmation_url: string | null;
+  photo_confirmed_at: Date | string | null;
 };
 
 const normalizeTitle = (value: string) => value.trim().replace(/\s+/g, ' ').slice(0, 240);
 
 const toIso = (value: Date | string | null): string | null => {
-  if (!value) {
-    return null;
-  }
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
+};
+
+const isOverdue = (row: TaskDbRow): boolean => {
+  if (row.status === 'done' || !row.deadline_at) return false;
+  const deadline = new Date(row.deadline_at);
+  return !Number.isNaN(deadline.valueOf()) && deadline.getTime() < Date.now();
 };
 
 const mapTask = (row: TaskDbRow): Task => ({
@@ -36,25 +42,31 @@ const mapTask = (row: TaskDbRow): Task => ({
   status: row.status,
   createdAt: toIso(row.created_at) ?? new Date().toISOString(),
   completedAt: toIso(row.completed_at),
+  deadlineAt: toIso(row.deadline_at),
+  requiresPhotoConfirmation: row.requires_photo_confirmation,
+  photoConfirmationUrl: row.photo_confirmation_url,
+  photoConfirmedAt: toIso(row.photo_confirmed_at),
+  overdue: isOverdue(row),
 });
 
+const selectFields = `
+  id,
+  title,
+  assignee_id,
+  assignee_display_name,
+  created_by_id,
+  created_by_display_name,
+  status,
+  created_at,
+  completed_at,
+  deadline_at,
+  requires_photo_confirmation,
+  photo_confirmation_url,
+  photo_confirmed_at
+`;
+
 export const listTasks = async (): Promise<Task[]> => {
-  const result = await db.query<TaskDbRow>(
-    `
-      SELECT
-        id,
-        title,
-        assignee_id,
-        assignee_display_name,
-        created_by_id,
-        created_by_display_name,
-        status,
-        created_at,
-        completed_at
-      FROM tasks
-      ORDER BY created_at DESC, id DESC;
-    `,
-  );
+  const result = await db.query<TaskDbRow>(`SELECT ${selectFields} FROM tasks ORDER BY created_at DESC, id DESC;`);
   return result.rows.map(mapTask);
 };
 
@@ -64,61 +76,53 @@ export const createTask = async (input: {
   assigneeDisplayName: string;
   createdById: string;
   createdByDisplayName: string;
+  deadlineAt?: string | null;
+  requiresPhotoConfirmation?: boolean;
 }): Promise<Task> => {
   const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const result = await db.query<TaskDbRow>(
     `
       INSERT INTO tasks (
-        id,
-        title,
-        assignee_id,
-        assignee_display_name,
-        created_by_id,
-        created_by_display_name,
-        status,
-        created_at,
-        completed_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL)
-      RETURNING
-        id,
-        title,
-        assignee_id,
-        assignee_display_name,
-        created_by_id,
-        created_by_display_name,
-        status,
-        created_at,
-        completed_at;
+        id, title, assignee_id, assignee_display_name, created_by_id, created_by_display_name,
+        status, created_at, completed_at, deadline_at, requires_photo_confirmation,
+        photo_confirmation_url, photo_confirmed_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL,$7,$8,NULL,NULL,NOW())
+      RETURNING ${selectFields};
     `,
-    [id, normalizeTitle(input.title), input.assigneeId, input.assigneeDisplayName, input.createdById, input.createdByDisplayName],
+    [
+      id,
+      normalizeTitle(input.title),
+      input.assigneeId,
+      input.assigneeDisplayName,
+      input.createdById,
+      input.createdByDisplayName,
+      input.deadlineAt ?? null,
+      input.requiresPhotoConfirmation ?? false,
+    ],
   );
   return mapTask(result.rows[0]);
 };
 
-export const updateTaskStatus = async (id: string, status: TaskStatus): Promise<Task | null> => {
+export const updateTaskStatus = async (
+  id: string,
+  status: TaskStatus,
+  photoConfirmationUrl?: string | null,
+): Promise<Task | null> => {
   const result = await db.query<TaskDbRow>(
     `
       UPDATE tasks
       SET
         status = $2,
-        completed_at = CASE WHEN $2 = 'done' THEN NOW() ELSE NULL END
+        completed_at = CASE WHEN $2 = 'done' THEN NOW() ELSE NULL END,
+        photo_confirmation_url = COALESCE($3, photo_confirmation_url),
+        photo_confirmed_at = CASE WHEN $3 IS NOT NULL THEN NOW() ELSE photo_confirmed_at END,
+        updated_at = NOW()
       WHERE id = $1
-      RETURNING
-        id,
-        title,
-        assignee_id,
-        assignee_display_name,
-        created_by_id,
-        created_by_display_name,
-        status,
-        created_at,
-        completed_at;
+      RETURNING ${selectFields};
     `,
-    [id, status],
+    [id, status, photoConfirmationUrl ?? null],
   );
-  if (result.rowCount === 0) {
-    return null;
-  }
+  if (result.rowCount === 0) return null;
   return mapTask(result.rows[0]);
 };
 

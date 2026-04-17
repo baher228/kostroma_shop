@@ -20,6 +20,9 @@ export const SupportPanel = ({ session }: { session: Session }) => {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [activeThreadId, setActiveThreadId] = useState('');
+  const [replyBody, setReplyBody] = useState('');
+  const canManage = session.user.role === 'manager';
 
   const loadThreads = async () => {
     try {
@@ -54,6 +57,29 @@ export const SupportPanel = ({ session }: { session: Session }) => {
     }
   };
 
+
+  const sendReply = async () => {
+    if (!activeThreadId || !replyBody.trim()) {
+      setError('Введите сообщение для ответа.');
+      return;
+    }
+    try {
+      setSending(true);
+      const message = await supportApi.sendMessage(session.token, activeThreadId, replyBody.trim());
+      setThreads((current) =>
+        current.map((thread) =>
+          thread.id === activeThreadId ? { ...thread, messages: [...thread.messages, message] } : thread,
+        ),
+      );
+      setReplyBody('');
+      setError('');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <View style={styles.panel}>
       <View style={styles.headerRow}>
@@ -62,7 +88,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
           <Text style={styles.refreshButtonText}>Обновить</Text>
         </Pressable>
       </View>
-      <View style={styles.createBox}>
+      {!canManage && <View style={styles.createBox}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
           {categories.map((item) => (
             <Pressable key={item.key} style={[styles.categoryButton, category === item.key && styles.categoryButtonActive]} onPress={() => setCategory(item.key)}>
@@ -75,14 +101,33 @@ export const SupportPanel = ({ session }: { session: Session }) => {
         <Pressable style={[styles.sendButton, sending && styles.sendButtonDisabled]} onPress={createThread} disabled={sending}>
           <Text style={styles.sendButtonText}>{sending ? 'Отправка...' : 'Создать обращение'}</Text>
         </Pressable>
-      </View>
+      </View>}
+      {canManage && (
+        <View style={styles.createBox}>
+          <Text style={styles.threadMeta}>Менеджер видит все обращения и отвечает в выбранный тред.</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+            {threads.map((thread) => (
+              <Pressable key={thread.id} style={[styles.categoryButton, activeThreadId === thread.id && styles.categoryButtonActive]} onPress={() => setActiveThreadId(thread.id)}>
+                <Text style={[styles.categoryButtonText, activeThreadId === thread.id && styles.categoryButtonTextActive]} numberOfLines={1}>
+                  {thread.subject}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <TextInput value={replyBody} onChangeText={setReplyBody} style={[styles.input, styles.bodyInput]} placeholder="Ответ менеджера" placeholderTextColor="#7a8b7f" multiline />
+          <Pressable style={[styles.sendButton, sending && styles.sendButtonDisabled]} onPress={sendReply} disabled={sending}>
+            <Text style={styles.sendButtonText}>{sending ? 'Отправка...' : 'Отправить ответ'}</Text>
+          </Pressable>
+        </View>
+      )}
       {!!error && <Text style={styles.error}>{error}</Text>}
       {loading ? <View style={styles.loadingBox}><ActivityIndicator color="#2f6f4f" /></View> : (
         <ScrollView style={styles.threadList} contentContainerStyle={styles.threadListContent}>
           {threads.map((thread) => (
             <View key={thread.id} style={styles.threadCard}>
-              <Text style={styles.threadSubject}>{thread.subject}</Text>
               <Text style={styles.threadMeta}>{thread.category} · {thread.status} · {formatDate(thread.createdAt)}</Text>
+              <Pressable onPress={() => setActiveThreadId(thread.id)}>
+                </Pressable>
               {thread.messages.map((message) => (
                 <Text key={message.id} style={styles.threadMessage}>{message.authorDisplayName}: {message.body}</Text>
               ))}

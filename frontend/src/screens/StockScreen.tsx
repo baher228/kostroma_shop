@@ -47,6 +47,7 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
   const [rows, setRows] = useState<StockRow[]>([]);
+  const [newRowName, setNewRowName] = useState('');
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('manual');
@@ -122,8 +123,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return;
     }
     try {
-      const created = await stockApi.create(session.token, 'Новый товар');
+      const normalizedName = newRowName.trim();
+      if (!normalizedName) {
+        setError('Введите название товара.');
+        return;
+      }
+      const created = await stockApi.create(session.token, normalizedName);
       setRows((current) => [...current, created]);
+      setNewRowName('');
       setError('');
     } catch (createError) {
       setError(errorMessage(createError));
@@ -187,6 +194,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           placeholder="Поиск товара"
           placeholderTextColor="#6d7d72"
         />
+        {canManage && (
+          <TextInput
+            value={newRowName}
+            onChangeText={setNewRowName}
+            style={styles.searchInput}
+            placeholder="Название нового товара"
+            placeholderTextColor="#6d7d72"
+          />
+        )}
         <View style={styles.controlButtons}>
           {canManage && (
             <Pressable style={styles.primaryButton} onPress={addRow}>

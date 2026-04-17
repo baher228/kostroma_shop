@@ -139,11 +139,6 @@ export const createApp = () => {
     try {
       const params = idParamSchema.parse(req.params);
       const payload = updateRowSchema.parse(req.body);
-      const user = (req as AuthorizedRequest).user;
-      if (user.role === 'worker' && payload.name) {
-        res.status(403).json({ message: 'Сотрудник не может менять название товара.' });
-        return;
-      }
       const updated = await updateRow(params.id, payload);
       if (!updated) {
         res.status(404).json({ message: 'Товар не найден.' });

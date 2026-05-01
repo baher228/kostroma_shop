@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -18,16 +18,16 @@ import { supportApi } from "../api/support";
 import { Session, SupportCategory, SupportMessage, SupportThread } from "../types/models";
 
 const categories: Array<{ key: SupportCategory; label: string }> = [
-  { key: "technical_failure", label: "Ð¢ÐµÑ…. ÑÐ±Ð¾Ð¹" },
-  { key: "suppliers_failure", label: "Ð¡Ð±Ð¾Ð¹ Ð¿Ð¾ÑÑ‚Ð°Ð²ÐºÐ¸" },
-  { key: "client_conflict", label: "ÐšÐ¾Ð½Ñ„Ð»Ð¸ÐºÑ‚ Ñ ÐºÐ»Ð¸ÐµÐ½Ñ‚Ð¾Ð¼" },
+  { key: "technical_failure", label: "Тех. сбой" },
+  { key: "suppliers_failure", label: "Сбой поставки" },
+  { key: "client_conflict", label: "Конфликт с клиентом" },
 ];
 
 const categoryLabel = (category: SupportCategory) =>
   categories.find((item) => item.key === category)?.label ?? category;
 
 const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "ÐžÑˆÐ¸Ð±ÐºÐ° ÑÐµÑ€Ð²ÐµÑ€Ð°.";
+  error instanceof Error ? error.message : "Ошибка сервера.";
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleString("ru-RU", {
@@ -146,7 +146,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
 
   const createThread = async () => {
     if (!subject.trim() || (!body.trim() && !photoUrl.trim())) {
-      setError("Ð—Ð°Ð¿Ð¾Ð»Ð½Ð¸Ñ‚Ðµ Ñ‚ÐµÐ¼Ñƒ Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ.");
+      setError("Заполните тему и описание.");
       return;
     }
     try {
@@ -174,7 +174,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
 
   const sendReply = async () => {
     if (!activeThreadId || (!replyBody.trim() && !replyPhotoUrl.trim())) {
-      setError("Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð´Ð»Ñ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸.");
+      setError("Введите сообщение для отправки.");
       return;
     }
     try {
@@ -208,11 +208,11 @@ export const SupportPanel = ({ session }: { session: Session }) => {
 
   const renderThreadList = () => (
     <View style={styles.listWrap}>
-      <Text style={styles.sectionTitle}>{canManage ? "Ð’ÑÐµ Ð¾Ð±Ñ€Ð°Ñ‰ÐµÐ½Ð¸Ñ" : "ÐœÐ¾Ð¸ Ð¾Ð±Ñ€Ð°Ñ‰ÐµÐ½Ð¸Ñ"}</Text>
+      <Text style={styles.sectionTitle}>{canManage ? "Все обращения" : "Мои обращения"}</Text>
       <ScrollView style={styles.threadList} contentContainerStyle={styles.threadListContent}>
         {!threads.length && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>ÐŸÐ¾ÐºÐ° Ð½ÐµÑ‚ Ð¾Ð±Ñ€Ð°Ñ‰ÐµÐ½Ð¸Ð¹.</Text>
+            <Text style={styles.emptyText}>Пока нет обращений.</Text>
           </View>
         )}
         {threads.map((thread) => {
@@ -231,10 +231,10 @@ export const SupportPanel = ({ session }: { session: Session }) => {
                 <Text style={styles.threadDate}>{formatDate(thread.updatedAt)}</Text>
               </View>
               <Text style={styles.threadMeta}>
-                {categoryLabel(thread.category)} Â· {thread.status} Â· {thread.createdByDisplayName}
+                {categoryLabel(thread.category)} · {thread.status} · {thread.createdByDisplayName}
               </Text>
               <Text style={styles.threadPreview} numberOfLines={2}>
-                {latest ? `${latest.authorDisplayName}: ${latest.body}` : "Ð‘ÐµÐ· ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹"}
+                {latest ? `${latest.authorDisplayName}: ${latest.body}` : "Без сообщений"}
               </Text>
             </Pressable>
           );
@@ -247,7 +247,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
     if (!activeThread) {
       return (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ð¾Ð±Ñ€Ð°Ñ‰ÐµÐ½Ð¸Ðµ Ð¸Ð· ÑÐ¿Ð¸ÑÐºÐ°.</Text>
+          <Text style={styles.emptyText}>Выберите обращение из списка.</Text>
         </View>
       );
     }
@@ -256,14 +256,14 @@ export const SupportPanel = ({ session }: { session: Session }) => {
       <View style={styles.chatWrap}>
         <View style={styles.chatHeader}>
           <Pressable style={styles.backButton} onPress={() => setChatMode(false)}>
-            <Text style={styles.backButtonText}>Ðš ÑÐ¿Ð¸ÑÐºÑƒ</Text>
+            <Text style={styles.backButtonText}>К списку</Text>
           </Pressable>
           <View style={styles.chatHeaderInfo}>
             <Text style={styles.chatSubject} numberOfLines={1}>
               {activeThread.subject}
             </Text>
             <Text style={styles.chatMeta}>
-              {categoryLabel(activeThread.category)} Â· {activeThread.createdByDisplayName}
+              {categoryLabel(activeThread.category)} · {activeThread.createdByDisplayName}
             </Text>
           </View>
         </View>
@@ -307,7 +307,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
             value={replyBody}
             onChangeText={setReplyBody}
             style={[styles.input, styles.replyInput]}
-            placeholder="Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ"
+            placeholder="Введите сообщение"
             placeholderTextColor="#7a8b7f"
             multiline
             onFocus={() => messagesScrollRef.current?.scrollToEnd({ animated: true })}
@@ -316,7 +316,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
             value={replyPhotoUrl}
             onChangeText={setReplyPhotoUrl}
             style={styles.input}
-            placeholder="Ð¡ÑÑ‹Ð»ÐºÐ° Ð½Ð° Ñ„Ð¾Ñ‚Ð¾ (Ð¾Ð¿Ñ†Ð¸Ð¾Ð½Ð°Ð»ÑŒÐ½Ð¾)"
+            placeholder="Ссылка на фото (опционально)"
             placeholderTextColor="#7a8b7f"
             autoCapitalize="none"
             autoCorrect={false}
@@ -326,7 +326,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
             onPress={sendReply}
             disabled={sending}
           >
-            <Text style={styles.sendButtonText}>{sending ? "ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ°..." : "ÐžÑ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ"}</Text>
+            <Text style={styles.sendButtonText}>{sending ? "Отправка..." : "Отправить"}</Text>
           </Pressable>
         </View>
       </View>
@@ -341,9 +341,9 @@ export const SupportPanel = ({ session }: { session: Session }) => {
     >
       <View style={styles.panel}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°</Text>
+        <Text style={styles.title}>Поддержка</Text>
         <Pressable style={styles.refreshButton} onPress={loadThreads}>
-          <Text style={styles.refreshButtonText}>ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ</Text>
+          <Text style={styles.refreshButtonText}>Обновить</Text>
         </Pressable>
       </View>
 
@@ -375,14 +375,14 @@ export const SupportPanel = ({ session }: { session: Session }) => {
             value={subject}
             onChangeText={setSubject}
             style={styles.input}
-            placeholder="Ð¢ÐµÐ¼Ð° Ð¾Ð±Ñ€Ð°Ñ‰ÐµÐ½Ð¸Ñ"
+            placeholder="Тема обращения"
             placeholderTextColor="#7a8b7f"
           />
           <TextInput
             value={body}
             onChangeText={setBody}
             style={[styles.input, styles.bodyInput]}
-            placeholder="ÐžÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¿Ñ€Ð¾Ð±Ð»ÐµÐ¼Ñ‹"
+            placeholder="Описание проблемы"
             placeholderTextColor="#7a8b7f"
             multiline
           />
@@ -390,7 +390,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
             value={photoUrl}
             onChangeText={setPhotoUrl}
             style={styles.input}
-            placeholder="Ð¡ÑÑ‹Ð»ÐºÐ° Ð½Ð° Ñ„Ð¾Ñ‚Ð¾ (Ð¼Ð¾Ð¶Ð½Ð¾ Ð±ÐµÐ· Ñ‚ÐµÐºÑÑ‚Ð°)"
+            placeholder="Ссылка на фото (можно без текста)"
             placeholderTextColor="#7a8b7f"
             autoCapitalize="none"
             autoCorrect={false}
@@ -400,7 +400,7 @@ export const SupportPanel = ({ session }: { session: Session }) => {
             onPress={createThread}
             disabled={sending}
           >
-            <Text style={styles.sendButtonText}>{sending ? "ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ°..." : "Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ Ð¾Ð±Ñ€Ð°Ñ‰ÐµÐ½Ð¸Ðµ"}</Text>
+            <Text style={styles.sendButtonText}>{sending ? "Отправка..." : "Создать обращение"}</Text>
           </Pressable>
         </View>
       )}

@@ -1,8 +1,9 @@
-import { SellerOrder } from '../types/models';
+import { OrderSheet, SellerOrder } from '../types/models';
 import { request } from './http';
 
 type OrdersResponse = { orders: SellerOrder[] };
 type OrderResponse = { order: SellerOrder };
+type OrderSheetResponse = { sheet: OrderSheet };
 
 export const ordersApi = {
   list: async (token: string): Promise<SellerOrder[]> => {
@@ -23,5 +24,9 @@ export const ordersApi = {
   ): Promise<SellerOrder> => {
     const result = await request<OrderResponse>('/api/orders', { method: 'POST', token, body: payload });
     return result.order;
+  },
+  sheet: async (token: string, date: string): Promise<OrderSheet> => {
+    const result = await request<OrderSheetResponse>(`/api/orders/sheet?date=${date}`, { token });
+    return result.sheet;
   },
 };

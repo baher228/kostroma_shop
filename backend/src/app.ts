@@ -7,6 +7,7 @@ import { signSessionToken } from './auth';
 import { getWorkerCheckInStatus, upsertWorkerCheckInStatus } from './checkInStore';
 import { config } from './config';
 import { AuthorizedRequest, requireAuth, requireRole } from './middleware';
+import { getOrderSheet } from './orderSheetStore';
 import { createSellerOrder, listSellerOrders } from './ordersStore';
 import {
   createProduct,
@@ -14,8 +15,10 @@ import {
   deleteProduct,
   getShopById,
   getStockTable,
+  listOrderValues,
   listShops,
   updateProductMeta,
+  upsertOrderValue,
   upsertStockValue,
 } from './store';
 import { addSupportMessage, createSupportThread, listSupportThreads } from './supportStore';
@@ -30,6 +33,7 @@ import {
   createTaskSchema,
   createUserSchema,
   createSellerOrderSchema,
+  orderSheetQuerySchema,
   idParamSchema,
   listStockTableQuerySchema,
   loginSchema,
@@ -314,6 +318,39 @@ export const createApp = () => {
     }
   });
 
+  app.get('/api/stock/order-values', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const from = toStringParam(req.query.from);
+      const to = toStringParam(req.query.to);
+      if (!from || !to) {
+        res.status(400).json({ message: 'from and to query params required.' });
+        return;
+      }
+      const orderValues = await listOrderValues(from, to);
+      res.json({ orderValues });
+    } catch {
+      res.status(500).json({ message: 'Failed to load order values.' });
+    }
+  });
+
+  app.put('/api/stock/order-values', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const { productId, orderDate, packs } = req.body as { productId: string; orderDate: string; packs: number };
+      if (!productId || !orderDate || typeof packs !== 'number') {
+        res.status(400).json({ message: 'productId, orderDate, and packs required.' });
+        return;
+      }
+      const ok = await upsertOrderValue({ productId, orderDate, packs });
+      if (!ok) {
+        res.status(404).json({ message: 'Product not found.' });
+        return;
+      }
+      res.status(204).send();
+    } catch {
+      res.status(500).json({ message: 'Failed to update order value.' });
+    }
+  });
+
   app.get('/api/orders', requireAuth, async (req: Request, res: Response) => {
     try {
       const viewer = (req as AuthorizedRequest).user;
@@ -344,6 +381,20 @@ export const createApp = () => {
         return;
       }
       res.status(500).json({ message: 'Failed to create seller order.' });
+    }
+  });
+
+  app.get('/api/orders/sheet', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const query = orderSheetQuerySchema.parse({ date: req.query.date });
+      const sheet = await getOrderSheet(query.date);
+      res.json({ sheet });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to load order sheet.' });
     }
   });
 

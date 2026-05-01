@@ -159,3 +159,22 @@ export type WorkerCheckInStatus = {
   status: 'in' | 'out';
   lastChangedAt: string;
 };
+
+export type OrderSheetRow = {
+  productId: string;
+  productName: string;
+  category: string;
+  packType: string | null;
+  unitsInPack: number | null;
+  packWeightKg: number | null;
+  shelfLifeDays: number | null;
+  unitPriceRubVat: number | null;
+  shopValues: Record<string, number>;
+  total: number;
+};
+
+export type OrderSheet = {
+  date: string;
+  shops: Shop[];
+  rows: OrderSheetRow[];
+};

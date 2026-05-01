@@ -7,6 +7,7 @@ import { signSessionToken } from './auth';
 import { getWorkerCheckInStatus, upsertWorkerCheckInStatus } from './checkInStore';
 import { config } from './config';
 import { AuthorizedRequest, requireAuth, requireRole } from './middleware';
+import { getOrderSheet } from './orderSheetStore';
 import { createSellerOrder, listSellerOrders } from './ordersStore';
 import {
   createProduct,
@@ -30,6 +31,7 @@ import {
   createTaskSchema,
   createUserSchema,
   createSellerOrderSchema,
+  orderSheetQuerySchema,
   idParamSchema,
   listStockTableQuerySchema,
   loginSchema,
@@ -344,6 +346,20 @@ export const createApp = () => {
         return;
       }
       res.status(500).json({ message: 'Failed to create seller order.' });
+    }
+  });
+
+  app.get('/api/orders/sheet', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const query = orderSheetQuerySchema.parse({ date: req.query.date });
+      const sheet = await getOrderSheet(query.date);
+      res.json({ sheet });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to load order sheet.' });
     }
   });
 

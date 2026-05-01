@@ -1,35 +1,130 @@
-import { StatusBar } from 'expo-status-bar';
+﻿import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
+  Share,
   StatusBar as NativeStatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { shopsApi } from '../api/shops';
 import { stockApi } from '../api/stock';
+import { OrdersPanel } from '../components/OrdersPanel';
+import { SupportPanel } from '../components/SupportPanel';
 import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
-import { SupportPanel } from '../components/SupportPanel';
-import { COLUMNS, STOCK_KEYS } from '../constants/table';
-import { ColumnType, Session, StockRow } from '../types/models';
+import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
+import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
 type SortMode = 'manual' | 'name' | 'critical';
-type ScreenTab = 'stock' | 'tasks' | 'support' | 'users';
+type ScreenTab = 'stock' | 'orders' | 'tasks' | 'support' | 'users';
+type ManagerStockView = 'dashboard' | 'calendar';
+
+type DashboardManualOrderKey = 'orderPackThu' | 'orderPackSat' | 'orderPackTue';
+type DashboardColumnKey =
+  | 'currentTue'
+  | DashboardManualOrderKey
+  | 'orderUnitsThu'
+  | 'orderUnitsSat'
+  | 'orderUnitsTue'
+  | 'prevWed'
+  | 'soldPrevMonWed'
+  | 'soldMonWed'
+  | 'currentWed'
+  | 'currentThu'
+  | 'prevFri'
+  | 'soldPrevWedFri'
+  | 'soldWedFri'
+  | 'currentFri'
+  | 'currentSun'
+  | 'prevMon'
+  | 'soldPrevFriMon'
+  | 'soldFriMon'
+  | 'currentMon';
+
+type DashboardTone = 'neutral' | 'order' | 'yellow' | 'green' | 'blue';
+type DashboardWeekRef = 'current' | 'previous';
+type WeekSlot = keyof WeekDateMap;
+
+type DashboardColumn = {
+  key: DashboardColumnKey;
+  title: string;
+  subtitle: string;
+  kind: 'stock' | 'order' | 'metric';
+  tone: DashboardTone;
+  dateKind?: 'none' | 'day' | 'range';
+  dateWeek?: DashboardWeekRef;
+  dateDay?: WeekSlot;
+  dateFrom?: WeekSlot;
+  dateTo?: WeekSlot;
+};
+
+type WeekDateMap = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sun', string>>;
+
+type DashboardRowValues = Record<DashboardColumnKey, string>;
+
+type EditingCell = {
+  productId: string;
+  date: string;
+  productName: string;
+};
 
 type StockScreenProps = {
   session: Session;
   onLogout: () => Promise<void>;
 };
 
-const sanitizeNumber = (raw: string) => raw.replace(/[^0-9]/g, '').slice(0, 5);
-const normalizeText = (value: string) => value.trim().toLowerCase();
+const PRODUCT_CATEGORIES = ['Ð™Ð¾Ð³ÑƒÑ€Ñ‚Ñ‹', 'ÐšÐµÑ„Ð¸Ñ€, Ð ÑÐ¶ÐµÐ½ÐºÐ°, Ð¡Ð½ÐµÐ¶Ð¾Ðº', 'ÐœÐ¾Ð»Ð¾ÐºÐ¾', 'Ð¡Ð¼ÐµÑ‚Ð°Ð½Ð°', 'Ð¢Ð²Ð¾Ñ€Ð¾Ð³'] as unknown as ProductCategory[];
+const DEFAULT_PRODUCT_CATEGORY: ProductCategory = PRODUCT_CATEGORIES[0];
+const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 12 : 0;
+const TWO_WEEKS_DAYS = 14;
+const MAX_ORDER_VALUE_LEN = 5;
+
+const DASHBOARD_COLUMNS: DashboardColumn[] = [
+  { key: 'currentTue', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0412\u0442\u043e\u0440\u043d\u0438\u043a', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
+  { key: 'orderPackThu', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0447\u0435\u0442\u0432\u0435\u0440\u0433', subtitle: '\u0412\u0442\u043e\u0440\u043d\u0438\u043a', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
+  { key: 'orderUnitsThu', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
+  { key: 'prevWed', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0421\u0440\u0435\u0434\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'wed' },
+  { key: 'soldPrevMonWed', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u043d-\u0421\u0440', kind: 'metric', tone: 'yellow', dateKind: 'range', dateWeek: 'previous', dateFrom: 'mon', dateTo: 'wed' },
+  { key: 'currentWed', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0421\u0440\u0435\u0434\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'wed' },
+  { key: 'soldMonWed', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u043d-\u0421\u0440', kind: 'metric', tone: 'yellow', dateKind: 'range', dateWeek: 'current', dateFrom: 'mon', dateTo: 'wed' },
+  { key: 'currentThu', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0427\u0435\u0442\u0432\u0435\u0440\u0433', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'thu' },
+  { key: 'orderPackSat', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0441\u0443\u0431\u0431\u043e\u0442\u0443', subtitle: '\u0427\u0435\u0442\u0432\u0435\u0440\u0433', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'thu' },
+  { key: 'orderUnitsSat', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
+  { key: 'prevFri', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u044f\u0442\u043d\u0438\u0446\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'fri' },
+  { key: 'soldPrevWedFri', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u0421\u0440-\u041f\u0442', kind: 'metric', tone: 'green', dateKind: 'range', dateWeek: 'previous', dateFrom: 'wed', dateTo: 'fri' },
+  { key: 'currentFri', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u044f\u0442\u043d\u0438\u0446\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'fri' },
+  { key: 'soldWedFri', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u0421\u0440-\u041f\u0442', kind: 'metric', tone: 'green', dateKind: 'range', dateWeek: 'current', dateFrom: 'wed', dateTo: 'fri' },
+  { key: 'currentSun', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0412\u043e\u0441\u043a\u0440\u0435\u0441', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
+  { key: 'orderPackTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0432\u0442\u043e\u0440\u043d\u0438\u043a', subtitle: '\u0412\u043e\u0441\u043a\u0440\u0435\u0441', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
+  { key: 'orderUnitsTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
+  { key: 'prevMon', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon' },
+  { key: 'soldPrevFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon' },
+  { key: 'currentMon', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon' },
+  { key: 'soldFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'current', dateFrom: 'fri', dateTo: 'mon' },
+];
+
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
+
+const sanitizeStockValue = (raw: string): string => {
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (!digits) {
+    return '';
+  }
+  const parsed = Number.parseInt(digits, 10);
+  if (Number.isNaN(parsed)) {
+    return '';
+  }
+  return String(Math.min(15, Math.max(0, parsed)));
+};
 
 const parseNumber = (value: string) => {
   if (!value) {
@@ -39,22 +134,189 @@ const parseNumber = (value: string) => {
   return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
 };
 
-const minStock = (row: StockRow) => Math.min(...STOCK_KEYS.map((key) => parseNumber(row.values[key])));
-const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 12 : 0;
+const minStock = (row: StockTableRow, dates: string[]) => {
+  const values = dates.map((date) => parseNumber(row.values[date] ?? ''));
+  return values.length ? Math.min(...values) : Number.POSITIVE_INFINITY;
+};
 
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Ошибка сервера.');
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateKey = (raw: string): Date => {
+  const [year, month, day] = raw.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
+
+const formatDate = (dateKey: string): string => {
+  const date = parseDateKey(dateKey);
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+};
+
+const formatWeekday = (dateKey: string): string => {
+  const date = parseDateKey(dateKey);
+  return date.toLocaleDateString('ru-RU', { weekday: 'short' });
+};
+
+const normalizeText = (value: string) => value.trim().toLowerCase();
+
+const startOfWeekMonday = (date: Date): Date => {
+  const current = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = current.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  current.setDate(current.getDate() + diff);
+  return current;
+};
+
+const currentTwoWeeksStart = (): string => toDateKey(startOfWeekMonday(new Date()));
+
+const shiftDateKey = (dateKey: string, deltaDays: number): string => {
+  const shifted = parseDateKey(dateKey);
+  shifted.setDate(shifted.getDate() + deltaDays);
+  return toDateKey(shifted);
+};
+
+const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
+
+const sanitizeOrderValue = (raw: string): string => raw.replace(/[^0-9]/g, '').slice(0, MAX_ORDER_VALUE_LEN);
+const orderUnitsFromPacks = (packsRaw: string, unitsInPack: number | null): string => {
+  if (!packsRaw) {
+    return '';
+  }
+  if (unitsInPack === null || unitsInPack <= 0) {
+    return '';
+  }
+  const packs = Number.parseInt(packsRaw, 10);
+  return Number.isNaN(packs) ? '' : String(packs * unitsInPack);
+};
+const isManualOrderKey = (key: DashboardColumnKey): key is DashboardManualOrderKey =>
+  key === 'orderPackThu' || key === 'orderPackSat' || key === 'orderPackTue';
+const isManualStockKey = (
+  key: DashboardColumnKey,
+): key is 'currentTue' | 'currentWed' | 'currentThu' | 'currentFri' | 'currentSun' | 'currentMon' =>
+  key === 'currentTue' ||
+  key === 'currentWed' ||
+  key === 'currentThu' ||
+  key === 'currentFri' ||
+  key === 'currentSun' ||
+  key === 'currentMon';
+
+const parseStockNumber = (raw?: string): number | null => {
+  if (!raw) {
+    return null;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const diffStocks = (startRaw?: string, endRaw?: string): string => {
+  const start = parseStockNumber(startRaw);
+  const end = parseStockNumber(endRaw);
+  if (start === null || end === null) {
+    return '';
+  }
+  return String(start - end);
+};
+
+const formatOptionalPrice = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return '';
+  }
+  return `${parsed.toFixed(2)} Ñ€ÑƒÐ±`;
+};
+
+const weekdaySlot = (dateKey: string): keyof WeekDateMap | null => {
+  const day = parseDateKey(dateKey).getDay();
+  if (day === 1) {
+    return 'mon';
+  }
+  if (day === 2) {
+    return 'tue';
+  }
+  if (day === 3) {
+    return 'wed';
+  }
+  if (day === 4) {
+    return 'thu';
+  }
+  if (day === 5) {
+    return 'fri';
+  }
+  if (day === 0) {
+    return 'sun';
+  }
+  return null;
+};
+
+const splitWeeks = (dates: string[]): string[][] => {
+  const chunks: string[][] = [];
+  for (let i = 0; i < dates.length; i += 7) {
+    const chunk = dates.slice(i, i + 7);
+    if (chunk.length === 7) {
+      chunks.push(chunk);
+    }
+  }
+  return chunks;
+};
+
+const mapWeekDates = (weekDates: string[]): WeekDateMap => {
+  const mapped: WeekDateMap = {};
+  for (const date of weekDates) {
+    const slot = weekdaySlot(date);
+    if (slot) {
+      mapped[slot] = date;
+    }
+  }
+  return mapped;
+};
+
+const csvEscape = (value: string): string => `"${value.replace(/"/g, '""')}"`;
+
+const buildCsv = (rows: string[][]): string => rows.map((row) => row.map((item) => csvEscape(item)).join(';')).join('\n');
+
+const safeFileName = (raw: string): string => raw.replace(/[\\/:*?"<>|]/g, '_');
+
+const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
+  PRODUCT_CATEGORIES.reduce(
+    (acc, category) => {
+      acc[category] = [];
+      return acc;
+    },
+    {} as Record<ProductCategory, StockTableRow[]>,
+  );
 
 export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
+  const canManage = session.user.role === 'manager';
+
   const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
-  const [rows, setRows] = useState<StockRow[]>([]);
-  const [newRowName, setNewRowName] = useState('');
+  const [table, setTable] = useState<StockTable | null>(null);
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
+  const [managerWindowStart, setManagerWindowStart] = useState<string>(shiftDateKey(currentTwoWeeksStart(), -7));
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('manual');
-  const [error, setError] = useState('');
-  const [pendingRows, setPendingRows] = useState<Record<string, boolean>>({});
+  const [managerStockView, setManagerStockView] = useState<ManagerStockView>('dashboard');
+  const [dashboardOrderValues, setDashboardOrderValues] = useState<Record<string, string>>({});
+  const [pendingKeys, setPendingKeys] = useState<Record<string, boolean>>({});
+  const [isShopPickerOpen, setIsShopPickerOpen] = useState(false);
 
-  const canManage = session.user.role === 'manager';
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductCategory, setNewProductCategory] = useState<ProductCategory>(DEFAULT_PRODUCT_CATEGORY);
+  const [addingProduct, setAddingProduct] = useState(false);
+
+  const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (!canManage && activeTab === 'users') {
@@ -62,12 +324,36 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
   }, [activeTab, canManage]);
 
-  const loadRows = async () => {
+  const setPending = (key: string, value: boolean) => {
+    setPendingKeys((current) => ({ ...current, [key]: value }));
+  };
+
+  const loadShops = async () => {
+    try {
+      const nextShops = await shopsApi.list(session.token);
+      setShops(nextShops);
+      if (canManage && nextShops.length > 0 && !selectedShopId) {
+        setSelectedShopId(nextShops[0].id);
+      }
+    } catch (loadError) {
+      setError(errorMessage(loadError));
+    }
+  };
+
+  const loadTable = async () => {
     try {
       setLoading(true);
       setError('');
-      const nextRows = await stockApi.list(session.token);
-      setRows(nextRows);
+      const nextTable = await stockApi.list(session.token, {
+        shopId: canManage ? selectedShopId ?? undefined : undefined,
+        from: canManage ? managerWindowStart : undefined,
+        to: canManage ? getTwoWeeksEnd(managerWindowStart) : undefined,
+        range: canManage ? undefined : 'week',
+      });
+      setTable(nextTable);
+      if (!selectedShopId) {
+        setSelectedShopId(nextTable.shop.id);
+      }
     } catch (loadError) {
       setError(errorMessage(loadError));
     } finally {
@@ -76,80 +362,404 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   useEffect(() => {
-    loadRows();
-  }, []);
+    void loadShops();
+  }, [session.token]);
 
-  const setRowPending = (rowId: string, value: boolean) => {
-    setPendingRows((current) => ({ ...current, [rowId]: value }));
+  useEffect(() => {
+    if (canManage && !selectedShopId && shops.length > 0) {
+      return;
+    }
+    void loadTable();
+  }, [session.token, canManage, selectedShopId, managerWindowStart]);
+
+  const visibleRows = useMemo(() => {
+    if (!table) {
+      return [];
+    }
+    const normalizedQuery = normalizeText(query);
+    let nextRows = table.rows;
+
+    if (normalizedQuery) {
+      nextRows = nextRows.filter((row) => normalizeText(row.name).includes(normalizedQuery));
+    }
+    if (sortMode === 'name') {
+      return [...nextRows].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    }
+    if (sortMode === 'critical') {
+      return [...nextRows].sort((a, b) => minStock(a, table.dates) - minStock(b, table.dates));
+    }
+    return nextRows;
+  }, [table, query, sortMode]);
+
+  const rowsByCategory = useMemo(() => {
+    const grouped = createCategoryMap();
+    for (const row of visibleRows) {
+      const category = PRODUCT_CATEGORIES.includes(row.category) ? row.category : DEFAULT_PRODUCT_CATEGORY;
+      grouped[category].push(row);
+    }
+    return grouped;
+  }, [visibleRows]);
+
+  const orderedRows = useMemo(
+    () => PRODUCT_CATEGORIES.flatMap((category) => rowsByCategory[category]),
+    [rowsByCategory],
+  );
+
+  const dashboardWeeks = useMemo(() => {
+    if (!table) {
+      return { current: {} as WeekDateMap, previous: null as WeekDateMap | null };
+    }
+    const weeks = splitWeeks(table.dates);
+    if (weeks.length === 0) {
+      return { current: mapWeekDates(table.dates), previous: null };
+    }
+    const current = mapWeekDates(weeks[weeks.length - 1]);
+    const previous = weeks.length > 1 ? mapWeekDates(weeks[weeks.length - 2]) : null;
+    return { current, previous };
+  }, [table]);
+
+  const dashboardDateFor = (week: DashboardWeekRef, slot: WeekSlot): string | undefined => {
+    if (week === 'previous') {
+      return dashboardWeeks.previous?.[slot];
+    }
+    return dashboardWeeks.current[slot];
   };
 
-  const updateValueLocal = (rowId: string, key: keyof StockRow['values'], value: string) => {
-    const sanitized = sanitizeNumber(value);
-    setRows((current) =>
-      current.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              values: {
-                ...row.values,
-                [key]: sanitized,
-              },
-            }
-          : row,
-      ),
-    );
+  const dashboardRangeLabel = (
+    week: DashboardWeekRef,
+    from: WeekSlot,
+    to: WeekSlot,
+  ): string => {
+    const fromDate = dashboardDateFor(week, from);
+    const toDate = dashboardDateFor(week, to);
+    if (!fromDate || !toDate) {
+      return '';
+    }
+    return `${formatDate(fromDate)}-${formatDate(toDate)}`;
   };
 
-  const saveValue = async (rowId: string, key: keyof StockRow['values'], value: string) => {
+  const dashboardHeaderSubtitle = (column: DashboardColumn): string => {
+    if (!column.subtitle) {
+      return '';
+    }
+
+    if (column.dateKind === 'day' && column.dateDay && column.dateWeek) {
+      const date = dashboardDateFor(column.dateWeek, column.dateDay);
+      return date ? `${column.subtitle}\n${formatDate(date)}` : column.subtitle;
+    }
+
+    if (column.dateKind === 'range' && column.dateWeek && column.dateFrom && column.dateTo) {
+      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo);
+      return range ? `${column.subtitle}\n${range}` : column.subtitle;
+    }
+
+    return column.subtitle;
+  };
+
+  const productReferenceLabel = (row: StockTableRow): string => {
+    const parts: string[] = [];
+    if (row.packType) {
+      parts.push(row.packType);
+    }
+    const units = typeof row.unitsInPack === 'number' ? row.unitsInPack : Number(row.unitsInPack);
+    if (Number.isFinite(units)) {
+      parts.push(`${units} ÑˆÑ‚/ÑƒÐ¿`);
+    }
+    const packWeight = Number(row.packWeightKg);
+    if (Number.isFinite(packWeight)) {
+      parts.push(`${packWeight} ÐºÐ³`);
+    }
+    const shelfLife = typeof row.shelfLifeDays === 'number' ? row.shelfLifeDays : Number(row.shelfLifeDays);
+    if (Number.isFinite(shelfLife)) {
+      parts.push(`${shelfLife} ÑÑƒÑ‚`);
+    }
+    const priceLabel = formatOptionalPrice(row.unitPriceRubVat);
+    if (priceLabel) {
+      parts.push(priceLabel);
+    }
+    if (row.minStockUnits !== null || row.maxStockUnits !== null) {
+      parts.push(`границы: ${row.minStockUnits ?? '-'}-${row.maxStockUnits ?? '-'}`);
+    }
+    return parts.join(' Â· ');
+  };
+
+  const currentStockDateForColumn = (key: DashboardColumnKey): string | undefined => {
+    if (key === 'currentTue') {
+      return dashboardWeeks.current.tue;
+    }
+    if (key === 'currentWed') {
+      return dashboardWeeks.current.wed;
+    }
+    if (key === 'currentThu') {
+      return dashboardWeeks.current.thu;
+    }
+    if (key === 'currentFri') {
+      return dashboardWeeks.current.fri;
+    }
+    if (key === 'currentSun') {
+      return dashboardWeeks.current.sun;
+    }
+    if (key === 'currentMon') {
+      return dashboardWeeks.current.mon;
+    }
+    return undefined;
+  };
+
+  const orderCellValue = (productId: string, key: DashboardManualOrderKey): string => {
+    return dashboardOrderValues[`${productId}:${key}`] ?? '';
+  };
+
+  const setOrderCellValue = (productId: string, key: DashboardManualOrderKey, value: string) => {
+    const nextValue = sanitizeOrderValue(value);
+    const fieldKey = `${productId}:${key}`;
+    setDashboardOrderValues((current) => ({
+      ...current,
+      [fieldKey]: nextValue,
+    }));
+  };
+
+  const dashboardRowValues = (row: StockTableRow): DashboardRowValues => {
+    const current = dashboardWeeks.current;
+    const previous = dashboardWeeks.previous;
+    const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
+    const soldMonWedCurrent = diffStocks(stock(current.mon), stock(current.wed));
+    const soldWedFriCurrent = diffStocks(stock(current.wed), stock(current.fri));
+    const soldFriMonCurrent = diffStocks(stock(current.fri), stock(current.mon));
+    const soldMonWedPrevious = previous ? diffStocks(stock(previous.mon), stock(previous.wed)) : '';
+    const soldWedFriPrevious = previous ? diffStocks(stock(previous.wed), stock(previous.fri)) : '';
+    const soldFriMonPrevious = previous ? diffStocks(stock(previous.fri), stock(previous.mon)) : '';
+    const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
+    const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
+    const orderPackTue = orderCellValue(row.productId, 'orderPackTue');
+
+    return {
+      currentTue: stock(current.tue),
+      orderPackThu,
+      orderUnitsThu: orderUnitsFromPacks(orderPackThu, row.unitsInPack),
+      prevWed: previous ? stock(previous.wed) : '',
+      soldPrevMonWed: soldMonWedPrevious,
+      soldMonWed: soldMonWedCurrent,
+      currentWed: stock(current.wed),
+      currentThu: stock(current.thu),
+      orderPackSat,
+      orderUnitsSat: orderUnitsFromPacks(orderPackSat, row.unitsInPack),
+      prevFri: previous ? stock(previous.fri) : '',
+      soldPrevWedFri: soldWedFriPrevious,
+      soldWedFri: soldWedFriCurrent,
+      currentFri: stock(current.fri),
+      currentSun: stock(current.sun),
+      orderPackTue,
+      orderUnitsTue: orderUnitsFromPacks(orderPackTue, row.unitsInPack),
+      prevMon: previous ? stock(previous.mon) : '',
+      soldPrevFriMon: soldFriMonPrevious,
+      soldFriMon: soldFriMonCurrent,
+      currentMon: stock(current.mon),
+    };
+  };
+
+  const exportDashboard = async () => {
+    if (!table) {
+      return;
+    }
+
+    const headerRow = [
+      'ÐšÐ°Ñ‚ÐµÐ³Ð¾Ñ€Ð¸Ñ',
+      'Ð¢Ð¾Ð²Ð°Ñ€',
+      'Ð£Ð¿Ð°ÐºÐ¾Ð²ÐºÐ°',
+      'ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð² ÑƒÐ¿Ð°ÐºÐ¾Ð²ÐºÐµ',
+      'Ð’ÐµÑ ÑƒÐ¿Ð°ÐºÐ¾Ð²ÐºÐ¸, ÐºÐ³',
+      'Ð¡Ñ€Ð¾Ðº Ð³Ð¾Ð´Ð½Ð¾ÑÑ‚Ð¸, ÑÑƒÑ‚',
+      'Ð¦ÐµÐ½Ð° Ð² Ñ€ÑƒÐ±, Ñ ÐÐ”Ð¡',
+      ...DASHBOARD_COLUMNS.map((column) => {
+        const subtitle = dashboardHeaderSubtitle(column).replace('\n', ' ');
+        return subtitle ? `${column.title} (${subtitle})` : column.title;
+      }),
+    ];
+    const dataRows = orderedRows.map((row) => {
+      const values = dashboardRowValues(row);
+      return [
+        row.category,
+        row.name,
+        row.packType ?? '',
+        row.unitsInPack !== null ? String(row.unitsInPack) : '',
+        row.packWeightKg !== null ? String(row.packWeightKg) : '',
+        row.shelfLifeDays !== null ? String(row.shelfLifeDays) : '',
+        row.unitPriceRubVat !== null && row.unitPriceRubVat !== undefined ? String(row.unitPriceRubVat) : '',
+        ...DASHBOARD_COLUMNS.map((column) => values[column.key] ?? ''),
+      ];
+    });
+
+    const csv = `\uFEFF${buildCsv([headerRow, ...dataRows])}`;
+    const fileName = safeFileName(`manager_dashboard_${table.shop.name}_${table.from}_${table.to}.csv`);
+
+    if (Platform.OS === 'web') {
+      const browser = globalThis as typeof globalThis & {
+        Blob?: new (parts?: BlobPart[], options?: BlobPropertyBag) => Blob;
+        URL?: { createObjectURL: (blob: Blob) => string; revokeObjectURL: (url: string) => void };
+        document?: {
+          createElement: (tag: string) => { href: string; download: string; click: () => void };
+          body?: { appendChild: (node: unknown) => void; removeChild: (node: unknown) => void };
+        };
+      };
+
+      if (browser.Blob && browser.URL && browser.document?.createElement) {
+        const blob = new browser.Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const objectUrl = browser.URL.createObjectURL(blob);
+        const link = browser.document.createElement('a');
+        link.href = objectUrl;
+        link.download = fileName;
+        browser.document.body?.appendChild(link);
+        link.click();
+        browser.document.body?.removeChild(link);
+        browser.URL.revokeObjectURL(objectUrl);
+        return;
+      }
+    }
+
+    await Share.share({
+      title: fileName,
+      message: csv,
+    });
+  };
+
+  const columnToneHeader = (date: string) => {
+    if (!table) {
+      return styles.headerToneA;
+    }
+    return table.dates.indexOf(date) % 2 === 0 ? styles.headerToneA : styles.headerToneB;
+  };
+
+  const columnToneValue = (date: string) => {
+    if (!table) {
+      return styles.valueToneA;
+    }
+    return table.dates.indexOf(date) % 2 === 0 ? styles.valueToneA : styles.valueToneB;
+  };
+
+  const secondWeekBoundaryStyle = (date: string) =>
+    table && table.dates.indexOf(date) === 7 ? styles.secondWeekBoundary : null;
+
+  const openEditCell = (row: StockTableRow, date: string) => {
+    setEditingCell({
+      productId: row.productId,
+      date,
+      productName: row.name,
+    });
+    setEditingValue(row.values[date] ?? '');
+  };
+
+  const getNextRow = (productId: string): StockTableRow | null => {
+    const currentIndex = orderedRows.findIndex((row) => row.productId === productId);
+    if (currentIndex < 0 || currentIndex + 1 >= orderedRows.length) {
+      return null;
+    }
+    return orderedRows[currentIndex + 1];
+  };
+
+  const saveCell = async (continueToNext: boolean) => {
+    if (!editingCell || !table) {
+      return;
+    }
+
+    const currentCell = editingCell;
+    const key = `${currentCell.productId}:${currentCell.date}`;
+    const nextValue = sanitizeStockValue(editingValue);
+    const nextRow = continueToNext ? getNextRow(currentCell.productId) : null;
+
     try {
-      setRowPending(rowId, true);
-      const updated = await stockApi.update(session.token, rowId, {
-        values: {
-          [key]: sanitizeNumber(value),
-        },
+      setSavingEdit(true);
+      setPending(key, true);
+      await stockApi.updateValue(session.token, {
+        shopId: canManage ? selectedShopId ?? table.shop.id : undefined,
+        productId: currentCell.productId,
+        date: currentCell.date,
+        value: nextValue,
       });
-      setRows((current) => current.map((row) => (row.id === rowId ? updated : row)));
+
+      setTable((current) => {
+        if (!current) {
+          return current;
+        }
+        return {
+          ...current,
+          rows: current.rows.map((row) =>
+            row.productId === currentCell.productId
+              ? {
+                  ...row,
+                  values: {
+                    ...row.values,
+                    [currentCell.date]: nextValue,
+                  },
+                }
+              : row,
+          ),
+        };
+      });
+
+      if (continueToNext && nextRow) {
+        setEditingCell({
+          productId: nextRow.productId,
+          date: currentCell.date,
+          productName: nextRow.name,
+        });
+        setEditingValue(nextRow.values[currentCell.date] ?? '');
+      } else {
+        setEditingCell(null);
+      }
       setError('');
     } catch (saveError) {
       setError(errorMessage(saveError));
-      await loadRows();
+      await loadTable();
     } finally {
-      setRowPending(rowId, false);
+      setPending(key, false);
+      setSavingEdit(false);
     }
   };
 
-  const addRow = async () => {
+  const addProduct = async () => {
     if (!canManage) {
+      return;
+    }
+    const normalizedName = newProductName.trim();
+    if (!normalizedName) {
+      Alert.alert('ÐÐ¾Ð²Ñ‹Ð¹ Ñ‚Ð¾Ð²Ð°Ñ€', 'Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ñ‚Ð¾Ð²Ð°Ñ€Ð°.');
       return;
     }
     try {
-      const normalizedName = newRowName.trim();
-      if (!normalizedName) {
-        setError('Введите название товара.');
-        return;
-      }
-      const created = await stockApi.create(session.token, normalizedName);
-      setRows((current) => [...current, created]);
-      setNewRowName('');
+      setAddingProduct(true);
+      await stockApi.createProduct(session.token, normalizedName, newProductCategory);
+      setNewProductName('');
+      setNewProductCategory(DEFAULT_PRODUCT_CATEGORY);
+      setIsAddProductModalOpen(false);
+      await loadTable();
       setError('');
     } catch (createError) {
       setError(errorMessage(createError));
+    } finally {
+      setAddingProduct(false);
     }
   };
 
-  const removeRow = (rowId: string) => {
+  const removeProduct = (productId: string) => {
     if (!canManage) {
       return;
     }
-    Alert.alert('Удалить товар?', 'Строка будет удалена без возможности восстановления.', [
-      { text: 'Отмена', style: 'cancel' },
+    Alert.alert('Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€?', 'Ð­Ñ‚Ð° ÑÑ‚Ñ€Ð¾ÐºÐ° Ñ‚Ð¾Ð²Ð°Ñ€Ð° Ð±ÑƒÐ´ÐµÑ‚ ÑƒÐ´Ð°Ð»ÐµÐ½Ð°.', [
+      { text: 'ÐžÑ‚Ð¼ÐµÐ½Ð°', style: 'cancel' },
       {
-        text: 'Удалить',
+        text: 'Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ',
         style: 'destructive',
         onPress: async () => {
           try {
-            await stockApi.remove(session.token, rowId);
-            setRows((current) => current.filter((row) => row.id !== rowId));
+            await stockApi.deleteProduct(session.token, productId);
+            setTable((current) =>
+              current
+                ? {
+                    ...current,
+                    rows: current.rows.filter((row) => row.productId !== productId),
+                  }
+                : current,
+            );
             setError('');
           } catch (removeError) {
             setError(errorMessage(removeError));
@@ -159,141 +769,374 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     ]);
   };
 
-  const visibleRows = useMemo(() => {
-    const normalizedQuery = normalizeText(query);
-    let nextRows = rows;
-    if (normalizedQuery) {
-      nextRows = nextRows.filter((row) => normalizeText(row.name).includes(normalizedQuery));
-    }
-    if (sortMode === 'name') {
-      return [...nextRows].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-    }
-    if (sortMode === 'critical') {
-      return [...nextRows].sort((a, b) => minStock(a) - minStock(b));
-    }
-    return nextRows;
-  }, [rows, query, sortMode]);
+  const renderCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
+    <View key={category} style={styles.categoryBlock}>
+      <View style={styles.categoryTitleRow}>
+        <Text style={styles.categoryTitle}>{category}</Text>
+      </View>
+      <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        <View>
+          <View style={styles.headerRow}>
+            <View style={[styles.headerCell, styles.nameColumn]}>
+              <Text style={styles.headerText}>Ð¢Ð¾Ð²Ð°Ñ€</Text>
+            </View>
+            {table?.dates.map((date) => (
+              <View
+                key={date}
+                style={[
+                  styles.headerCell,
+                  styles.dateColumn,
+                  columnToneHeader(date),
+                  secondWeekBoundaryStyle(date),
+                ]}
+              >
+                <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
+                <Text style={styles.dateDayText}>{formatDate(date)}</Text>
+              </View>
+            ))}
+            <View style={[styles.headerCell, styles.actionColumn]}>
+              <Text style={styles.headerText}>Ð”ÐµÐ¹ÑÑ‚Ð²Ð¸Ðµ</Text>
+            </View>
+          </View>
 
-  const columnStyleByType = (type: ColumnType) => {
-    if (type === 'stock') {
-      return styles.stockCell;
+          {rows.length === 0 ? (
+            <View style={styles.emptyRow}>
+              <Text style={styles.emptyRowText}>ÐÐµÑ‚ Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð² Ð² ÑÑ‚Ð¾Ð¹ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ðµ</Text>
+            </View>
+          ) : (
+            rows.map((row) => (
+              <View key={row.productId} style={styles.row}>
+                <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+                  <Text numberOfLines={1} ellipsizeMode="tail" style={styles.nameText}>
+                    {row.name}
+                  </Text>
+                </View>
+                {table?.dates.map((date) => {
+                  const key = `${row.productId}:${date}`;
+                  const pending = pendingKeys[key];
+                  const value = row.values[date] ?? '';
+                  const numeric = value ? Number.parseInt(value, 10) : NaN;
+                  const isLow = !Number.isNaN(numeric) && numeric <= 2;
+
+                  return (
+                    <Pressable
+                      key={date}
+                      style={[
+                        styles.cell,
+                        styles.dateColumn,
+                        styles.valueCell,
+                        columnToneValue(date),
+                        secondWeekBoundaryStyle(date),
+                        isLow && styles.lowValueCell,
+                        pending && styles.pendingCell,
+                      ]}
+                      onPress={() => openEditCell(row, date)}
+                    >
+                      <Text style={styles.valueText}>{value || '-'}</Text>
+                    </Pressable>
+                  );
+                })}
+                <View style={[styles.cell, styles.actionColumn]}>
+                  {canManage ? (
+                    <Pressable style={styles.deleteButton} onPress={() => removeProduct(row.productId)}>
+                      <Text style={styles.deleteButtonText}>Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.workerActionText}>-</Text>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
+
+  const dashboardHeaderToneStyle = (tone: DashboardTone) => {
+    if (tone === 'order') {
+      return styles.dashboardHeaderOrder;
     }
-    if (type === 'order') {
-      return styles.orderCell;
+    if (tone === 'yellow') {
+      return styles.dashboardHeaderYellow;
     }
-    return styles.baseCell;
+    if (tone === 'green') {
+      return styles.dashboardHeaderGreen;
+    }
+    if (tone === 'blue') {
+      return styles.dashboardHeaderBlue;
+    }
+    return styles.dashboardHeaderNeutral;
   };
+
+  const dashboardValueToneStyle = (tone: DashboardTone) => {
+    if (tone === 'order') {
+      return styles.dashboardValueOrder;
+    }
+    if (tone === 'yellow') {
+      return styles.dashboardValueYellow;
+    }
+    if (tone === 'green') {
+      return styles.dashboardValueGreen;
+    }
+    if (tone === 'blue') {
+      return styles.dashboardValueBlue;
+    }
+    return styles.dashboardValueNeutral;
+  };
+
+  const dashboardColumnStyle = (column: DashboardColumn) => {
+    if (column.kind === 'order') {
+      return styles.dashboardOrderColumn;
+    }
+    if (column.kind === 'metric') {
+      return styles.dashboardMetricColumn;
+    }
+    return styles.dashboardStockColumn;
+  };
+
+  const renderDashboardCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
+    <View key={category} style={styles.categoryBlock}>
+      <View style={styles.categoryTitleRow}>
+        <Text style={styles.categoryTitle}>{category}</Text>
+      </View>
+      <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        <View>
+          <View style={styles.headerRow}>
+            <View style={[styles.headerCell, styles.nameColumn]}>
+              <Text style={styles.headerText}>Ð¢Ð¾Ð²Ð°Ñ€</Text>
+            </View>
+            {DASHBOARD_COLUMNS.map((column) => (
+              <View
+                key={column.key}
+                style={[
+                  styles.headerCell,
+                  styles.dashboardHeaderCell,
+                  dashboardColumnStyle(column),
+                  dashboardHeaderToneStyle(column.tone),
+                ]}
+              >
+                <Text style={styles.dashboardHeaderTitle}>{column.title}</Text>
+                <Text style={styles.dashboardHeaderSubtitle}>{dashboardHeaderSubtitle(column)}</Text>
+              </View>
+            ))}
+            <View style={[styles.headerCell, styles.actionColumn]}>
+              <Text style={styles.headerText}>Ð”ÐµÐ¹ÑÑ‚Ð²Ð¸Ðµ</Text>
+            </View>
+          </View>
+
+          {rows.length === 0 ? (
+            <View style={styles.emptyRow}>
+              <Text style={styles.emptyRowText}>ÐÐµÑ‚ Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð² Ð² ÑÑ‚Ð¾Ð¹ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ðµ</Text>
+            </View>
+          ) : (
+            rows.map((row) => {
+              const values = dashboardRowValues(row);
+              const reference = productReferenceLabel(row);
+              return (
+                <View key={row.productId} style={styles.row}>
+                  <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.nameText}>
+                      {row.name}
+                    </Text>
+                    {!!reference && (
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={styles.referenceText}>
+                        {reference}
+                      </Text>
+                    )}
+                  </View>
+                  {DASHBOARD_COLUMNS.map((column) => {
+                    const value = values[column.key] ?? '';
+                    if (column.kind === 'order' && isManualOrderKey(column.key)) {
+                      const manualOrderKey = column.key;
+                      return (
+                        <View
+                          key={column.key}
+                          style={[
+                            styles.cell,
+                            styles.dashboardValueCell,
+                            dashboardColumnStyle(column),
+                            dashboardValueToneStyle(column.tone),
+                          ]}
+                        >
+                          <TextInput
+                            value={value}
+                            onChangeText={(nextValue) => setOrderCellValue(row.productId, manualOrderKey, nextValue)}
+                            keyboardType="number-pad"
+                            style={styles.dashboardOrderInput}
+                            maxLength={MAX_ORDER_VALUE_LEN}
+                            placeholder="-"
+                            placeholderTextColor="#6d7d72"
+                          />
+                        </View>
+                      );
+                    }
+
+                    if (column.kind === 'stock' && isManualStockKey(column.key)) {
+                      const date = currentStockDateForColumn(column.key);
+                      const pending = date ? pendingKeys[`${row.productId}:${date}`] : false;
+                      const numeric = parseStockNumber(value);
+                      const isLowStock = numeric !== null && numeric <= 2;
+
+                      return (
+                        <Pressable
+                          key={column.key}
+                          style={[
+                            styles.cell,
+                            styles.dashboardValueCell,
+                            dashboardColumnStyle(column),
+                            dashboardValueToneStyle(column.tone),
+                            isLowStock && styles.lowValueCell,
+                            pending && styles.pendingCell,
+                          ]}
+                          onPress={() => {
+                            if (date) {
+                              openEditCell(row, date);
+                            }
+                          }}
+                        >
+                          <Text style={styles.valueText}>{value || '-'}</Text>
+                        </Pressable>
+                      );
+                    }
+
+                    const numeric = parseStockNumber(value);
+                    const isLowStock = column.kind === 'stock' && numeric !== null && numeric <= 2;
+                    return (
+                      <View
+                        key={column.key}
+                        style={[
+                          styles.cell,
+                          styles.dashboardValueCell,
+                          dashboardColumnStyle(column),
+                          dashboardValueToneStyle(column.tone),
+                          isLowStock && styles.lowValueCell,
+                        ]}
+                      >
+                        <Text style={styles.valueText}>{value || '-'}</Text>
+                      </View>
+                    );
+                  })}
+                  <View style={[styles.cell, styles.actionColumn]}>
+                    <Pressable style={styles.deleteButton} onPress={() => removeProduct(row.productId)}>
+                      <Text style={styles.deleteButtonText}>Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
 
   const renderStockTab = () => (
     <>
+      {!canManage && <WorkerCheckInCard token={session.token} />}
       <View style={styles.controls}>
         <TextInput
           value={query}
           onChangeText={setQuery}
           style={styles.searchInput}
-          placeholder="Поиск товара"
+          placeholder="ÐŸÐ¾Ð¸ÑÐº Ñ‚Ð¾Ð²Ð°Ñ€Ð°"
           placeholderTextColor="#6d7d72"
         />
-        {canManage && (
-          <TextInput
-            value={newRowName}
-            onChangeText={setNewRowName}
-            style={styles.searchInput}
-            placeholder="Название нового товара"
-            placeholderTextColor="#6d7d72"
-          />
-        )}
         <View style={styles.controlButtons}>
           {canManage && (
-            <Pressable style={styles.primaryButton} onPress={addRow}>
-              <Text style={styles.primaryButtonText}>Добавить товар</Text>
-            </Pressable>
+            <>
+              <Pressable style={styles.secondaryButton} onPress={() => setIsShopPickerOpen(true)}>
+                <Text style={styles.secondaryButtonText}>
+                  ÐœÐ°Ð³Ð°Ð·Ð¸Ð½: {shops.find((shop) => shop.id === selectedShopId)?.name ?? table?.shop.name ?? '...'}
+                </Text>
+              </Pressable>
+              <View style={styles.rangeButtons}>
+                <Pressable
+                  style={styles.calendarNavButton}
+                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, -TWO_WEEKS_DAYS))}
+                >
+                  <Text style={styles.calendarNavButtonText}>-2 Ð½ÐµÐ´.</Text>
+                </Pressable>
+                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(shiftDateKey(currentTwoWeeksStart(), -7))}>
+                  <Text style={styles.calendarNavButtonText}>Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ 2 Ð½ÐµÐ´.</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.calendarNavButton}
+                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, TWO_WEEKS_DAYS))}
+                >
+                  <Text style={styles.calendarNavButtonText}>+2 Ð½ÐµÐ´.</Text>
+                </Pressable>
+              </View>
+              <Pressable style={styles.primaryButton} onPress={() => setIsAddProductModalOpen(true)}>
+                <Text style={styles.primaryButtonText}>Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButton} onPress={() => void exportDashboard()}>
+                <Text style={styles.secondaryButtonText}>Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ Ð² Excel</Text>
+              </Pressable>
+            </>
           )}
-          <Pressable style={styles.secondaryButton} onPress={loadRows}>
-            <Text style={styles.secondaryButtonText}>Обновить</Text>
+          <Pressable style={styles.secondaryButton} onPress={loadTable}>
+            <Text style={styles.secondaryButtonText}>ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ</Text>
           </Pressable>
         </View>
       </View>
 
       <View style={styles.sortRow}>
-        <Text style={styles.metaText}>Позиций: {visibleRows.length}</Text>
-        <View style={styles.sortButtons}>
-          <Pressable style={[styles.sortButton, sortMode === 'manual' && styles.sortButtonActive]} onPress={() => setSortMode('manual')}>
-            <Text style={[styles.sortButtonText, sortMode === 'manual' && styles.sortButtonTextActive]}>Без сорт.</Text>
-          </Pressable>
-          <Pressable style={[styles.sortButton, sortMode === 'name' && styles.sortButtonActive]} onPress={() => setSortMode('name')}>
-            <Text style={[styles.sortButtonText, sortMode === 'name' && styles.sortButtonTextActive]}>А-Я</Text>
+        <Text style={styles.metaText}>ÐŸÐ¾Ð·Ð¸Ñ†Ð¸Ð¹: {visibleRows.length}</Text>
+        <Text style={styles.metaText}>{table ? `${table.from} - ${table.to}` : ''}</Text>
+      </View>
+
+      <View style={styles.sortButtons}>
+        <Pressable
+          style={[styles.sortButton, sortMode === 'manual' && styles.sortButtonActive]}
+          onPress={() => setSortMode('manual')}
+        >
+          <Text style={[styles.sortButtonText, sortMode === 'manual' && styles.sortButtonTextActive]}>Ð‘ÐµÐ· ÑÐ¾Ñ€Ñ‚.</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.sortButton, sortMode === 'name' && styles.sortButtonActive]}
+          onPress={() => setSortMode('name')}
+        >
+          <Text style={[styles.sortButtonText, sortMode === 'name' && styles.sortButtonTextActive]}>Ð-Ð¯</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.sortButton, sortMode === 'critical' && styles.sortButtonActive]}
+          onPress={() => setSortMode('critical')}
+        >
+          <Text style={[styles.sortButtonText, sortMode === 'critical' && styles.sortButtonTextActive]}>ÐšÑ€Ð¸Ñ‚Ð¸Ñ‡Ð½Ñ‹Ð¹</Text>
+        </Pressable>
+      </View>
+
+      {canManage && (
+        <View style={styles.viewModeButtons}>
+          <Pressable
+            style={[styles.viewModeButton, managerStockView === 'dashboard' && styles.viewModeButtonActive]}
+            onPress={() => setManagerStockView('dashboard')}
+          >
+            <Text style={[styles.viewModeButtonText, managerStockView === 'dashboard' && styles.viewModeButtonTextActive]}>
+              Ð”Ð°ÑˆÐ±Ð¾Ñ€Ð´
+            </Text>
           </Pressable>
           <Pressable
-            style={[styles.sortButton, sortMode === 'critical' && styles.sortButtonActive]}
-            onPress={() => setSortMode('critical')}
+            style={[styles.viewModeButton, managerStockView === 'calendar' && styles.viewModeButtonActive]}
+            onPress={() => setManagerStockView('calendar')}
           >
-            <Text style={[styles.sortButtonText, sortMode === 'critical' && styles.sortButtonTextActive]}>Критичный</Text>
+            <Text style={[styles.viewModeButtonText, managerStockView === 'calendar' && styles.viewModeButtonTextActive]}>
+              ÐšÐ°Ð»ÐµÐ½Ð´Ð°Ñ€ÑŒ
+            </Text>
           </Pressable>
         </View>
-      </View>
+      )}
 
       {!!error && <Text style={styles.error}>{error}</Text>}
 
       <View style={styles.tableWrap}>
-        <ScrollView showsVerticalScrollIndicator>
-          <ScrollView horizontal showsHorizontalScrollIndicator>
-            <View>
-              <View style={styles.categoryRow}>
-                <Text style={styles.categoryText}>Йогурты</Text>
-              </View>
-
-              <View style={styles.headerRow}>
-                <View style={[styles.headerCell, styles.nameHeaderCell]}>
-                  <Text style={styles.headerText}>Товар</Text>
-                </View>
-                {COLUMNS.map((column) => (
-                  <View key={column.key} style={[styles.headerCell, styles.numericCell, columnStyleByType(column.type)]}>
-                    <Text style={styles.headerText}>{column.label}</Text>
-                  </View>
-                ))}
-                <View style={[styles.headerCell, styles.actionCell]}>
-                  <Text style={styles.headerText}>Действие</Text>
-                </View>
-              </View>
-
-              {visibleRows.map((row) => {
-                const rowPending = pendingRows[row.id];
-                return (
-                  <View key={row.id} style={[styles.row, rowPending && styles.rowPending]}>
-                    <View style={[styles.nameCell, styles.nameHeaderCell]}>
-                      <Text style={styles.nameText} numberOfLines={1} ellipsizeMode="tail">
-                        {row.name}
-                      </Text>
-                    </View>
-                    {COLUMNS.map((column) => (
-                      <View key={column.key} style={[styles.cell, styles.numericCell, columnStyleByType(column.type)]}>
-                        <TextInput
-                          value={row.values[column.key]}
-                          onChangeText={(value) => updateValueLocal(row.id, column.key, value)}
-                          onEndEditing={(event) => saveValue(row.id, column.key, event.nativeEvent.text)}
-                          style={styles.numberInput}
-                          keyboardType="number-pad"
-                          placeholder="-"
-                          placeholderTextColor="#7f7f7f"
-                          maxLength={5}
-                        />
-                      </View>
-                    ))}
-                    <View style={[styles.cell, styles.actionCell]}>
-                      {canManage ? (
-                        <Pressable style={styles.deleteButton} onPress={() => removeRow(row.id)}>
-                          <Text style={styles.deleteButtonText}>Удалить</Text>
-                        </Pressable>
-                      ) : (
-                        <Text style={styles.workerText}>Нет</Text>
-                      )}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </ScrollView>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
+          {PRODUCT_CATEGORIES.map((category) =>
+            canManage && managerStockView === 'dashboard'
+              ? renderDashboardCategoryTable(category, rowsByCategory[category])
+              : renderCategoryTable(category, rowsByCategory[category]),
+          )}
         </ScrollView>
       </View>
     </>
@@ -304,6 +1147,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return (
         <View style={styles.tabContentWrap}>
           <TasksPanel session={session} fullHeight />
+        </View>
+      );
+    }
+    if (activeTab === 'orders') {
+      return (
+        <View style={styles.tabContentWrap}>
+          <OrdersPanel session={session} />
         </View>
       );
     }
@@ -328,23 +1178,24 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#2f6f4f" />
-        <Text style={styles.loadingText}>Загрузка данных склада...</Text>
+        <Text style={styles.loadingText}>Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð´Ð°Ð½Ð½Ñ‹Ñ… ÑÐºÐ»Ð°Ð´Ð°...</Text>
       </SafeAreaView>
     );
   }
 
   const tabs: Array<{ key: ScreenTab; label: string }> = canManage
     ? [
-        { key: 'stock', label: 'Остатки' },
-        { key: 'tasks', label: 'Задачи' },
-        { key: 'support', label: 'Поддержка' },
-        { key: 'support', label: 'Поддержка' },
-        { key: 'users', label: 'Пользователи' },
+        { key: 'stock', label: 'ÐžÑÑ‚Ð°Ñ‚ÐºÐ¸' },
+        { key: 'orders', label: 'Ð—Ð°ÐºÐ°Ð·Ñ‹' },
+        { key: 'tasks', label: 'Ð—Ð°Ð´Ð°Ñ‡Ð¸' },
+        { key: 'support', label: 'ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°' },
+        { key: 'users', label: 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ð¸' },
       ]
     : [
-        { key: 'stock', label: 'Остатки' },
-        { key: 'tasks', label: 'Задачи' },
-        { key: 'support', label: 'Поддержка' },
+        { key: 'stock', label: 'ÐžÑÑ‚Ð°Ñ‚ÐºÐ¸' },
+        { key: 'orders', label: 'Ð—Ð°ÐºÐ°Ð·Ñ‹' },
+        { key: 'tasks', label: 'Ð—Ð°Ð´Ð°Ñ‡Ð¸' },
+        { key: 'support', label: 'ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°' },
       ];
 
   return (
@@ -353,13 +1204,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Учёт остатков</Text>
+          <Text style={styles.title}>Ð£Ñ‡ÐµÑ‚ Ð¾ÑÑ‚Ð°Ñ‚ÐºÐ¾Ð²</Text>
           <Text style={styles.subtitle}>
-            {session.user.displayName} · {canManage ? 'Менеджер' : 'Сотрудник'}
+            {session.user.fullName} Â· {canManage ? 'ÐœÐµÐ½ÐµÐ´Ð¶ÐµÑ€' : 'Ð¡Ð¾Ñ‚Ñ€ÑƒÐ´Ð½Ð¸Ðº'}
           </Text>
         </View>
         <Pressable style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutButtonText}>Выйти</Text>
+          <Text style={styles.logoutButtonText}>Ð’Ñ‹Ð¹Ñ‚Ð¸</Text>
         </Pressable>
       </View>
 
@@ -369,12 +1220,141 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         {tabs.map((tab) => {
           const active = activeTab === tab.key;
           return (
-            <Pressable key={tab.key} style={[styles.bottomTabButton, active && styles.bottomTabButtonActive]} onPress={() => setActiveTab(tab.key)}>
+            <Pressable
+              key={tab.key}
+              style={[styles.bottomTabButton, active && styles.bottomTabButtonActive]}
+              onPress={() => setActiveTab(tab.key)}
+            >
               <Text style={[styles.bottomTabButtonText, active && styles.bottomTabButtonTextActive]}>{tab.label}</Text>
             </Pressable>
           );
         })}
       </View>
+
+      <Modal
+        visible={isAddProductModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsAddProductModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>ÐÐ¾Ð²Ñ‹Ð¹ Ñ‚Ð¾Ð²Ð°Ñ€</Text>
+            <TextInput
+              value={newProductName}
+              onChangeText={setNewProductName}
+              style={styles.modalInput}
+              placeholder="Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ñ‚Ð¾Ð²Ð°Ñ€Ð°"
+              placeholderTextColor="#7a8b7f"
+              autoFocus
+              maxLength={140}
+            />
+            <View style={styles.categoryPicker}>
+              {PRODUCT_CATEGORIES.map((category) => {
+                const active = newProductCategory === category;
+                return (
+                  <Pressable
+                    key={category}
+                    style={[styles.categoryChip, active && styles.categoryChipActive]}
+                    onPress={() => setNewProductCategory(category)}
+                  >
+                    <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{category}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancelButton} onPress={() => setIsAddProductModalOpen(false)}>
+                <Text style={styles.modalCancelText}>ÐžÑ‚Ð¼ÐµÐ½Ð°</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSaveButton, addingProduct && styles.modalSaveButtonDisabled]}
+                onPress={addProduct}
+                disabled={addingProduct}
+              >
+                <Text style={styles.modalSaveText}>{addingProduct ? 'Ð¡Ð¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ðµ...' : 'Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={editingCell !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingCell(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Ð˜Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ðº</Text>
+            <Text style={styles.modalMeta}>
+              {editingCell?.productName} Â· {editingCell ? `${formatWeekday(editingCell.date)}, ${formatDate(editingCell.date)}` : ''}
+            </Text>
+            <TextInput
+              value={editingValue}
+              onChangeText={(value) => setEditingValue(sanitizeStockValue(value))}
+              style={styles.modalInput}
+              placeholder="0-15"
+              placeholderTextColor="#7a8b7f"
+              keyboardType="number-pad"
+              maxLength={2}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancelButton} onPress={() => setEditingCell(null)} disabled={savingEdit}>
+                <Text style={styles.modalCancelText}>ÐžÑ‚Ð¼ÐµÐ½Ð°</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSaveButton, savingEdit && styles.modalSaveButtonDisabled]}
+                onPress={() => void saveCell(false)}
+                disabled={savingEdit}
+              >
+                <Text style={styles.modalSaveText}>Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalContinueButton, savingEdit && styles.modalSaveButtonDisabled]}
+                onPress={() => void saveCell(true)}
+                disabled={savingEdit}
+              >
+                <Text style={styles.modalContinueText}>Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ð¸ Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isShopPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsShopPickerOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½</Text>
+            <ScrollView style={styles.modalShopList}>
+              {shops.map((shop) => (
+                <Pressable
+                  key={shop.id}
+                  style={[styles.modalShopItem, selectedShopId === shop.id && styles.modalShopItemActive]}
+                  onPress={() => {
+                    setSelectedShopId(shop.id);
+                    setIsShopPickerOpen(false);
+                  }}
+                >
+                  <Text style={[styles.modalShopItemText, selectedShopId === shop.id && styles.modalShopItemTextActive]}>
+                    {shop.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable style={styles.modalCancelButton} onPress={() => setIsShopPickerOpen(false)}>
+              <Text style={styles.modalCancelText}>Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -452,33 +1432,51 @@ const styles = StyleSheet.create({
   },
   controlButtons: {
     flexDirection: 'row',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   primaryButton: {
     backgroundColor: '#2f6f4f',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   primaryButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   secondaryButton: {
     backgroundColor: '#d5ddd5',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   secondaryButtonText: {
     color: '#213125',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
+  },
+  rangeButtons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  calendarNavButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#b8c7bb',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  calendarNavButtonText: {
+    color: '#2d4034',
+    fontWeight: '700',
+    fontSize: 12,
   },
   sortRow: {
     marginTop: 10,
-    marginBottom: 8,
+    marginBottom: 6,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -487,11 +1485,12 @@ const styles = StyleSheet.create({
   metaText: {
     color: '#35473b',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 13,
   },
   sortButtons: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 8,
   },
   sortButton: {
     borderWidth: 1,
@@ -508,9 +1507,34 @@ const styles = StyleSheet.create({
   sortButtonText: {
     color: '#2f4437',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12,
   },
   sortButtonTextActive: {
+    color: '#ffffff',
+  },
+  viewModeButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  viewModeButton: {
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#f3f6f4',
+  },
+  viewModeButtonActive: {
+    backgroundColor: '#1f4f37',
+    borderColor: '#1f4f37',
+  },
+  viewModeButtonText: {
+    color: '#2f4437',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  viewModeButtonTextActive: {
     color: '#ffffff',
   },
   error: {
@@ -528,20 +1552,29 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 8,
   },
-  categoryRow: {
-    backgroundColor: '#d9d3a4',
-    borderBottomWidth: 1,
-    borderBottomColor: '#95a596',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+  tableVerticalContent: {
+    minHeight: '100%',
+    paddingBottom: 10,
   },
-  categoryText: {
-    fontSize: 20,
+  categoryBlock: {
+    borderTopWidth: 1,
+    borderTopColor: '#b7c5b8',
+  },
+  categoryTitleRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: '#d6dfd6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#9eb09f',
+  },
+  categoryTitle: {
+    color: '#24382d',
     fontWeight: '800',
-    color: '#2c311f',
+    fontSize: 16,
   },
   headerRow: {
     flexDirection: 'row',
+    backgroundColor: '#ecf1ec',
   },
   headerCell: {
     justifyContent: 'center',
@@ -549,43 +1582,54 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
-    minHeight: 72,
+    minHeight: 62,
     paddingHorizontal: 6,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   headerText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#2e312f',
     fontWeight: '800',
     textAlign: 'center',
-    lineHeight: 17,
+  },
+  dateWeekdayText: {
+    fontSize: 10,
+    color: '#2e312f',
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  dateDayText: {
+    marginTop: 1,
+    fontSize: 9,
+    color: '#3a4b3e',
+    fontWeight: '700',
+  },
+  headerToneA: {
+    backgroundColor: '#ffffff',
+  },
+  headerToneB: {
+    backgroundColor: '#eef6ef',
+  },
+  secondWeekBoundary: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#6f8fb4',
   },
   row: {
     flexDirection: 'row',
   },
-  rowPending: {
-    opacity: 0.7,
-  },
-  nameHeaderCell: {
-    width: 350,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'flex-start',
-    paddingHorizontal: 12,
-  },
-  nameCell: {
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#7f8d81',
+  emptyRow: {
+    minHeight: 52,
+    alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: '#a7b5a8',
+    backgroundColor: '#f6f8f6',
   },
-  nameText: {
-    width: '100%',
-    fontSize: 23,
-    color: '#222222',
-    fontWeight: '500',
-    textAlign: 'left',
-    paddingHorizontal: 0,
+  emptyRowText: {
+    color: '#5a6d5e',
+    fontSize: 13,
+    fontWeight: '700',
   },
   cell: {
     justifyContent: 'center',
@@ -593,22 +1637,124 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
-    minHeight: 56,
+    minHeight: 52,
+    paddingHorizontal: 6,
   },
-  numericCell: {
-    width: 110,
+  nameColumn: {
+    width: 280,
+    alignItems: 'flex-start',
+    paddingHorizontal: 10,
+    backgroundColor: '#f7f7f7',
   },
-  numberInput: {
+  dateColumn: {
+    width: 96,
+  },
+  dashboardStockColumn: {
+    width: 108,
+  },
+  dashboardOrderColumn: {
+    width: 120,
+  },
+  dashboardMetricColumn: {
+    width: 112,
+  },
+  actionColumn: {
+    width: 100,
+    backgroundColor: '#ecf0ec',
+  },
+  nameCell: {
+    justifyContent: 'center',
+  },
+  nameText: {
+    width: '100%',
+    fontSize: 16,
+    color: '#222222',
+    fontWeight: '600',
+  },
+  referenceText: {
+    marginTop: 2,
+    width: '100%',
+    fontSize: 11,
+    color: '#4e5d53',
+    fontWeight: '600',
+  },
+  valueCell: {
+    backgroundColor: '#f9fbf8',
+  },
+  valueToneA: {
+    backgroundColor: '#ffffff',
+  },
+  valueToneB: {
+    backgroundColor: '#f1f8f1',
+  },
+  dashboardHeaderCell: {
+    minHeight: 98,
+    gap: 3,
+  },
+  dashboardHeaderTitle: {
+    fontSize: 11,
+    color: '#1f2a21',
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  dashboardHeaderSubtitle: {
+    fontSize: 11,
+    color: '#1f2a21',
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  dashboardHeaderNeutral: {
+    backgroundColor: '#d9d9d9',
+  },
+  dashboardHeaderOrder: {
+    backgroundColor: '#e4cccc',
+  },
+  dashboardHeaderYellow: {
+    backgroundColor: '#ecec9c',
+  },
+  dashboardHeaderGreen: {
+    backgroundColor: '#bdd196',
+  },
+  dashboardHeaderBlue: {
+    backgroundColor: '#90c7da',
+  },
+  dashboardValueCell: {
+    backgroundColor: '#f4f6f4',
+  },
+  dashboardValueNeutral: {
+    backgroundColor: '#f2f2f2',
+  },
+  dashboardValueOrder: {
+    backgroundColor: '#efe0e0',
+  },
+  dashboardValueYellow: {
+    backgroundColor: '#f4f3bf',
+  },
+  dashboardValueGreen: {
+    backgroundColor: '#dbe7bf',
+  },
+  dashboardValueBlue: {
+    backgroundColor: '#c7e4ef',
+  },
+  dashboardOrderInput: {
     width: '100%',
     textAlign: 'center',
-    fontSize: 20,
-    color: '#232323',
+    color: '#223528',
+    fontSize: 15,
     fontWeight: '700',
-    paddingVertical: 8,
+    paddingVertical: 0,
   },
-  actionCell: {
-    width: 110,
-    backgroundColor: '#ecf0ec',
+  lowValueCell: {
+    backgroundColor: '#f4d2cb',
+  },
+  pendingCell: {
+    opacity: 0.6,
+  },
+  valueText: {
+    color: '#223528',
+    fontSize: 16,
+    fontWeight: '800',
   },
   deleteButton: {
     backgroundColor: '#9f4038',
@@ -621,19 +1767,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
-  workerText: {
+  workerActionText: {
     color: '#55685b',
     fontSize: 12,
     fontWeight: '700',
-  },
-  baseCell: {
-    backgroundColor: '#f4f5f3',
-  },
-  stockCell: {
-    backgroundColor: '#e8ecb7',
-  },
-  orderCell: {
-    backgroundColor: '#ecd8c4',
   },
   bottomTabs: {
     flexDirection: 'row',
@@ -665,4 +1802,136 @@ const styles = StyleSheet.create({
   bottomTabButtonTextActive: {
     color: '#ffffff',
   },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(22, 32, 26, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#c5d1c7',
+    backgroundColor: '#f7faf7',
+    padding: 14,
+    gap: 12,
+    maxHeight: '75%',
+  },
+  modalTitle: {
+    color: '#1f2f26',
+    fontSize: 19,
+    fontWeight: '800',
+  },
+  modalMeta: {
+    color: '#4d6052',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalInput: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#c6d3c8',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: '#1f2f26',
+    fontWeight: '500',
+  },
+  categoryPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#c8d3ca',
+    backgroundColor: '#edf3ee',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  categoryChipActive: {
+    backgroundColor: '#2f6f4f',
+    borderColor: '#2f6f4f',
+  },
+  categoryChipText: {
+    color: '#334b3d',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  categoryChipTextActive: {
+    color: '#ffffff',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalCancelButton: {
+    borderRadius: 11,
+    backgroundColor: '#dbe4dc',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalCancelText: {
+    color: '#2b3d31',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalSaveButton: {
+    borderRadius: 11,
+    backgroundColor: '#2f6f4f',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalContinueButton: {
+    borderRadius: 11,
+    backgroundColor: '#215c40',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalSaveButtonDisabled: {
+    opacity: 0.7,
+  },
+  modalSaveText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalContinueText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalShopList: {
+    maxHeight: 320,
+  },
+  modalShopItem: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#d1dbd2',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  modalShopItemActive: {
+    borderColor: '#2f6f4f',
+    backgroundColor: '#e8f2eb',
+  },
+  modalShopItemText: {
+    color: '#2a3f33',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalShopItemTextActive: {
+    color: '#1f4f37',
+  },
 });
+
+
+
+
+

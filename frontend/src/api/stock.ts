@@ -1,49 +1,105 @@
-import { ColumnKey, StockRow } from '../types/models';
+import { ProductCategory, StockTable } from '../types/models';
 import { request } from './http';
 
-type RowsResponse = {
-  rows: StockRow[];
+type StockTableResponse = {
+  table: StockTable;
 };
 
-type RowResponse = {
-  row: StockRow;
+type ProductResponse = {
+  product: {
+    id: string;
+    name: string;
+    category: ProductCategory;
+    unitsInPack: number | null;
+    minStockUnits: number | null;
+    maxStockUnits: number | null;
+  };
+};
+
+type StockListQuery = {
+  shopId?: string;
+  from?: string;
+  to?: string;
+  range?: 'week' | 'year';
+};
+
+const toQueryString = (query: StockListQuery): string => {
+  const params = new URLSearchParams();
+  if (query.shopId) {
+    params.set('shopId', query.shopId);
+  }
+  if (query.from) {
+    params.set('from', query.from);
+  }
+  if (query.to) {
+    params.set('to', query.to);
+  }
+  if (query.range) {
+    params.set('range', query.range);
+  }
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
 };
 
 export const stockApi = {
-  list: async (token: string): Promise<StockRow[]> => {
-    const result = await request<RowsResponse>('/api/stock', { token });
-    return result.rows;
+  list: async (token: string, query: StockListQuery = {}): Promise<StockTable> => {
+    const result = await request<StockTableResponse>(`/api/stock${toQueryString(query)}`, { token });
+    return result.table;
   },
 
-  create: async (token: string, name: string): Promise<StockRow> => {
-    const result = await request<RowResponse>('/api/stock', {
+  createProduct: async (
+    token: string,
+    name: string,
+    category: ProductCategory,
+  ): Promise<{ id: string; name: string; category: ProductCategory }> => {
+    const result = await request<ProductResponse>('/api/stock/products', {
       method: 'POST',
       token,
-      body: { name },
+      body: { name, category },
     });
-    return result.row;
+    return result.product;
   },
 
-  update: async (
+  updateProductMeta: async (
     token: string,
-    rowId: string,
-    payload: {
-      name?: string;
-      values?: Partial<Record<ColumnKey, string>>;
-    },
-  ): Promise<StockRow> => {
-    const result = await request<RowResponse>(`/api/stock/${rowId}`, {
-      method: 'PUT',
+    productId: string,
+    payload: { unitsInPack?: number | null; minStockUnits?: number | null; maxStockUnits?: number | null },
+  ): Promise<{
+    id: string;
+    name: string;
+    category: ProductCategory;
+    unitsInPack: number | null;
+    minStockUnits: number | null;
+    maxStockUnits: number | null;
+  }> => {
+    const result = await request<ProductResponse>(`/api/stock/products/${productId}/meta`, {
+      method: 'PATCH',
       token,
       body: payload,
     });
-    return result.row;
+    return result.product;
   },
 
-  remove: async (token: string, rowId: string): Promise<void> => {
-    await request<{}>(`/api/stock/${rowId}`, {
+  deleteProduct: async (token: string, productId: string): Promise<void> => {
+    await request<{}>(`/api/stock/products/${productId}`, {
       method: 'DELETE',
       token,
+    });
+  },
+
+  updateValue: async (
+    token: string,
+    payload: {
+      shopId?: string;
+      productId: string;
+      date: string;
+      value: string;
+    },
+  ): Promise<void> => {
+    await request<{}>('/api/stock/value', {
+      method: 'PUT',
+      token,
+      body: payload,
     });
   },
 };

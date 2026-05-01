@@ -10,15 +10,22 @@ export const supportApi = {
     const result = await request<ThreadsResponse>('/api/support', { token });
     return result.threads;
   },
-  create: async (token: string, payload: { category: SupportCategory; subject: string; body: string }): Promise<SupportThread> => {
+  create: async (
+    token: string,
+    payload: { category: SupportCategory; body?: string; photoUrl?: string | null; subject: string },
+  ): Promise<SupportThread> => {
     const result = await request<ThreadResponse>('/api/support', { method: 'POST', token, body: payload });
     return result.thread;
   },
-  sendMessage: async (token: string, threadId: string, body: string): Promise<SupportMessage> => {
+  sendMessage: async (
+    token: string,
+    threadId: string,
+    payload: { body?: string; photoUrl?: string | null },
+  ): Promise<SupportMessage> => {
     const result = await request<MessageResponse>(`/api/support/${threadId}/messages`, {
       method: 'POST',
       token,
-      body: { body },
+      body: payload,
     });
     return result.message;
   },

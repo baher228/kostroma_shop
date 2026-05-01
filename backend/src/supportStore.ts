@@ -18,6 +18,7 @@ type MessageRow = {
   author_id: string;
   author_display_name: string;
   body: string;
+  photo_url: string | null;
   created_at: Date | string;
 };
 
@@ -29,6 +30,7 @@ const mapMessage = (row: MessageRow): SupportMessage => ({
   authorId: row.author_id,
   authorDisplayName: row.author_display_name,
   body: row.body,
+  photoUrl: row.photo_url,
   createdAt: toIso(row.created_at),
 });
 
@@ -55,7 +57,8 @@ export const listSupportThreads = async (): Promise<SupportThread[]> => {
 export const createSupportThread = async (input: {
   category: SupportCategory;
   subject: string;
-  body: string;
+  body?: string;
+  photoUrl?: string | null;
   createdById: string;
   createdByDisplayName: string;
 }): Promise<SupportThread> => {
@@ -69,9 +72,9 @@ export const createSupportThread = async (input: {
       [threadId, input.category, input.subject.trim(), input.createdById, input.createdByDisplayName],
     );
     const messageResult = await db.query<MessageRow>(
-      `INSERT INTO support_messages (id, thread_id, author_id, author_display_name, body, created_at)
-       VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING *;`,
-      [messageId, threadId, input.createdById, input.createdByDisplayName, input.body.trim()],
+      `INSERT INTO support_messages (id, thread_id, author_id, author_display_name, body, photo_url, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW()) RETURNING *;`,
+      [messageId, threadId, input.createdById, input.createdByDisplayName, input.body?.trim() || '', input.photoUrl ?? null],
     );
     await db.query('COMMIT;');
     return mapThread(threadResult.rows[0], [mapMessage(messageResult.rows[0])]);
@@ -84,15 +87,16 @@ export const createSupportThread = async (input: {
 export const addSupportMessage = async (threadId: string, input: {
   authorId: string;
   authorDisplayName: string;
-  body: string;
+  body?: string;
+  photoUrl?: string | null;
 }): Promise<SupportMessage | null> => {
   const exists = await db.query<ThreadRow>('SELECT * FROM support_threads WHERE id = $1 LIMIT 1;', [threadId]);
   if (!exists.rows[0]) return null;
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const result = await db.query<MessageRow>(
-    `INSERT INTO support_messages (id, thread_id, author_id, author_display_name, body, created_at)
-     VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING *;`,
-    [messageId, threadId, input.authorId, input.authorDisplayName, input.body.trim()],
+    `INSERT INTO support_messages (id, thread_id, author_id, author_display_name, body, photo_url, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,NOW()) RETURNING *;`,
+    [messageId, threadId, input.authorId, input.authorDisplayName, input.body?.trim() || '', input.photoUrl ?? null],
   );
   await db.query('UPDATE support_threads SET updated_at = NOW() WHERE id = $1;', [threadId]);
   return mapMessage(result.rows[0]);

@@ -19,15 +19,26 @@ export const usersApi = {
     token: string,
     payload: {
       username: string;
-      displayName: string;
+      firstName: string;
+      lastName: string;
       password: string;
       role: Role;
+      shopId?: string | null;
     },
   ): Promise<ManagedUser> => {
     const result = await request<UserResponse>('/api/users', {
       method: 'POST',
       token,
       body: payload,
+    });
+    return result.user;
+  },
+
+  assignShop: async (token: string, userId: string, shopId: string | null): Promise<ManagedUser> => {
+    const result = await request<UserResponse>(`/api/users/${userId}/shop`, {
+      method: 'PATCH',
+      token,
+      body: { shopId },
     });
     return result.user;
   },

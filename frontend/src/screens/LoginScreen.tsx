@@ -1,4 +1,4 @@
-import { ActivityIndicator, Platform, Pressable, SafeAreaView, StatusBar as NativeStatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+﻿import { ActivityIndicator, Platform, Pressable, SafeAreaView, StatusBar as NativeStatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useState } from 'react';
 
 type LoginScreenProps = {
@@ -60,9 +60,9 @@ export const LoginScreen = ({ onSubmit }: LoginScreenProps) => {
         </Pressable>
 
         <View style={styles.hintBox}>
-          <Text style={styles.hintText}>Тестовые роли:</Text>
-          <Text style={styles.hintText}>manager / manager123</Text>
-          <Text style={styles.hintText}>worker / worker123</Text>
+          <Text style={styles.hintText}>Тестовый менеджер:</Text>
+          <Text style={styles.hintText}>Логин: manager</Text>
+          <Text style={styles.hintText}>Пароль: manager123</Text>
         </View>
       </View>
     </SafeAreaView>

@@ -16,8 +16,12 @@ const {
 const sessionUser = {
   id: 'u1',
   username: 'manager',
-  displayName: 'Manager',
+  firstName: 'Main',
+  lastName: 'Manager',
+  fullName: 'Main Manager',
   role: 'manager',
+  shopId: null,
+  shopName: null,
 };
 
 test('signSessionToken/verifySessionToken roundtrip works', () => {
@@ -31,8 +35,8 @@ test('verifySessionToken rejects invalid token', () => {
 });
 
 test('loginSchema trims and validates username/password', () => {
-  const parsed = loginSchema.parse({ username: '  admin  ', password: '123456' });
-  assert.equal(parsed.username, 'admin');
+  const parsed = loginSchema.parse({ username: '  Worker.User  ', password: '123456' });
+  assert.equal(parsed.username, 'worker.user');
   assert.equal(parsed.password, '123456');
 });
 
@@ -65,18 +69,22 @@ test('task schemas validate title, deadline and photo requirement', () => {
   assert.throws(() => updateTaskStatusSchema.parse({ status: 'closed' }));
 });
 
-test('createUserSchema normalizes username and validates role', () => {
+test('createUserSchema validates username, name fields and role', () => {
   const parsed = createUserSchema.parse({
-    username: '  Worker.User  ',
-    displayName: 'Worker User',
+    username: '  worker.user  ',
+    firstName: '  Иван  ',
+    lastName: '  Петров  ',
     password: 'secret123',
     role: 'worker',
   });
   assert.equal(parsed.username, 'worker.user');
+  assert.equal(parsed.firstName, 'Иван');
+  assert.equal(parsed.lastName, 'Петров');
   assert.equal(parsed.role, 'worker');
   assert.throws(() => createUserSchema.parse({
     username: 'bad name',
-    displayName: 'Bad Name',
+    firstName: 'A',
+    lastName: 'Petrov',
     password: 'secret123',
     role: 'worker',
   }));

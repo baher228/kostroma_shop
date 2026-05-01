@@ -36,16 +36,6 @@ const formatDateLabel = (iso: string): string => {
   return `${day}.${month}.${year}`;
 };
 
-const formatNumber = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '';
-  return String(value);
-};
-
-const formatPrice = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '';
-  return value.toFixed(2);
-};
-
 const computeWeight = (total: number, packWeightKg: number | null): string => {
   if (!total || packWeightKg === null || packWeightKg === undefined) return '';
   return (total * packWeightKg).toFixed(2);
@@ -122,93 +112,95 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     );
   }
 
-  const renderCategoryTable = (category: string, rows: OrderSheetRow[]) => {
-    if (!sheet || rows.length === 0) return null;
-    return (
-      <View key={category} style={styles.categoryBlock}>
-        <View style={styles.categoryTitleRow}>
-          <Text style={styles.categoryTitle}>{category}</Text>
-        </View>
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-          <View>
-            {/* Header row */}
-            <View style={styles.headerRow}>
-              <View style={[styles.headerCell, styles.nameColumn]}>
-                <Text style={styles.headerMainText}>Номенклатура</Text>
-              </View>
-              <View style={[styles.headerCell, styles.metaCol]}>
-                <Text style={styles.headerMainText}>Упак.</Text>
-              </View>
-              <View style={[styles.headerCell, styles.metaCol]}>
-                <Text style={styles.headerMainText}>Шт/кг</Text>
-              </View>
-              <View style={[styles.headerCell, styles.metaCol]}>
-                <Text style={styles.headerMainText}>Вес уп.</Text>
-              </View>
-              <View style={[styles.headerCell, styles.metaCol]}>
-                <Text style={styles.headerMainText}>Срок</Text>
-              </View>
-              <View style={[styles.headerCell, styles.priceCol]}>
-                <Text style={styles.headerMainText}>Цена</Text>
-              </View>
-              {sheet.shops.map((shop) => (
-                <View key={shop.id} style={[styles.headerCell, styles.shopCol, styles.shopHeader]}>
-                  <Text style={styles.shopHeaderText} numberOfLines={2}>{shop.name}</Text>
-                </View>
-              ))}
-              <View style={[styles.headerCell, styles.totalCol, styles.totalHeader]}>
-                <Text style={styles.headerMainText}>ИТОГО</Text>
-              </View>
-              <View style={[styles.headerCell, styles.weightCol, styles.weightHeader]}>
-                <Text style={styles.headerMainText}>ВЕС</Text>
-              </View>
-            </View>
+  const renderTable = () => {
+    if (!sheet) return null;
+    const shopCount = sheet.shops.length;
 
-            {/* Data rows */}
-            {rows.map((row) => (
-              <View key={row.productId} style={styles.dataRow}>
-                <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
-                  <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
-                    {row.productName}
-                  </Text>
-                </View>
-                <View style={[styles.cell, styles.metaCol]}>
-                  <Text style={styles.metaText}>{row.packType ?? ''}</Text>
-                </View>
-                <View style={[styles.cell, styles.metaCol]}>
-                  <Text style={styles.metaText}>{formatNumber(row.unitsInPack)}</Text>
-                </View>
-                <View style={[styles.cell, styles.metaCol]}>
-                  <Text style={styles.metaText}>{formatNumber(row.packWeightKg)}</Text>
-                </View>
-                <View style={[styles.cell, styles.metaCol]}>
-                  <Text style={styles.metaText}>{formatNumber(row.shelfLifeDays)}</Text>
-                </View>
-                <View style={[styles.cell, styles.priceCol]}>
-                  <Text style={styles.metaText}>{formatPrice(row.unitPriceRubVat)}</Text>
-                </View>
-                {sheet.shops.map((shop) => {
-                  const val = row.shopValues[shop.id];
-                  return (
-                    <View
-                      key={shop.id}
-                      style={[styles.cell, styles.shopCol, val ? styles.filledShopCell : undefined]}
-                    >
-                      <Text style={styles.shopValueText}>{val || ''}</Text>
-                    </View>
-                  );
-                })}
-                <View style={[styles.cell, styles.totalCol, row.total > 0 ? styles.filledTotalCell : undefined]}>
-                  <Text style={styles.totalValueText}>{row.total || ''}</Text>
-                </View>
-                <View style={[styles.cell, styles.weightCol]}>
-                  <Text style={styles.weightValueText}>{computeWeight(row.total, row.packWeightKg)}</Text>
-                </View>
+    return (
+      <ScrollView horizontal keyboardShouldPersistTaps="handled">
+        <View>
+          {/* Machine group header */}
+          <View style={styles.machineRow}>
+            <View style={[styles.machineCell, styles.nameColumn]} />
+            <View style={[styles.machineCell, { width: shopCount * SHOP_COL_WIDTH }]}>
+              <Text style={styles.machineText}>МАШИНА 1</Text>
+            </View>
+            <View style={[styles.machineCell, styles.totalCol]} />
+            <View style={[styles.machineCell, styles.weightCol]} />
+          </View>
+
+          {/* Shop names header */}
+          <View style={styles.headerRow}>
+            <View style={[styles.headerCell, styles.nameColumn]}>
+              <Text style={styles.headerNameText}>Номенклатура</Text>
+            </View>
+            {sheet.shops.map((shop) => (
+              <View key={shop.id} style={[styles.headerCell, styles.shopCol]}>
+                <Text style={styles.shopHeaderText} numberOfLines={2}>{shop.name}</Text>
               </View>
             ))}
+            <View style={[styles.headerCell, styles.totalCol, styles.totalHeaderBg]}>
+              <Text style={styles.totalHeaderText}>ИТОГО</Text>
+            </View>
+            <View style={[styles.headerCell, styles.weightCol, styles.totalHeaderBg]}>
+              <Text style={styles.totalHeaderText}>ВЕС</Text>
+            </View>
           </View>
-        </ScrollView>
-      </View>
+
+          {/* Category sections */}
+          <ScrollView style={styles.bodyScroll} nestedScrollEnabled>
+            {PRODUCT_CATEGORIES.map((category) => {
+              const rows = rowsByCategory[category];
+              if (!rows || rows.length === 0) return null;
+              return (
+                <View key={category}>
+                  {/* Category header row */}
+                  <View style={styles.categoryRow}>
+                    <View style={[styles.categoryCell, styles.nameColumn]}>
+                      <Text style={styles.categoryText}>{category}</Text>
+                    </View>
+                    {sheet.shops.map((shop) => (
+                      <View key={shop.id} style={[styles.categoryCell, styles.shopCol]} />
+                    ))}
+                    <View style={[styles.categoryCell, styles.totalCol]} />
+                    <View style={[styles.categoryCell, styles.weightCol]} />
+                  </View>
+
+                  {/* Product data rows */}
+                  {rows.map((row) => (
+                    <View key={row.productId} style={styles.dataRow}>
+                      <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+                        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.nameText}>
+                          {row.productName}
+                        </Text>
+                      </View>
+                      {sheet.shops.map((shop) => {
+                        const val = row.shopValues[shop.id];
+                        return (
+                          <View
+                            key={shop.id}
+                            style={[styles.cell, styles.shopCol, val ? styles.filledCell : undefined]}
+                          >
+                            <Text style={styles.valueText}>{val || ''}</Text>
+                          </View>
+                        );
+                      })}
+                      <View style={[styles.cell, styles.totalCol, styles.totalCellBg]}>
+                        <Text style={styles.totalValueText}>{row.total || ''}</Text>
+                      </View>
+                      <View style={[styles.cell, styles.weightCol, styles.totalCellBg]}>
+                        <Text style={styles.weightValueText}>
+                          {computeWeight(row.total, row.packWeightKg)}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </ScrollView>
     );
   };
 
@@ -246,23 +238,23 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
       {!!error && <Text style={styles.error}>{error}</Text>}
 
       {sheet && (
-        <ScrollView style={styles.tableScroll}>
+        <View style={styles.tableWrap}>
           <Text style={styles.sheetDate}>
             Заказ на {formatDateLabel(sheet.date)} — магазинов: {sheet.shops.length}
           </Text>
-          {PRODUCT_CATEGORIES.map((cat) =>
-            renderCategoryTable(cat, rowsByCategory[cat] ?? []),
-          )}
-        </ScrollView>
+          {renderTable()}
+        </View>
       )}
     </View>
   );
 };
 
+const SHOP_COL_WIDTH = 62;
+
 const styles = StyleSheet.create({
   panel: {
     flex: 1,
-    gap: 10,
+    gap: 8,
   },
   loadingWrap: {
     flex: 1,
@@ -332,58 +324,118 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#4f6155',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  tableScroll: {
+  tableWrap: {
     flex: 1,
   },
-  categoryBlock: {
-    marginBottom: 16,
+  bodyScroll: {
+    flex: 1,
   },
-  categoryTitleRow: {
-    backgroundColor: '#e8f0ea',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  categoryTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1a3a26',
-  },
-  headerRow: {
+
+  // Machine group header
+  machineRow: {
     flexDirection: 'row',
-    backgroundColor: '#dceadf',
     borderBottomWidth: 1,
-    borderBottomColor: '#b8cdb8',
+    borderBottomColor: '#999',
   },
-  headerCell: {
-    paddingHorizontal: 4,
-    paddingVertical: 6,
+  machineCell: {
+    paddingVertical: 4,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderRightColor: '#c6d3c8',
+    borderRightColor: '#999',
   },
-  headerMainText: {
-    fontSize: 10,
+  machineText: {
+    fontSize: 12,
     fontWeight: '800',
-    color: '#213428',
+    color: '#000',
     textAlign: 'center',
   },
+
+  // Column header row
+  headerRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 2,
+    borderBottomColor: '#666',
+  },
+  headerCell: {
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#999',
+  },
+  headerNameText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#000',
+  },
+  shopHeaderText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+  },
+  totalHeaderBg: {
+    backgroundColor: '#c6efce',
+  },
+  totalHeaderText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#006100',
+  },
+
+  // Category row (yellow)
+  categoryRow: {
+    flexDirection: 'row',
+    backgroundColor: '#ffff99',
+    borderBottomWidth: 1,
+    borderBottomColor: '#999',
+  },
+  categoryCell: {
+    paddingVertical: 3,
+    paddingHorizontal: 2,
+    borderRightWidth: 1,
+    borderRightColor: '#ccc',
+  },
+  categoryText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#000',
+  },
+
+  // Data row
+  dataRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#d0d0d0',
+  },
+  cell: {
+    paddingHorizontal: 2,
+    paddingVertical: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#d0d0d0',
+  },
   nameColumn: {
-    width: 170,
+    width: 200,
     alignItems: 'flex-start',
+    paddingHorizontal: 4,
   },
-  metaCol: {
-    width: 50,
+  nameCell: {
+    backgroundColor: '#fff',
   },
-  priceCol: {
-    width: 60,
+  nameText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#000',
   },
   shopCol: {
-    width: 65,
+    width: SHOP_COL_WIDTH,
   },
   totalCol: {
     width: 55,
@@ -391,67 +443,25 @@ const styles = StyleSheet.create({
   weightCol: {
     width: 55,
   },
-  shopHeader: {
-    backgroundColor: '#fde8e8',
+  filledCell: {
+    backgroundColor: '#fce4ec',
   },
-  totalHeader: {
-    backgroundColor: '#e8f5e9',
-  },
-  weightHeader: {
-    backgroundColor: '#e3f2fd',
-  },
-  shopHeaderText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#b53030',
-    textAlign: 'center',
-  },
-  dataRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e8e1',
-  },
-  cell: {
-    paddingHorizontal: 4,
-    paddingVertical: 5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#e8ede9',
-  },
-  nameCell: {
-    alignItems: 'flex-start',
-  },
-  nameText: {
+  valueText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#233629',
+    color: '#000',
   },
-  metaText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#4f6155',
-    textAlign: 'center',
-  },
-  shopValueText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#b53030',
-  },
-  filledShopCell: {
-    backgroundColor: '#fef3f3',
-  },
-  filledTotalCell: {
+  totalCellBg: {
     backgroundColor: '#e8f5e9',
   },
   totalValueText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#1b5e20',
+    color: '#006100',
   },
   weightValueText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#1565c0',
+    color: '#006100',
   },
 });

@@ -1,4 +1,4 @@
-﻿import { StatusBar } from 'expo-status-bar';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,14 +18,15 @@ import {
 import { shopsApi } from '../api/shops';
 import { stockApi } from '../api/stock';
 import { OrdersPanel } from '../components/OrdersPanel';
+import { OrderSheetPanel } from '../components/OrderSheetPanel';
 import { SupportPanel } from '../components/SupportPanel';
 import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
 import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
-import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
+import { OrderValueEntry, ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
 type SortMode = 'manual' | 'name' | 'critical';
-type ScreenTab = 'stock' | 'orders' | 'tasks' | 'support' | 'users';
+type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
 type ManagerStockView = 'dashboard' | 'calendar';
 
 type DashboardManualOrderKey = 'orderPackThu' | 'orderPackSat' | 'orderPackTue';
@@ -65,6 +66,7 @@ type DashboardColumn = {
   dateDay?: WeekSlot;
   dateFrom?: WeekSlot;
   dateTo?: WeekSlot;
+  dateToWeek?: DashboardWeekRef;
 };
 
 type WeekDateMap = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sun', string>>;
@@ -82,7 +84,7 @@ type StockScreenProps = {
   onLogout: () => Promise<void>;
 };
 
-const PRODUCT_CATEGORIES = ['Ð™Ð¾Ð³ÑƒÑ€Ñ‚Ñ‹', 'ÐšÐµÑ„Ð¸Ñ€, Ð ÑÐ¶ÐµÐ½ÐºÐ°, Ð¡Ð½ÐµÐ¶Ð¾Ðº', 'ÐœÐ¾Ð»Ð¾ÐºÐ¾', 'Ð¡Ð¼ÐµÑ‚Ð°Ð½Ð°', 'Ð¢Ð²Ð¾Ñ€Ð¾Ð³'] as unknown as ProductCategory[];
+const PRODUCT_CATEGORIES = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'] as unknown as ProductCategory[];
 const DEFAULT_PRODUCT_CATEGORY: ProductCategory = PRODUCT_CATEGORIES[0];
 const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 12 : 0;
 const TWO_WEEKS_DAYS = 14;
@@ -107,9 +109,9 @@ const DASHBOARD_COLUMNS: DashboardColumn[] = [
   { key: 'orderPackTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0432\u0442\u043e\u0440\u043d\u0438\u043a', subtitle: '\u0412\u043e\u0441\u043a\u0440\u0435\u0441', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
   { key: 'orderUnitsTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
   { key: 'prevMon', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon' },
-  { key: 'soldPrevFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon' },
+  { key: 'soldPrevFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'previous' },
   { key: 'currentMon', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon' },
-  { key: 'soldFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'current', dateFrom: 'fri', dateTo: 'mon' },
+  { key: 'soldFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
 ];
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
@@ -221,6 +223,16 @@ const diffStocks = (startRaw?: string, endRaw?: string): string => {
   return String(start - end);
 };
 
+const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
+  const start = parseStockNumber(startRaw);
+  const end = parseStockNumber(endRaw);
+  if (start === null || end === null) {
+    return '';
+  }
+  const delivery = parseStockNumber(deliveryRaw) ?? 0;
+  return String(start + delivery - end);
+};
+
 const formatOptionalPrice = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
     return '';
@@ -229,7 +241,7 @@ const formatOptionalPrice = (value: unknown): string => {
   if (!Number.isFinite(parsed)) {
     return '';
   }
-  return `${parsed.toFixed(2)} Ñ€ÑƒÐ±`;
+  return `${parsed.toFixed(2)} руб`;
 };
 
 const weekdaySlot = (dateKey: string): keyof WeekDateMap | null => {
@@ -344,15 +356,29 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     try {
       setLoading(true);
       setError('');
+      const from = canManage ? managerWindowStart : undefined;
+      const to = canManage ? getTwoWeeksEnd(managerWindowStart) : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
-        from: canManage ? managerWindowStart : undefined,
-        to: canManage ? getTwoWeeksEnd(managerWindowStart) : undefined,
+        from,
+        to,
         range: canManage ? undefined : 'week',
       });
       setTable(nextTable);
       if (!selectedShopId) {
         setSelectedShopId(nextTable.shop.id);
+      }
+      if (canManage && from && to) {
+        try {
+          const orderValues = await stockApi.listOrderValues(session.token, from, to);
+          const loaded: Record<string, string> = {};
+          for (const entry of orderValues) {
+            loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
+          }
+          setDashboardOrderValues(loaded);
+        } catch {
+          // non-critical: order values may not be available yet
+        }
       }
     } catch (loadError) {
       setError(errorMessage(loadError));
@@ -429,9 +455,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     week: DashboardWeekRef,
     from: WeekSlot,
     to: WeekSlot,
+    toWeek?: DashboardWeekRef,
   ): string => {
     const fromDate = dashboardDateFor(week, from);
-    const toDate = dashboardDateFor(week, to);
+    const toDate = dashboardDateFor(toWeek ?? week, to);
     if (!fromDate || !toDate) {
       return '';
     }
@@ -449,7 +476,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
 
     if (column.dateKind === 'range' && column.dateWeek && column.dateFrom && column.dateTo) {
-      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo);
+      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo, column.dateToWeek);
       return range ? `${column.subtitle}\n${range}` : column.subtitle;
     }
 
@@ -463,15 +490,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
     const units = typeof row.unitsInPack === 'number' ? row.unitsInPack : Number(row.unitsInPack);
     if (Number.isFinite(units)) {
-      parts.push(`${units} ÑˆÑ‚/ÑƒÐ¿`);
+      parts.push(`${units} шт/уп`);
     }
     const packWeight = Number(row.packWeightKg);
     if (Number.isFinite(packWeight)) {
-      parts.push(`${packWeight} ÐºÐ³`);
+      parts.push(`${packWeight} кг`);
     }
     const shelfLife = typeof row.shelfLifeDays === 'number' ? row.shelfLifeDays : Number(row.shelfLifeDays);
     if (Number.isFinite(shelfLife)) {
-      parts.push(`${shelfLife} ÑÑƒÑ‚`);
+      parts.push(`${shelfLife} сут`);
     }
     const priceLabel = formatOptionalPrice(row.unitPriceRubVat);
     if (priceLabel) {
@@ -480,7 +507,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (row.minStockUnits !== null || row.maxStockUnits !== null) {
       parts.push(`границы: ${row.minStockUnits ?? '-'}-${row.maxStockUnits ?? '-'}`);
     }
-    return parts.join(' Â· ');
+    return parts.join(' · ');
   };
 
   const currentStockDateForColumn = (key: DashboardColumnKey): string | undefined => {
@@ -505,29 +532,68 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return undefined;
   };
 
+  const orderDateForKey = (key: DashboardManualOrderKey): string | undefined => {
+    if (key === 'orderPackThu') return dashboardWeeks.current.tue;
+    if (key === 'orderPackSat') return dashboardWeeks.current.thu;
+    if (key === 'orderPackTue') return dashboardWeeks.current.sun;
+    return undefined;
+  };
+
   const orderCellValue = (productId: string, key: DashboardManualOrderKey): string => {
-    return dashboardOrderValues[`${productId}:${key}`] ?? '';
+    const date = orderDateForKey(key);
+    if (!date) return '';
+    return dashboardOrderValues[`${productId}:${date}`] ?? '';
   };
 
   const setOrderCellValue = (productId: string, key: DashboardManualOrderKey, value: string) => {
+    const date = orderDateForKey(key);
+    if (!date) return;
     const nextValue = sanitizeOrderValue(value);
-    const fieldKey = `${productId}:${key}`;
+    const fieldKey = `${productId}:${date}`;
     setDashboardOrderValues((current) => ({
       ...current,
       [fieldKey]: nextValue,
     }));
+    const packs = nextValue ? Number.parseInt(nextValue, 10) : 0;
+    void stockApi.updateOrderValue(session.token, {
+      productId,
+      orderDate: date,
+      packs: Number.isNaN(packs) ? 0 : packs,
+    });
+  };
+
+  const orderPacksForDate = (productId: string, date?: string): string => {
+    if (!date) return '';
+    return dashboardOrderValues[`${productId}:${date}`] ?? '';
   };
 
   const dashboardRowValues = (row: StockTableRow): DashboardRowValues => {
     const current = dashboardWeeks.current;
     const previous = dashboardWeeks.previous;
     const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
-    const soldMonWedCurrent = diffStocks(stock(current.mon), stock(current.wed));
-    const soldWedFriCurrent = diffStocks(stock(current.wed), stock(current.fri));
-    const soldFriMonCurrent = diffStocks(stock(current.fri), stock(current.mon));
+    const units = row.unitsInPack;
+
+    // Excel formula: Продано = start_stock + delivery_units - end_stock
+    // soldMonWed: period Mon→Wed, start=Sun, delivery=orderTue (placed prev Sun)
+    const prevOrderTueUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previous?.sun), units);
+    const soldMonWedCurrent = computeSold(stock(previous?.sun), prevOrderTueUnits, stock(current.wed));
+    // soldWedFri: period Wed→Fri, start=Tue, delivery=orderThu (placed current Tue)
+    const curOrderThuUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.tue), units);
+    const soldWedFriCurrent = computeSold(stock(current.tue), curOrderThuUnits, stock(current.fri));
+    // soldFriMon: period Fri→Mon, start=Thu, delivery=orderSat (placed prev Thu)
+    const prevOrderSatUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previous?.thu), units);
+    const soldFriMonCurrent = computeSold(stock(previous?.thu), prevOrderSatUnits, stock(current.mon));
+
+    // Previous week sold: same formula structure but some start dates unavailable (before 14-day window)
+    // soldPrevMonWed: start=Sun before prev.mon (unavailable), fallback to simple diff
     const soldMonWedPrevious = previous ? diffStocks(stock(previous.mon), stock(previous.wed)) : '';
-    const soldWedFriPrevious = previous ? diffStocks(stock(previous.wed), stock(previous.fri)) : '';
-    const soldFriMonPrevious = previous ? diffStocks(stock(previous.fri), stock(previous.mon)) : '';
+    // soldPrevWedFri: start=prev.tue, delivery=orderThu placed on prev.tue
+    const prevOrderThuUnits = previous ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.tue), units) : '';
+    const soldWedFriPrevious = previous ? computeSold(stock(previous.tue), prevOrderThuUnits, stock(previous.fri)) : '';
+    // soldPrevFriMon: period prev.fri→current.mon, start=prev.thu, delivery=orderSat placed prev.thu
+    const prevPrevOrderSatUnits = previous ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.thu), units) : '';
+    const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(current.mon)) : '';
+
     const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
     const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
     const orderPackTue = orderCellValue(row.productId, 'orderPackTue');
@@ -535,21 +601,21 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return {
       currentTue: stock(current.tue),
       orderPackThu,
-      orderUnitsThu: orderUnitsFromPacks(orderPackThu, row.unitsInPack),
+      orderUnitsThu: orderUnitsFromPacks(orderPackThu, units),
       prevWed: previous ? stock(previous.wed) : '',
       soldPrevMonWed: soldMonWedPrevious,
       soldMonWed: soldMonWedCurrent,
       currentWed: stock(current.wed),
       currentThu: stock(current.thu),
       orderPackSat,
-      orderUnitsSat: orderUnitsFromPacks(orderPackSat, row.unitsInPack),
+      orderUnitsSat: orderUnitsFromPacks(orderPackSat, units),
       prevFri: previous ? stock(previous.fri) : '',
       soldPrevWedFri: soldWedFriPrevious,
       soldWedFri: soldWedFriCurrent,
       currentFri: stock(current.fri),
       currentSun: stock(current.sun),
       orderPackTue,
-      orderUnitsTue: orderUnitsFromPacks(orderPackTue, row.unitsInPack),
+      orderUnitsTue: orderUnitsFromPacks(orderPackTue, units),
       prevMon: previous ? stock(previous.mon) : '',
       soldPrevFriMon: soldFriMonPrevious,
       soldFriMon: soldFriMonCurrent,
@@ -563,13 +629,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
 
     const headerRow = [
-      'ÐšÐ°Ñ‚ÐµÐ³Ð¾Ñ€Ð¸Ñ',
-      'Ð¢Ð¾Ð²Ð°Ñ€',
-      'Ð£Ð¿Ð°ÐºÐ¾Ð²ÐºÐ°',
-      'ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð² ÑƒÐ¿Ð°ÐºÐ¾Ð²ÐºÐµ',
-      'Ð’ÐµÑ ÑƒÐ¿Ð°ÐºÐ¾Ð²ÐºÐ¸, ÐºÐ³',
-      'Ð¡Ñ€Ð¾Ðº Ð³Ð¾Ð´Ð½Ð¾ÑÑ‚Ð¸, ÑÑƒÑ‚',
-      'Ð¦ÐµÐ½Ð° Ð² Ñ€ÑƒÐ±, Ñ ÐÐ”Ð¡',
+      'Категория',
+      'Товар',
+      'Упаковка',
+      'Количество в упаковке',
+      'Вес упаковки, кг',
+      'Срок годности, сут',
+      'Цена в руб, с НДС',
       ...DASHBOARD_COLUMNS.map((column) => {
         const subtitle = dashboardHeaderSubtitle(column).replace('\n', ' ');
         return subtitle ? `${column.title} (${subtitle})` : column.title;
@@ -722,7 +788,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
     const normalizedName = newProductName.trim();
     if (!normalizedName) {
-      Alert.alert('ÐÐ¾Ð²Ñ‹Ð¹ Ñ‚Ð¾Ð²Ð°Ñ€', 'Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ñ‚Ð¾Ð²Ð°Ñ€Ð°.');
+      Alert.alert('Новый товар', 'Введите название товара.');
       return;
     }
     try {
@@ -744,10 +810,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (!canManage) {
       return;
     }
-    Alert.alert('Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€?', 'Ð­Ñ‚Ð° ÑÑ‚Ñ€Ð¾ÐºÐ° Ñ‚Ð¾Ð²Ð°Ñ€Ð° Ð±ÑƒÐ´ÐµÑ‚ ÑƒÐ´Ð°Ð»ÐµÐ½Ð°.', [
-      { text: 'ÐžÑ‚Ð¼ÐµÐ½Ð°', style: 'cancel' },
+    Alert.alert('Удалить товар?', 'Эта строка товара будет удалена.', [
+      { text: 'Отмена', style: 'cancel' },
       {
-        text: 'Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ',
+        text: 'Удалить',
         style: 'destructive',
         onPress: async () => {
           try {
@@ -778,7 +844,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         <View>
           <View style={styles.headerRow}>
             <View style={[styles.headerCell, styles.nameColumn]}>
-              <Text style={styles.headerText}>Ð¢Ð¾Ð²Ð°Ñ€</Text>
+              <Text style={styles.headerText}>Товар</Text>
             </View>
             {table?.dates.map((date) => (
               <View
@@ -795,13 +861,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               </View>
             ))}
             <View style={[styles.headerCell, styles.actionColumn]}>
-              <Text style={styles.headerText}>Ð”ÐµÐ¹ÑÑ‚Ð²Ð¸Ðµ</Text>
+              <Text style={styles.headerText}>Действие</Text>
             </View>
           </View>
 
           {rows.length === 0 ? (
             <View style={styles.emptyRow}>
-              <Text style={styles.emptyRowText}>ÐÐµÑ‚ Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð² Ð² ÑÑ‚Ð¾Ð¹ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ðµ</Text>
+              <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
             </View>
           ) : (
             rows.map((row) => (
@@ -839,7 +905,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 <View style={[styles.cell, styles.actionColumn]}>
                   {canManage ? (
                     <Pressable style={styles.deleteButton} onPress={() => removeProduct(row.productId)}>
-                      <Text style={styles.deleteButtonText}>Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ</Text>
+                      <Text style={styles.deleteButtonText}>Удалить</Text>
                     </Pressable>
                   ) : (
                     <Text style={styles.workerActionText}>-</Text>
@@ -904,7 +970,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         <View>
           <View style={styles.headerRow}>
             <View style={[styles.headerCell, styles.nameColumn]}>
-              <Text style={styles.headerText}>Ð¢Ð¾Ð²Ð°Ñ€</Text>
+              <Text style={styles.headerText}>Товар</Text>
             </View>
             {DASHBOARD_COLUMNS.map((column) => (
               <View
@@ -921,13 +987,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               </View>
             ))}
             <View style={[styles.headerCell, styles.actionColumn]}>
-              <Text style={styles.headerText}>Ð”ÐµÐ¹ÑÑ‚Ð²Ð¸Ðµ</Text>
+              <Text style={styles.headerText}>Действие</Text>
             </View>
           </View>
 
           {rows.length === 0 ? (
             <View style={styles.emptyRow}>
-              <Text style={styles.emptyRowText}>ÐÐµÑ‚ Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð² Ð² ÑÑ‚Ð¾Ð¹ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ðµ</Text>
+              <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
             </View>
           ) : (
             rows.map((row) => {
@@ -1019,7 +1085,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   })}
                   <View style={[styles.cell, styles.actionColumn]}>
                     <Pressable style={styles.deleteButton} onPress={() => removeProduct(row.productId)}>
-                      <Text style={styles.deleteButtonText}>Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ</Text>
+                      <Text style={styles.deleteButtonText}>Удалить</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -1039,7 +1105,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           value={query}
           onChangeText={setQuery}
           style={styles.searchInput}
-          placeholder="ÐŸÐ¾Ð¸ÑÐº Ñ‚Ð¾Ð²Ð°Ñ€Ð°"
+          placeholder="Поиск товара"
           placeholderTextColor="#6d7d72"
         />
         <View style={styles.controlButtons}>
@@ -1047,7 +1113,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             <>
               <Pressable style={styles.secondaryButton} onPress={() => setIsShopPickerOpen(true)}>
                 <Text style={styles.secondaryButtonText}>
-                  ÐœÐ°Ð³Ð°Ð·Ð¸Ð½: {shops.find((shop) => shop.id === selectedShopId)?.name ?? table?.shop.name ?? '...'}
+                  Магазин: {shops.find((shop) => shop.id === selectedShopId)?.name ?? table?.shop.name ?? '...'}
                 </Text>
               </Pressable>
               <View style={styles.rangeButtons}>
@@ -1055,34 +1121,34 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   style={styles.calendarNavButton}
                   onPress={() => setManagerWindowStart((current) => shiftDateKey(current, -TWO_WEEKS_DAYS))}
                 >
-                  <Text style={styles.calendarNavButtonText}>-2 Ð½ÐµÐ´.</Text>
+                  <Text style={styles.calendarNavButtonText}>-2 нед.</Text>
                 </Pressable>
                 <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(shiftDateKey(currentTwoWeeksStart(), -7))}>
-                  <Text style={styles.calendarNavButtonText}>Ð¢ÐµÐºÑƒÑ‰Ð¸Ðµ 2 Ð½ÐµÐ´.</Text>
+                  <Text style={styles.calendarNavButtonText}>Текущие 2 нед.</Text>
                 </Pressable>
                 <Pressable
                   style={styles.calendarNavButton}
                   onPress={() => setManagerWindowStart((current) => shiftDateKey(current, TWO_WEEKS_DAYS))}
                 >
-                  <Text style={styles.calendarNavButtonText}>+2 Ð½ÐµÐ´.</Text>
+                  <Text style={styles.calendarNavButtonText}>+2 нед.</Text>
                 </Pressable>
               </View>
               <Pressable style={styles.primaryButton} onPress={() => setIsAddProductModalOpen(true)}>
-                <Text style={styles.primaryButtonText}>Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€</Text>
+                <Text style={styles.primaryButtonText}>Добавить товар</Text>
               </Pressable>
               <Pressable style={styles.secondaryButton} onPress={() => void exportDashboard()}>
-                <Text style={styles.secondaryButtonText}>Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ Ð² Excel</Text>
+                <Text style={styles.secondaryButtonText}>Экспорт в Excel</Text>
               </Pressable>
             </>
           )}
           <Pressable style={styles.secondaryButton} onPress={loadTable}>
-            <Text style={styles.secondaryButtonText}>ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ</Text>
+            <Text style={styles.secondaryButtonText}>Обновить</Text>
           </Pressable>
         </View>
       </View>
 
       <View style={styles.sortRow}>
-        <Text style={styles.metaText}>ÐŸÐ¾Ð·Ð¸Ñ†Ð¸Ð¹: {visibleRows.length}</Text>
+        <Text style={styles.metaText}>Позиций: {visibleRows.length}</Text>
         <Text style={styles.metaText}>{table ? `${table.from} - ${table.to}` : ''}</Text>
       </View>
 
@@ -1091,19 +1157,19 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           style={[styles.sortButton, sortMode === 'manual' && styles.sortButtonActive]}
           onPress={() => setSortMode('manual')}
         >
-          <Text style={[styles.sortButtonText, sortMode === 'manual' && styles.sortButtonTextActive]}>Ð‘ÐµÐ· ÑÐ¾Ñ€Ñ‚.</Text>
+          <Text style={[styles.sortButtonText, sortMode === 'manual' && styles.sortButtonTextActive]}>Без сорт.</Text>
         </Pressable>
         <Pressable
           style={[styles.sortButton, sortMode === 'name' && styles.sortButtonActive]}
           onPress={() => setSortMode('name')}
         >
-          <Text style={[styles.sortButtonText, sortMode === 'name' && styles.sortButtonTextActive]}>Ð-Ð¯</Text>
+          <Text style={[styles.sortButtonText, sortMode === 'name' && styles.sortButtonTextActive]}>А-Я</Text>
         </Pressable>
         <Pressable
           style={[styles.sortButton, sortMode === 'critical' && styles.sortButtonActive]}
           onPress={() => setSortMode('critical')}
         >
-          <Text style={[styles.sortButtonText, sortMode === 'critical' && styles.sortButtonTextActive]}>ÐšÑ€Ð¸Ñ‚Ð¸Ñ‡Ð½Ñ‹Ð¹</Text>
+          <Text style={[styles.sortButtonText, sortMode === 'critical' && styles.sortButtonTextActive]}>Критичный</Text>
         </Pressable>
       </View>
 
@@ -1114,7 +1180,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             onPress={() => setManagerStockView('dashboard')}
           >
             <Text style={[styles.viewModeButtonText, managerStockView === 'dashboard' && styles.viewModeButtonTextActive]}>
-              Ð”Ð°ÑˆÐ±Ð¾Ñ€Ð´
+              Дашборд
             </Text>
           </Pressable>
           <Pressable
@@ -1122,7 +1188,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             onPress={() => setManagerStockView('calendar')}
           >
             <Text style={[styles.viewModeButtonText, managerStockView === 'calendar' && styles.viewModeButtonTextActive]}>
-              ÐšÐ°Ð»ÐµÐ½Ð´Ð°Ñ€ÑŒ
+              Календарь
             </Text>
           </Pressable>
         </View>
@@ -1157,6 +1223,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         </View>
       );
     }
+    if (activeTab === 'orderSheet') {
+      return (
+        <View style={styles.tabContentWrap}>
+          <OrderSheetPanel session={session} />
+        </View>
+      );
+    }
     if (activeTab === 'support') {
       return (
         <View style={styles.tabContentWrap}>
@@ -1178,24 +1251,25 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#2f6f4f" />
-        <Text style={styles.loadingText}>Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð´Ð°Ð½Ð½Ñ‹Ñ… ÑÐºÐ»Ð°Ð´Ð°...</Text>
+        <Text style={styles.loadingText}>Загрузка данных склада...</Text>
       </SafeAreaView>
     );
   }
 
   const tabs: Array<{ key: ScreenTab; label: string }> = canManage
     ? [
-        { key: 'stock', label: 'ÐžÑÑ‚Ð°Ñ‚ÐºÐ¸' },
-        { key: 'orders', label: 'Ð—Ð°ÐºÐ°Ð·Ñ‹' },
-        { key: 'tasks', label: 'Ð—Ð°Ð´Ð°Ñ‡Ð¸' },
-        { key: 'support', label: 'ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°' },
-        { key: 'users', label: 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ð¸' },
+        { key: 'stock', label: 'Остатки' },
+        { key: 'orders', label: 'Заказы' },
+        { key: 'orderSheet', label: 'Лист заказа' },
+        { key: 'tasks', label: 'Задачи' },
+        { key: 'support', label: 'Поддержка' },
+        { key: 'users', label: 'Пользователи' },
       ]
     : [
-        { key: 'stock', label: 'ÐžÑÑ‚Ð°Ñ‚ÐºÐ¸' },
-        { key: 'orders', label: 'Ð—Ð°ÐºÐ°Ð·Ñ‹' },
-        { key: 'tasks', label: 'Ð—Ð°Ð´Ð°Ñ‡Ð¸' },
-        { key: 'support', label: 'ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°' },
+        { key: 'stock', label: 'Остатки' },
+        { key: 'orders', label: 'Заказы' },
+        { key: 'tasks', label: 'Задачи' },
+        { key: 'support', label: 'Поддержка' },
       ];
 
   return (
@@ -1204,13 +1278,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Ð£Ñ‡ÐµÑ‚ Ð¾ÑÑ‚Ð°Ñ‚ÐºÐ¾Ð²</Text>
+          <Text style={styles.title}>Учет остатков</Text>
           <Text style={styles.subtitle}>
-            {session.user.fullName} Â· {canManage ? 'ÐœÐµÐ½ÐµÐ´Ð¶ÐµÑ€' : 'Ð¡Ð¾Ñ‚Ñ€ÑƒÐ´Ð½Ð¸Ðº'}
+            {session.user.fullName} · {canManage ? 'Менеджер' : 'Сотрудник'}
           </Text>
         </View>
         <Pressable style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutButtonText}>Ð’Ñ‹Ð¹Ñ‚Ð¸</Text>
+          <Text style={styles.logoutButtonText}>Выйти</Text>
         </Pressable>
       </View>
 
@@ -1239,12 +1313,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>ÐÐ¾Ð²Ñ‹Ð¹ Ñ‚Ð¾Ð²Ð°Ñ€</Text>
+            <Text style={styles.modalTitle}>Новый товар</Text>
             <TextInput
               value={newProductName}
               onChangeText={setNewProductName}
               style={styles.modalInput}
-              placeholder="Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ñ‚Ð¾Ð²Ð°Ñ€Ð°"
+              placeholder="Введите название товара"
               placeholderTextColor="#7a8b7f"
               autoFocus
               maxLength={140}
@@ -1265,14 +1339,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
             <View style={styles.modalActions}>
               <Pressable style={styles.modalCancelButton} onPress={() => setIsAddProductModalOpen(false)}>
-                <Text style={styles.modalCancelText}>ÐžÑ‚Ð¼ÐµÐ½Ð°</Text>
+                <Text style={styles.modalCancelText}>Отмена</Text>
               </Pressable>
               <Pressable
                 style={[styles.modalSaveButton, addingProduct && styles.modalSaveButtonDisabled]}
                 onPress={addProduct}
                 disabled={addingProduct}
               >
-                <Text style={styles.modalSaveText}>{addingProduct ? 'Ð¡Ð¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ðµ...' : 'Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ'}</Text>
+                <Text style={styles.modalSaveText}>{addingProduct ? 'Сохранение...' : 'Сохранить'}</Text>
               </Pressable>
             </View>
           </View>
@@ -1287,9 +1361,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Ð˜Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ðº</Text>
+            <Text style={styles.modalTitle}>Изменить остаток</Text>
             <Text style={styles.modalMeta}>
-              {editingCell?.productName} Â· {editingCell ? `${formatWeekday(editingCell.date)}, ${formatDate(editingCell.date)}` : ''}
+              {editingCell?.productName} · {editingCell ? `${formatWeekday(editingCell.date)}, ${formatDate(editingCell.date)}` : ''}
             </Text>
             <TextInput
               value={editingValue}
@@ -1303,21 +1377,21 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             />
             <View style={styles.modalActions}>
               <Pressable style={styles.modalCancelButton} onPress={() => setEditingCell(null)} disabled={savingEdit}>
-                <Text style={styles.modalCancelText}>ÐžÑ‚Ð¼ÐµÐ½Ð°</Text>
+                <Text style={styles.modalCancelText}>Отмена</Text>
               </Pressable>
               <Pressable
                 style={[styles.modalSaveButton, savingEdit && styles.modalSaveButtonDisabled]}
                 onPress={() => void saveCell(false)}
                 disabled={savingEdit}
               >
-                <Text style={styles.modalSaveText}>Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ</Text>
+                <Text style={styles.modalSaveText}>Сохранить</Text>
               </Pressable>
               <Pressable
                 style={[styles.modalContinueButton, savingEdit && styles.modalSaveButtonDisabled]}
                 onPress={() => void saveCell(true)}
                 disabled={savingEdit}
               >
-                <Text style={styles.modalContinueText}>Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ð¸ Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ</Text>
+                <Text style={styles.modalContinueText}>Сохранить и продолжить</Text>
               </Pressable>
             </View>
           </View>
@@ -1332,7 +1406,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½</Text>
+            <Text style={styles.modalTitle}>Выберите магазин</Text>
             <ScrollView style={styles.modalShopList}>
               {shops.map((shop) => (
                 <Pressable
@@ -1350,7 +1424,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               ))}
             </ScrollView>
             <Pressable style={styles.modalCancelButton} onPress={() => setIsShopPickerOpen(false)}>
-              <Text style={styles.modalCancelText}>Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ</Text>
+              <Text style={styles.modalCancelText}>Закрыть</Text>
             </Pressable>
           </View>
         </View>

@@ -404,3 +404,64 @@ export const upsertStockValue = async (
   );
   return true;
 };
+
+type OrderValueDbRow = {
+  product_id: string;
+  order_date: string;
+  packs: number;
+};
+
+export type OrderValueEntry = {
+  productId: string;
+  orderDate: string;
+  packs: number;
+};
+
+export const listOrderValues = async (from: string, to: string): Promise<OrderValueEntry[]> => {
+  const result = await db.query<OrderValueDbRow>(
+    `
+      SELECT product_id, order_date::text AS order_date, packs
+      FROM order_values
+      WHERE order_date >= $1::date
+        AND order_date <= $2::date
+      ORDER BY order_date ASC;
+    `,
+    [from, to],
+  );
+  return result.rows.map((row) => ({
+    productId: row.product_id,
+    orderDate: row.order_date,
+    packs: row.packs,
+  }));
+};
+
+export const upsertOrderValue = async (
+  params: { productId: string; orderDate: string; packs: number },
+): Promise<boolean> => {
+  const productResult = await db.query<{ id: string }>(
+    `SELECT id FROM stock_products WHERE id = $1 LIMIT 1;`,
+    [params.productId],
+  );
+  if (!productResult.rows[0]) {
+    return false;
+  }
+
+  if (params.packs <= 0) {
+    await db.query(
+      `DELETE FROM order_values WHERE product_id = $1 AND order_date = $2::date;`,
+      [params.productId, params.orderDate],
+    );
+    return true;
+  }
+
+  await db.query(
+    `
+      INSERT INTO order_values (product_id, order_date, packs, updated_at)
+      VALUES ($1, $2::date, $3::smallint, NOW())
+      ON CONFLICT (product_id, order_date)
+      DO UPDATE SET packs = EXCLUDED.packs, updated_at = NOW();
+    `,
+    [params.productId, params.orderDate, params.packs],
+  );
+  return true;
+};

@@ -191,3 +191,7 @@ export const updateCheckInStatusSchema = z.object({
   status: z.enum(['in', 'out']),
 });
 
+export const orderSheetQuerySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+

@@ -1,4 +1,4 @@
-import { ProductCategory, StockTable } from '../types/models';
+import { OrderValueEntry, ProductCategory, StockTable } from '../types/models';
 import { request } from './http';
 
 type StockTableResponse = {
@@ -97,6 +97,25 @@ export const stockApi = {
     },
   ): Promise<void> => {
     await request<{}>('/api/stock/value', {
+      method: 'PUT',
+      token,
+      body: payload,
+    });
+  },
+
+  listOrderValues: async (token: string, from: string, to: string): Promise<OrderValueEntry[]> => {
+    const result = await request<{ orderValues: OrderValueEntry[] }>(
+      `/api/stock/order-values?from=${from}&to=${to}`,
+      { token },
+    );
+    return result.orderValues;
+  },
+
+  updateOrderValue: async (
+    token: string,
+    payload: { productId: string; orderDate: string; packs: number },
+  ): Promise<void> => {
+    await request<{}>('/api/stock/order-values', {
       method: 'PUT',
       token,
       body: payload,

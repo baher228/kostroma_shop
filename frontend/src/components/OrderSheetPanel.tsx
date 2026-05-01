@@ -18,8 +18,9 @@ type OrderSheetPanelProps = {
 const PRODUCT_CATEGORIES = [
   'Йогурты',
   'Кефир, Ряженка, Снежок',
-  'Сметана, Творог, Масло',
-  'Молоко, Сливки',
+  'Молоко',
+  'Сметана',
+  'Творог',
 ] as const;
 
 const todayDateKey = (): string => {

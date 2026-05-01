@@ -160,6 +160,12 @@ export type WorkerCheckInStatus = {
   lastChangedAt: string;
 };
 
+export type OrderValueEntry = {
+  productId: string;
+  orderDate: string;
+  packs: number;
+};
+
 export type OrderSheetRow = {
   productId: string;
   productName: string;

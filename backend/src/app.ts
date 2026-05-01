@@ -15,8 +15,10 @@ import {
   deleteProduct,
   getShopById,
   getStockTable,
+  listOrderValues,
   listShops,
   updateProductMeta,
+  upsertOrderValue,
   upsertStockValue,
 } from './store';
 import { addSupportMessage, createSupportThread, listSupportThreads } from './supportStore';
@@ -313,6 +315,39 @@ export const createApp = () => {
         return;
       }
       res.status(500).json({ message: 'Failed to update stock value.' });
+    }
+  });
+
+  app.get('/api/stock/order-values', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const from = toStringParam(req.query.from);
+      const to = toStringParam(req.query.to);
+      if (!from || !to) {
+        res.status(400).json({ message: 'from and to query params required.' });
+        return;
+      }
+      const orderValues = await listOrderValues(from, to);
+      res.json({ orderValues });
+    } catch {
+      res.status(500).json({ message: 'Failed to load order values.' });
+    }
+  });
+
+  app.put('/api/stock/order-values', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const { productId, orderDate, packs } = req.body as { productId: string; orderDate: string; packs: number };
+      if (!productId || !orderDate || typeof packs !== 'number') {
+        res.status(400).json({ message: 'productId, orderDate, and packs required.' });
+        return;
+      }
+      const ok = await upsertOrderValue({ productId, orderDate, packs });
+      if (!ok) {
+        res.status(404).json({ message: 'Product not found.' });
+        return;
+      }
+      res.status(204).send();
+    } catch {
+      res.status(500).json({ message: 'Failed to update order value.' });
     }
   });
 

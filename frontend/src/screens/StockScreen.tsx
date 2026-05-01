@@ -23,7 +23,7 @@ import { SupportPanel } from '../components/SupportPanel';
 import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
 import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
-import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
+import { OrderValueEntry, ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
 type SortMode = 'manual' | 'name' | 'critical';
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
@@ -66,6 +66,7 @@ type DashboardColumn = {
   dateDay?: WeekSlot;
   dateFrom?: WeekSlot;
   dateTo?: WeekSlot;
+  dateToWeek?: DashboardWeekRef;
 };
 
 type WeekDateMap = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sun', string>>;
@@ -108,9 +109,9 @@ const DASHBOARD_COLUMNS: DashboardColumn[] = [
   { key: 'orderPackTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0432\u0442\u043e\u0440\u043d\u0438\u043a', subtitle: '\u0412\u043e\u0441\u043a\u0440\u0435\u0441', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
   { key: 'orderUnitsTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
   { key: 'prevMon', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon' },
-  { key: 'soldPrevFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon' },
+  { key: 'soldPrevFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'previous' },
   { key: 'currentMon', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon' },
-  { key: 'soldFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'current', dateFrom: 'fri', dateTo: 'mon' },
+  { key: 'soldFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
 ];
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
@@ -220,6 +221,16 @@ const diffStocks = (startRaw?: string, endRaw?: string): string => {
     return '';
   }
   return String(start - end);
+};
+
+const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
+  const start = parseStockNumber(startRaw);
+  const end = parseStockNumber(endRaw);
+  if (start === null || end === null) {
+    return '';
+  }
+  const delivery = parseStockNumber(deliveryRaw) ?? 0;
+  return String(start + delivery - end);
 };
 
 const formatOptionalPrice = (value: unknown): string => {
@@ -345,15 +356,29 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     try {
       setLoading(true);
       setError('');
+      const from = canManage ? managerWindowStart : undefined;
+      const to = canManage ? getTwoWeeksEnd(managerWindowStart) : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
-        from: canManage ? managerWindowStart : undefined,
-        to: canManage ? getTwoWeeksEnd(managerWindowStart) : undefined,
+        from,
+        to,
         range: canManage ? undefined : 'week',
       });
       setTable(nextTable);
       if (!selectedShopId) {
         setSelectedShopId(nextTable.shop.id);
+      }
+      if (canManage && from && to) {
+        try {
+          const orderValues = await stockApi.listOrderValues(session.token, from, to);
+          const loaded: Record<string, string> = {};
+          for (const entry of orderValues) {
+            loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
+          }
+          setDashboardOrderValues(loaded);
+        } catch {
+          // non-critical: order values may not be available yet
+        }
       }
     } catch (loadError) {
       setError(errorMessage(loadError));
@@ -430,9 +455,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     week: DashboardWeekRef,
     from: WeekSlot,
     to: WeekSlot,
+    toWeek?: DashboardWeekRef,
   ): string => {
     const fromDate = dashboardDateFor(week, from);
-    const toDate = dashboardDateFor(week, to);
+    const toDate = dashboardDateFor(toWeek ?? week, to);
     if (!fromDate || !toDate) {
       return '';
     }
@@ -450,7 +476,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
 
     if (column.dateKind === 'range' && column.dateWeek && column.dateFrom && column.dateTo) {
-      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo);
+      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo, column.dateToWeek);
       return range ? `${column.subtitle}\n${range}` : column.subtitle;
     }
 
@@ -506,29 +532,68 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return undefined;
   };
 
+  const orderDateForKey = (key: DashboardManualOrderKey): string | undefined => {
+    if (key === 'orderPackThu') return dashboardWeeks.current.tue;
+    if (key === 'orderPackSat') return dashboardWeeks.current.thu;
+    if (key === 'orderPackTue') return dashboardWeeks.current.sun;
+    return undefined;
+  };
+
   const orderCellValue = (productId: string, key: DashboardManualOrderKey): string => {
-    return dashboardOrderValues[`${productId}:${key}`] ?? '';
+    const date = orderDateForKey(key);
+    if (!date) return '';
+    return dashboardOrderValues[`${productId}:${date}`] ?? '';
   };
 
   const setOrderCellValue = (productId: string, key: DashboardManualOrderKey, value: string) => {
+    const date = orderDateForKey(key);
+    if (!date) return;
     const nextValue = sanitizeOrderValue(value);
-    const fieldKey = `${productId}:${key}`;
+    const fieldKey = `${productId}:${date}`;
     setDashboardOrderValues((current) => ({
       ...current,
       [fieldKey]: nextValue,
     }));
+    const packs = nextValue ? Number.parseInt(nextValue, 10) : 0;
+    void stockApi.updateOrderValue(session.token, {
+      productId,
+      orderDate: date,
+      packs: Number.isNaN(packs) ? 0 : packs,
+    });
+  };
+
+  const orderPacksForDate = (productId: string, date?: string): string => {
+    if (!date) return '';
+    return dashboardOrderValues[`${productId}:${date}`] ?? '';
   };
 
   const dashboardRowValues = (row: StockTableRow): DashboardRowValues => {
     const current = dashboardWeeks.current;
     const previous = dashboardWeeks.previous;
     const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
-    const soldMonWedCurrent = diffStocks(stock(current.mon), stock(current.wed));
-    const soldWedFriCurrent = diffStocks(stock(current.wed), stock(current.fri));
-    const soldFriMonCurrent = diffStocks(stock(current.fri), stock(current.mon));
+    const units = row.unitsInPack;
+
+    // Excel formula: Продано = start_stock + delivery_units - end_stock
+    // soldMonWed: period Mon→Wed, start=Sun, delivery=orderTue (placed prev Sun)
+    const prevOrderTueUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previous?.sun), units);
+    const soldMonWedCurrent = computeSold(stock(previous?.sun), prevOrderTueUnits, stock(current.wed));
+    // soldWedFri: period Wed→Fri, start=Tue, delivery=orderThu (placed current Tue)
+    const curOrderThuUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.tue), units);
+    const soldWedFriCurrent = computeSold(stock(current.tue), curOrderThuUnits, stock(current.fri));
+    // soldFriMon: period Fri→Mon, start=Thu, delivery=orderSat (placed prev Thu)
+    const prevOrderSatUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previous?.thu), units);
+    const soldFriMonCurrent = computeSold(stock(previous?.thu), prevOrderSatUnits, stock(current.mon));
+
+    // Previous week sold: same formula structure but some start dates unavailable (before 14-day window)
+    // soldPrevMonWed: start=Sun before prev.mon (unavailable), fallback to simple diff
     const soldMonWedPrevious = previous ? diffStocks(stock(previous.mon), stock(previous.wed)) : '';
-    const soldWedFriPrevious = previous ? diffStocks(stock(previous.wed), stock(previous.fri)) : '';
-    const soldFriMonPrevious = previous ? diffStocks(stock(previous.fri), stock(previous.mon)) : '';
+    // soldPrevWedFri: start=prev.tue, delivery=orderThu placed on prev.tue
+    const prevOrderThuUnits = previous ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.tue), units) : '';
+    const soldWedFriPrevious = previous ? computeSold(stock(previous.tue), prevOrderThuUnits, stock(previous.fri)) : '';
+    // soldPrevFriMon: period prev.fri→current.mon, start=prev.thu, delivery=orderSat placed prev.thu
+    const prevPrevOrderSatUnits = previous ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.thu), units) : '';
+    const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(current.mon)) : '';
+
     const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
     const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
     const orderPackTue = orderCellValue(row.productId, 'orderPackTue');
@@ -536,21 +601,21 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return {
       currentTue: stock(current.tue),
       orderPackThu,
-      orderUnitsThu: orderUnitsFromPacks(orderPackThu, row.unitsInPack),
+      orderUnitsThu: orderUnitsFromPacks(orderPackThu, units),
       prevWed: previous ? stock(previous.wed) : '',
       soldPrevMonWed: soldMonWedPrevious,
       soldMonWed: soldMonWedCurrent,
       currentWed: stock(current.wed),
       currentThu: stock(current.thu),
       orderPackSat,
-      orderUnitsSat: orderUnitsFromPacks(orderPackSat, row.unitsInPack),
+      orderUnitsSat: orderUnitsFromPacks(orderPackSat, units),
       prevFri: previous ? stock(previous.fri) : '',
       soldPrevWedFri: soldWedFriPrevious,
       soldWedFri: soldWedFriCurrent,
       currentFri: stock(current.fri),
       currentSun: stock(current.sun),
       orderPackTue,
-      orderUnitsTue: orderUnitsFromPacks(orderPackTue, row.unitsInPack),
+      orderUnitsTue: orderUnitsFromPacks(orderPackTue, units),
       prevMon: previous ? stock(previous.mon) : '',
       soldPrevFriMon: soldFriMonPrevious,
       soldFriMon: soldFriMonCurrent,

@@ -62,7 +62,8 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
   };
 
   const shiftDate = (days: number) => {
-    const d = new Date(date);
+    const [y, m, dv] = date.split('-').map(Number);
+    const d = new Date(y, (m || 1) - 1, dv || 1);
     d.setDate(d.getDate() + days);
     const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     setInputDate(next);

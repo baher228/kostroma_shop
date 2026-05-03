@@ -1,4 +1,4 @@
-import { StatusBar } from 'expo-status-bar';
+﻿import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -87,6 +87,7 @@ type StockScreenProps = {
 const PRODUCT_CATEGORIES = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'] as unknown as ProductCategory[];
 const DEFAULT_PRODUCT_CATEGORY: ProductCategory = PRODUCT_CATEGORIES[0];
 const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 12 : 0;
+const WEEK_DAYS = 7;
 const TWO_WEEKS_DAYS = 14;
 const MAX_ORDER_VALUE_LEN = 5;
 
@@ -173,7 +174,7 @@ const startOfWeekMonday = (date: Date): Date => {
   return current;
 };
 
-const currentTwoWeeksStart = (): string => toDateKey(startOfWeekMonday(new Date()));
+const currentWeekStart = (): string => toDateKey(startOfWeekMonday(new Date()));
 
 const shiftDateKey = (dateKey: string, deltaDays: number): string => {
   const shifted = parseDateKey(dateKey);
@@ -311,7 +312,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
-  const [managerWindowStart, setManagerWindowStart] = useState<string>(shiftDateKey(currentTwoWeeksStart(), -7));
+  const [managerWindowStart, setManagerWindowStart] = useState<string>(shiftDateKey(currentWeekStart(), -WEEK_DAYS));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -588,14 +589,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
     const units = row.unitsInPack;
 
-    // Excel formula: Продано = start_stock + delivery_units - end_stock
-    // soldMonWed: period Mon→Wed, start=Sun, delivery=orderTue (placed prev Sun)
+    // Excel formula: ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾ = start_stock + delivery_units - end_stock
+    // soldMonWed: period Monâ†’Wed, start=Sun, delivery=orderTue (placed prev Sun)
     const prevOrderTueUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.tue), units);
     const soldMonWedCurrent = computeSold(stock(previous?.sun), prevOrderTueUnits, stock(current.wed));
-    // soldWedFri: period Wed→Fri, start=Tue, delivery=orderThu (placed current Tue)
+    // soldWedFri: period Wedâ†’Fri, start=Tue, delivery=orderThu (placed current Tue)
     const curOrderThuUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.thu), units);
     const soldWedFriCurrent = computeSold(stock(current.tue), curOrderThuUnits, stock(current.fri));
-    // soldFriMon: period Fri→Mon, start=Thu, delivery=orderSat (placed prev Thu)
+    // soldFriMon: period Friâ†’Mon, start=Thu, delivery=orderSat (placed prev Thu)
     const prevOrderSatUnits = previous?.thu
       ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
       : '';
@@ -609,7 +610,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.thu), units)
       : '';
     const soldWedFriPrevious = previous ? computeSold(stock(previous.tue), prevOrderThuUnits, stock(previous.fri)) : '';
-    // soldPrevFriMon: period prev.fri→current.mon, start=prev.thu, delivery=orderSat placed prev.thu
+    // soldPrevFriMon: period prev.friâ†’current.mon, start=prev.thu, delivery=orderSat placed prev.thu
     const prevPrevOrderSatUnits = previous?.thu
       ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
       : '';
@@ -1140,18 +1141,18 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               <View style={styles.rangeButtons}>
                 <Pressable
                   style={styles.calendarNavButton}
-                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, -TWO_WEEKS_DAYS))}
+                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, -WEEK_DAYS))}
                 >
-                  <Text style={styles.calendarNavButtonText}>-2 нед.</Text>
+                  <Text style={styles.calendarNavButtonText}>-1 нед.</Text>
                 </Pressable>
-                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(shiftDateKey(currentTwoWeeksStart(), -7))}>
-                  <Text style={styles.calendarNavButtonText}>Текущие 2 нед.</Text>
+                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(shiftDateKey(currentWeekStart(), -WEEK_DAYS))}>
+                  <Text style={styles.calendarNavButtonText}>Текущая нед.</Text>
                 </Pressable>
                 <Pressable
                   style={styles.calendarNavButton}
-                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, TWO_WEEKS_DAYS))}
+                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, WEEK_DAYS))}
                 >
-                  <Text style={styles.calendarNavButtonText}>+2 нед.</Text>
+                  <Text style={styles.calendarNavButtonText}>+1 нед.</Text>
                 </Pressable>
               </View>
               <Pressable style={styles.primaryButton} onPress={() => setIsAddProductModalOpen(true)}>
@@ -2024,6 +2025,7 @@ const styles = StyleSheet.create({
     color: '#1f4f37',
   },
 });
+
 
 
 

@@ -111,9 +111,17 @@ export const stockApi = {
     return result.orderValues;
   },
 
+  listShopOrderValues: async (token: string, shopId: string, from: string, to: string): Promise<OrderValueEntry[]> => {
+    const result = await request<{ orderValues: OrderValueEntry[] }>(
+      `/api/stock/order-values?shopId=${encodeURIComponent(shopId)}&from=${from}&to=${to}`,
+      { token },
+    );
+    return result.orderValues;
+  },
+
   updateOrderValue: async (
     token: string,
-    payload: { productId: string; orderDate: string; packs: number },
+    payload: { shopId: string; productId: string; orderDate: string; packs: number },
   ): Promise<void> => {
     await request<{}>('/api/stock/order-values', {
       method: 'PUT',

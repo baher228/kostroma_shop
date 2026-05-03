@@ -4,6 +4,7 @@ import { ProductCategory, SessionUser, Shop, StockProduct, StockTable, StockTabl
 type ShopDbRow = {
   id: string;
   name: string;
+  machine_number: number;
 };
 
 type ProductDbRow = {
@@ -95,6 +96,7 @@ const clampRangeSpan = (from: string, to: string): DateRange => {
 const mapShop = (row: ShopDbRow): Shop => ({
   id: row.id,
   name: row.name,
+  machineNumber: row.machine_number,
 });
 
 const mapProduct = (row: ProductDbRow): StockProduct => ({
@@ -113,9 +115,9 @@ const mapProduct = (row: ProductDbRow): StockProduct => ({
 export const listShops = async (): Promise<Shop[]> => {
   const result = await db.query<ShopDbRow>(
     `
-      SELECT id, name
+      SELECT id, name, machine_number
       FROM shops
-      ORDER BY created_at ASC, name ASC;
+      ORDER BY machine_number ASC, created_at ASC, name ASC;
     `,
   );
   return result.rows.map(mapShop);
@@ -124,7 +126,7 @@ export const listShops = async (): Promise<Shop[]> => {
 export const getShopById = async (shopId: string): Promise<Shop | null> => {
   const result = await db.query<ShopDbRow>(
     `
-      SELECT id, name
+      SELECT id, name, machine_number
       FROM shops
       WHERE id = $1
       LIMIT 1;
@@ -134,17 +136,41 @@ export const getShopById = async (shopId: string): Promise<Shop | null> => {
   return result.rows[0] ? mapShop(result.rows[0]) : null;
 };
 
-export const createShop = async (name: string): Promise<Shop> => {
+export const createShop = async (name: string, machineNumber: number): Promise<Shop> => {
   const id = `shop_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const result = await db.query<ShopDbRow>(
     `
-      INSERT INTO shops (id, name, created_at)
-      VALUES ($1, $2, NOW())
-      RETURNING id, name;
+      INSERT INTO shops (id, name, machine_number, created_at)
+      VALUES ($1, $2, $3, NOW())
+      RETURNING id, name, machine_number;
     `,
-    [id, name.trim()],
+    [id, name.trim(), machineNumber],
   );
   return mapShop(result.rows[0]);
+};
+
+export const updateShopMachine = async (shopId: string, machineNumber: number): Promise<Shop | null> => {
+  const result = await db.query<ShopDbRow>(
+    `
+      UPDATE shops
+      SET machine_number = $2
+      WHERE id = $1
+      RETURNING id, name, machine_number;
+    `,
+    [shopId, machineNumber],
+  );
+  return result.rows[0] ? mapShop(result.rows[0]) : null;
+};
+
+export const deleteShop = async (shopId: string): Promise<boolean> => {
+  const result = await db.query(
+    `
+      DELETE FROM shops
+      WHERE id = $1;
+    `,
+    [shopId],
+  );
+  return (result.rowCount ?? 0) > 0;
 };
 
 export const listProducts = async (): Promise<StockProduct[]> => {

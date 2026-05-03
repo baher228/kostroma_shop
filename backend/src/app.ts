@@ -7,18 +7,18 @@ import { signSessionToken } from './auth';
 import { getWorkerCheckInStatus, upsertWorkerCheckInStatus } from './checkInStore';
 import { config } from './config';
 import { AuthorizedRequest, requireAuth, requireRole } from './middleware';
-import { getOrderSheet } from './orderSheetStore';
+import { getOrderSheet, listOrderSheetValues, upsertOrderSheetValue } from './orderSheetStore';
 import { createSellerOrder, listSellerOrders } from './ordersStore';
 import {
   createProduct,
   createShop,
+  deleteShop,
   deleteProduct,
   getShopById,
   getStockTable,
-  listOrderValues,
   listShops,
+  updateShopMachine,
   updateProductMeta,
-  upsertOrderValue,
   upsertStockValue,
 } from './store';
 import { addSupportMessage, createSupportThread, listSupportThreads } from './supportStore';
@@ -37,9 +37,11 @@ import {
   idParamSchema,
   listStockTableQuerySchema,
   loginSchema,
+  updateShopMachineSchema,
   updateCheckInStatusSchema,
   updateProductMetaSchema,
   updateTaskStatusSchema,
+  upsertOrderSheetValueSchema,
   upsertStockValueSchema,
 } from './validation';
 
@@ -203,7 +205,7 @@ export const createApp = () => {
   app.post('/api/shops', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
     try {
       const payload = createShopSchema.parse(req.body);
-      const shop = await createShop(payload.name);
+      const shop = await createShop(payload.name, payload.machineNumber);
       res.status(201).json({ shop });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -216,6 +218,43 @@ export const createApp = () => {
         return;
       }
       res.status(500).json({ message: 'Failed to create shop.' });
+    }
+  });
+
+  app.patch('/api/shops/:id/machine', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const payload = updateShopMachineSchema.parse(req.body);
+      const shop = await updateShopMachine(params.id, payload.machineNumber);
+      if (!shop) {
+        res.status(404).json({ message: 'Shop not found.' });
+        return;
+      }
+      res.json({ shop });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to update shop machine.' });
+    }
+  });
+
+  app.delete('/api/shops/:id', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const removed = await deleteShop(params.id);
+      if (!removed) {
+        res.status(404).json({ message: 'Shop not found.' });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to delete shop.' });
     }
   });
 
@@ -320,13 +359,14 @@ export const createApp = () => {
 
   app.get('/api/stock/order-values', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
     try {
+      const shopId = toStringParam(req.query.shopId);
       const from = toStringParam(req.query.from);
       const to = toStringParam(req.query.to);
-      if (!from || !to) {
-        res.status(400).json({ message: 'from and to query params required.' });
+      if (!shopId || !from || !to) {
+        res.status(400).json({ message: 'shopId, from and to query params required.' });
         return;
       }
-      const orderValues = await listOrderValues(from, to);
+      const orderValues = await listOrderSheetValues(shopId, from, to);
       res.json({ orderValues });
     } catch {
       res.status(500).json({ message: 'Failed to load order values.' });
@@ -335,14 +375,24 @@ export const createApp = () => {
 
   app.put('/api/stock/order-values', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
     try {
-      const { productId, orderDate, packs } = req.body as { productId: string; orderDate: string; packs: number };
-      if (!productId || !orderDate || typeof packs !== 'number') {
-        res.status(400).json({ message: 'productId, orderDate, and packs required.' });
+      const { shopId, productId, orderDate, packs } = req.body as {
+        shopId: string;
+        productId: string;
+        orderDate: string;
+        packs: number;
+      };
+      if (!shopId || !productId || !orderDate || typeof packs !== 'number') {
+        res.status(400).json({ message: 'shopId, productId, orderDate, and packs required.' });
         return;
       }
-      const ok = await upsertOrderValue({ productId, orderDate, packs });
+      const ok = await upsertOrderSheetValue({
+        shopId,
+        productId,
+        date: orderDate,
+        value: packs > 0 ? String(packs) : '',
+      });
       if (!ok) {
-        res.status(404).json({ message: 'Product not found.' });
+        res.status(404).json({ message: 'Unable to update order value.' });
         return;
       }
       res.status(204).send();
@@ -395,6 +445,24 @@ export const createApp = () => {
         return;
       }
       res.status(500).json({ message: 'Failed to load order sheet.' });
+    }
+  });
+
+  app.put('/api/orders/sheet/value', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const payload = upsertOrderSheetValueSchema.parse(req.body);
+      const ok = await upsertOrderSheetValue(payload);
+      if (!ok) {
+        res.status(404).json({ message: 'Unable to update order sheet value.' });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to update order sheet value.' });
     }
   });
 

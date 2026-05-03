@@ -9,19 +9,31 @@ import {
   View,
 } from 'react-native';
 import { ordersApi } from '../api/orders';
-import { OrderSheet, OrderSheetRow, Session } from '../types/models';
+import { OrderSheet, OrderSheetRow, Session, Shop } from '../types/models';
 
 type OrderSheetPanelProps = {
   session: Session;
 };
 
+type MachineNumber = 1 | 2 | 3;
+type MachineGroup = {
+  machineNumber: MachineNumber;
+  shops: Shop[];
+  width: number;
+};
+
 const PRODUCT_CATEGORIES = [
-  'Йогурты',
-  'Кефир, Ряженка, Снежок',
-  'Молоко',
-  'Сметана',
-  'Творог',
+  '\u0419\u043e\u0433\u0443\u0440\u0442\u044b',
+  '\u041a\u0435\u0444\u0438\u0440, \u0420\u044f\u0436\u0435\u043d\u043a\u0430, \u0421\u043d\u0435\u0436\u043e\u043a',
+  '\u041c\u043e\u043b\u043e\u043a\u043e',
+  '\u0421\u043c\u0435\u0442\u0430\u043d\u0430',
+  '\u0422\u0432\u043e\u0440\u043e\u0433',
 ] as const;
+const MACHINE_NUMBERS: MachineNumber[] = [1, 2, 3];
+const SHOP_COL_WIDTH = 72;
+const TOTAL_COL_WIDTH = 62;
+const WEIGHT_COL_WIDTH = 70;
+const ALLOWED_ORDER_WEEKDAYS = new Set([2, 4, 6]);
 
 const todayDateKey = (): string => {
   const now = new Date();
@@ -31,19 +43,55 @@ const todayDateKey = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+const parseDateKey = (raw: string): Date => {
+  const [year, month, day] = raw.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
+
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const formatDateLabel = (iso: string): string => {
   const [year, month, day] = iso.split('-');
   return `${day}.${month}.${year}`;
 };
 
-const computeWeight = (total: number, packWeightKg: number | null): string => {
-  if (!total || packWeightKg === null || packWeightKg === undefined) return '';
-  return (total * packWeightKg).toFixed(2);
+const isAllowedOrderDate = (dateKey: string): boolean => ALLOWED_ORDER_WEEKDAYS.has(parseDateKey(dateKey).getDay());
+
+const shiftToAllowedOrderDate = (dateKey: string, direction: 1 | -1): string => {
+  const nextDate = parseDateKey(dateKey);
+  do {
+    nextDate.setDate(nextDate.getDate() + direction);
+  } while (!ALLOWED_ORDER_WEEKDAYS.has(nextDate.getDay()));
+  return toDateKey(nextDate);
 };
 
+const nearestAllowedOrderDate = (dateKey: string): string => {
+  if (isAllowedOrderDate(dateKey)) {
+    return dateKey;
+  }
+  return shiftToAllowedOrderDate(dateKey, 1);
+};
+
+const formatWeekdayLabel = (iso: string): string =>
+  parseDateKey(iso).toLocaleDateString('ru-RU', { weekday: 'long' });
+
+const formatWeight = (total: number, packWeightKg: number | null): string => {
+  if (!total || packWeightKg === null || packWeightKg === undefined) {
+    return '';
+  }
+  return (total * packWeightKg).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+};
+
+const cellKey = (productId: string, shopId: string) => `${productId}:${shopId}`;
+
 export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
-  const [date, setDate] = useState(todayDateKey());
-  const [inputDate, setInputDate] = useState(todayDateKey());
+  const [date, setDate] = useState(nearestAllowedOrderDate(todayDateKey()));
+  const [inputDate, setInputDate] = useState(nearestAllowedOrderDate(todayDateKey()));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sheet, setSheet] = useState<OrderSheet | null>(null);
@@ -56,8 +104,13 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
       const result = await ordersApi.sheet(session.token, targetDate);
       setSheet(result);
       setDate(targetDate);
+      setInputDate(targetDate);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Ошибка загрузки.');
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : '\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438.',
+      );
     } finally {
       setLoading(false);
     }
@@ -68,41 +121,89 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
   }, []);
 
   const handleLoadDate = () => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
-      void loadSheet(inputDate);
-    } else {
-      setError('Формат даты: YYYY-MM-DD');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
+      setError('\u0424\u043e\u0440\u043c\u0430\u0442 \u0434\u0430\u0442\u044b: YYYY-MM-DD');
+      return;
     }
+    if (!isAllowedOrderDate(inputDate)) {
+      setError(
+        '\u041b\u0438\u0441\u0442 \u0437\u0430\u043a\u0430\u0437\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d \u0442\u043e\u043b\u044c\u043a\u043e \u0432\u043e \u0432\u0442\u043e\u0440\u043d\u0438\u043a, \u0447\u0435\u0442\u0432\u0435\u0440\u0433 \u0438 \u0441\u0443\u0431\u0431\u043e\u0442\u0443.',
+      );
+      return;
+    }
+    void loadSheet(inputDate);
   };
 
-  const shiftDate = (days: number) => {
-    const [y, m, dv] = date.split('-').map(Number);
-    const d = new Date(y, (m || 1) - 1, dv || 1);
-    d.setDate(d.getDate() + days);
-    const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const shiftDate = (direction: 1 | -1) => {
+    const next = shiftToAllowedOrderDate(date, direction);
     setInputDate(next);
     void loadSheet(next);
   };
 
   const rowsByCategory = useMemo(() => {
-    if (!sheet) return {};
+    if (!sheet) {
+      return {} as Record<string, OrderSheetRow[]>;
+    }
     const normalizedQuery = query.trim().toLowerCase();
     const grouped: Record<string, OrderSheetRow[]> = {};
-    for (const cat of PRODUCT_CATEGORIES) {
-      grouped[cat] = [];
+    for (const category of PRODUCT_CATEGORIES) {
+      grouped[category] = [];
     }
     for (const row of sheet.rows) {
       if (normalizedQuery && !row.productName.toLowerCase().includes(normalizedQuery)) {
         continue;
       }
-      const cat = PRODUCT_CATEGORIES.includes(row.category as (typeof PRODUCT_CATEGORIES)[number])
+      const category = PRODUCT_CATEGORIES.includes(row.category as (typeof PRODUCT_CATEGORIES)[number])
         ? row.category
         : PRODUCT_CATEGORIES[0];
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(row);
+      grouped[category].push(row);
     }
     return grouped;
-  }, [sheet, query]);
+  }, [query, sheet]);
+
+  const shopsByMachine = useMemo(() => {
+    const grouped: Record<MachineNumber, Shop[]> = {
+      1: [],
+      2: [],
+      3: [],
+    };
+    if (!sheet) {
+      return grouped;
+    }
+    for (const shop of sheet.shops) {
+      const machine = shop.machineNumber >= 1 && shop.machineNumber <= 3 ? (shop.machineNumber as MachineNumber) : 1;
+      grouped[machine].push(shop);
+    }
+    return grouped;
+  }, [sheet]);
+
+  const machineGroups = useMemo<MachineGroup[]>(() => {
+    const groups = MACHINE_NUMBERS.map((machineNumber) => {
+      const shops = shopsByMachine[machineNumber];
+      return {
+        machineNumber,
+        shops,
+        width: shops.length * SHOP_COL_WIDTH + TOTAL_COL_WIDTH + WEIGHT_COL_WIDTH,
+      };
+    }).filter((group) => group.shops.length > 0);
+
+    if (groups.length > 0) {
+      return groups;
+    }
+
+    return [
+      {
+        machineNumber: 1,
+        shops: [],
+        width: TOTAL_COL_WIDTH + WEIGHT_COL_WIDTH,
+      },
+    ];
+  }, [shopsByMachine]);
+
+  const rowValue = (row: OrderSheetRow, shopId: string): number => row.shopValues[shopId] ?? 0;
+
+  const machineTotal = (row: OrderSheetRow, shops: Shop[]): number =>
+    shops.reduce((sum, shop) => sum + rowValue(row, shop.id), 0);
 
   if (loading && !sheet) {
     return (
@@ -112,87 +213,132 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     );
   }
 
+  const renderMachineHeader = (group: MachineGroup) => (
+    <View key={`machine:${group.machineNumber}`} style={styles.machineGroup}>
+      <View style={[styles.machineTitleCell, { width: group.width }]}>
+        <Text style={styles.machineText}>{`\u041c\u0410\u0428\u0418\u041d\u0410 ${group.machineNumber}`}</Text>
+      </View>
+    </View>
+  );
+
+  const renderMachineColumns = (row: OrderSheetRow, group: MachineGroup, isCategoryRow: boolean) => {
+    const total = machineTotal(row, group.shops);
+    const weight = formatWeight(total, row.packWeightKg);
+
+    if (isCategoryRow) {
+      return (
+        <View key={`category-group:${group.machineNumber}`} style={styles.machineGroup}>
+          {group.shops.map((shop) => (
+            <View
+              key={`category:${group.machineNumber}:${shop.id}`}
+              style={[styles.categoryCell, styles.shopCol]}
+            />
+          ))}
+          <View style={[styles.categoryCell, styles.totalCol, styles.totalHeaderBg]}>
+            <Text style={styles.totalHeaderText} />
+          </View>
+          <View style={[styles.categoryCell, styles.weightCol, styles.totalHeaderBg]}>
+            <Text style={styles.totalHeaderText} />
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View key={`${row.productId}:${group.machineNumber}`} style={styles.machineGroup}>
+        {group.shops.map((shop) => (
+          <View key={cellKey(row.productId, shop.id)} style={[styles.cell, styles.shopCol, styles.editCell]}>
+            <Text style={styles.valueText}>{rowValue(row, shop.id) || ''}</Text>
+          </View>
+        ))}
+        <View style={[styles.cell, styles.totalCol, styles.totalCellBg]}>
+          <Text style={styles.totalValueText}>{total || ''}</Text>
+        </View>
+        <View style={[styles.cell, styles.weightCol, styles.totalCellBg]}>
+          <Text style={styles.weightValueText}>{weight}</Text>
+        </View>
+      </View>
+    );
+  };
+
   const renderTable = () => {
-    if (!sheet) return null;
-    const shopCount = sheet.shops.length;
+    if (!sheet) {
+      return null;
+    }
 
     return (
       <ScrollView horizontal keyboardShouldPersistTaps="handled">
         <View>
-          {/* Machine group header */}
           <View style={styles.machineRow}>
-            <View style={[styles.machineCell, styles.nameColumn]} />
-            <View style={[styles.machineCell, { width: shopCount * SHOP_COL_WIDTH }]}>
-              <Text style={styles.machineText}>МАШИНА 1</Text>
-            </View>
-            <View style={[styles.machineCell, styles.totalCol]} />
-            <View style={[styles.machineCell, styles.weightCol]} />
+            <View style={[styles.machineLeadCell, styles.nameColumn]} />
+            {machineGroups.map((group) => renderMachineHeader(group))}
           </View>
 
-          {/* Shop names header */}
           <View style={styles.headerRow}>
             <View style={[styles.headerCell, styles.nameColumn]}>
-              <Text style={styles.headerNameText}>Номенклатура</Text>
+              <Text style={styles.headerNameText}>
+                {'\u041d\u043e\u043c\u0435\u043d\u043a\u043b\u0430\u0442\u0443\u0440\u0430'}
+              </Text>
             </View>
-            {sheet.shops.map((shop) => (
-              <View key={shop.id} style={[styles.headerCell, styles.shopCol]}>
-                <Text style={styles.shopHeaderText} numberOfLines={2}>{shop.name}</Text>
+            {machineGroups.map((group) => (
+              <View key={`header:${group.machineNumber}`} style={styles.machineGroup}>
+                {group.shops.map((shop) => (
+                  <View key={shop.id} style={[styles.headerCell, styles.shopCol]}>
+                    <Text style={styles.shopHeaderText} numberOfLines={3}>
+                      {shop.name}
+                    </Text>
+                  </View>
+                ))}
+                <View style={[styles.headerCell, styles.totalCol, styles.totalHeaderBg]}>
+                  <Text style={styles.totalHeaderText}>{'\u0418\u0422\u041e\u0413\u041e'}</Text>
+                </View>
+                <View style={[styles.headerCell, styles.weightCol, styles.totalHeaderBg]}>
+                  <Text style={styles.totalHeaderText}>{'\u0412\u0415\u0421'}</Text>
+                </View>
               </View>
             ))}
-            <View style={[styles.headerCell, styles.totalCol, styles.totalHeaderBg]}>
-              <Text style={styles.totalHeaderText}>ИТОГО</Text>
-            </View>
-            <View style={[styles.headerCell, styles.weightCol, styles.totalHeaderBg]}>
-              <Text style={styles.totalHeaderText}>ВЕС</Text>
-            </View>
           </View>
 
-          {/* Category sections */}
           <ScrollView style={styles.bodyScroll} nestedScrollEnabled>
             {PRODUCT_CATEGORIES.map((category) => {
               const rows = rowsByCategory[category];
-              if (!rows || rows.length === 0) return null;
+              if (!rows || rows.length === 0) {
+                return null;
+              }
               return (
                 <View key={category}>
-                  {/* Category header row */}
                   <View style={styles.categoryRow}>
                     <View style={[styles.categoryCell, styles.nameColumn]}>
                       <Text style={styles.categoryText}>{category}</Text>
                     </View>
-                    {sheet.shops.map((shop) => (
-                      <View key={shop.id} style={[styles.categoryCell, styles.shopCol]} />
-                    ))}
-                    <View style={[styles.categoryCell, styles.totalCol]} />
-                    <View style={[styles.categoryCell, styles.weightCol]} />
+                    {machineGroups.map((group) =>
+                      renderMachineColumns(
+                        {
+                          productId: `category-${category}`,
+                          productName: category,
+                          category,
+                          packType: null,
+                          unitsInPack: null,
+                          packWeightKg: null,
+                          shelfLifeDays: null,
+                          unitPriceRubVat: null,
+                          shopValues: {},
+                          total: 0,
+                        },
+                        group,
+                        true,
+                      ),
+                    )}
                   </View>
 
-                  {/* Product data rows */}
                   {rows.map((row) => (
                     <View key={row.productId} style={styles.dataRow}>
                       <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
-                        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.nameText}>
+                        <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
                           {row.productName}
                         </Text>
                       </View>
-                      {sheet.shops.map((shop) => {
-                        const val = row.shopValues[shop.id];
-                        return (
-                          <View
-                            key={shop.id}
-                            style={[styles.cell, styles.shopCol, val ? styles.filledCell : undefined]}
-                          >
-                            <Text style={styles.valueText}>{val || ''}</Text>
-                          </View>
-                        );
-                      })}
-                      <View style={[styles.cell, styles.totalCol, styles.totalCellBg]}>
-                        <Text style={styles.totalValueText}>{row.total || ''}</Text>
-                      </View>
-                      <View style={[styles.cell, styles.weightCol, styles.totalCellBg]}>
-                        <Text style={styles.weightValueText}>
-                          {computeWeight(row.total, row.packWeightKg)}
-                        </Text>
-                      </View>
+                      {machineGroups.map((group) => renderMachineColumns(row, group, false))}
                     </View>
                   ))}
                 </View>
@@ -206,11 +352,11 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
 
   return (
     <View style={styles.panel}>
-      <Text style={styles.title}>Лист заказа</Text>
+      <Text style={styles.title}>{'\u0417\u0430\u043a\u0430\u0437'}</Text>
 
       <View style={styles.dateRow}>
         <Pressable style={styles.dateButton} onPress={() => shiftDate(-1)}>
-          <Text style={styles.dateButtonText}>◀</Text>
+          <Text style={styles.dateButtonText}>{'<'}</Text>
         </Pressable>
         <TextInput
           value={inputDate}
@@ -220,17 +366,17 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
           placeholderTextColor="#7a8b7f"
         />
         <Pressable style={styles.dateButton} onPress={() => shiftDate(1)}>
-          <Text style={styles.dateButtonText}>▶</Text>
+          <Text style={styles.dateButtonText}>{'>'}</Text>
         </Pressable>
         <Pressable style={styles.loadButton} onPress={handleLoadDate}>
-          <Text style={styles.loadButtonText}>{loading ? '...' : 'Загрузить'}</Text>
+          <Text style={styles.loadButtonText}>{'\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c'}</Text>
         </Pressable>
       </View>
 
       <TextInput
         value={query}
         onChangeText={setQuery}
-        placeholder="Поиск по названию..."
+        placeholder={'\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044e...'}
         placeholderTextColor="#7a8b7f"
         style={styles.searchInput}
       />
@@ -239,8 +385,9 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
 
       {sheet && (
         <View style={styles.tableWrap}>
+          <Text style={styles.weekdayBadge}>{formatWeekdayLabel(sheet.date)}</Text>
           <Text style={styles.sheetDate}>
-            Заказ на {formatDateLabel(sheet.date)} — магазинов: {sheet.shops.length}
+            {`\u0417\u0430\u043a\u0430\u0437 \u043d\u0430 ${formatDateLabel(sheet.date)} — \u043c\u0430\u0433\u0430\u0437\u0438\u043d\u043e\u0432: ${sheet.shops.length}`}
           </Text>
           {renderTable()}
         </View>
@@ -248,8 +395,6 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     </View>
   );
 };
-
-const SHOP_COL_WIDTH = 62;
 
 const styles = StyleSheet.create({
   panel: {
@@ -320,6 +465,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  weekdayBadge: {
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#edf3ee',
+    color: '#2f6f4f',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'capitalize',
+  },
   sheetDate: {
     fontSize: 13,
     fontWeight: '700',
@@ -328,23 +485,39 @@ const styles = StyleSheet.create({
   },
   tableWrap: {
     flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#b7c5b8',
+    backgroundColor: '#dce4dc',
+    overflow: 'hidden',
+    padding: 8,
   },
   bodyScroll: {
     flex: 1,
   },
-
-  // Machine group header
   machineRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#999',
+    alignItems: 'stretch',
   },
-  machineCell: {
-    paddingVertical: 4,
+  machineLeadCell: {
+    borderWidth: 1,
+    borderColor: '#7f8d81',
+    backgroundColor: '#d6dfd6',
+  },
+  machineGroup: {
+    flexDirection: 'row',
+  },
+  machineTitleCell: {
+    minHeight: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderRightWidth: 1,
-    borderRightColor: '#999',
+    borderLeftWidth: 1,
+    borderColor: '#7f8d81',
+    backgroundColor: '#ecf1ec',
   },
   machineText: {
     fontSize: 12,
@@ -352,13 +525,11 @@ const styles = StyleSheet.create({
     color: '#000',
     textAlign: 'center',
   },
-
-  // Column header row
   headerRow: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: '#ecf1ec',
     borderBottomWidth: 2,
-    borderBottomColor: '#666',
+    borderBottomColor: '#7f8d81',
   },
   headerCell: {
     paddingHorizontal: 2,
@@ -366,12 +537,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderRightColor: '#999',
+    borderBottomWidth: 1,
+    borderRightColor: '#7f8d81',
+    borderBottomColor: '#7f8d81',
+    backgroundColor: '#ecf1ec',
   },
   headerNameText: {
     fontSize: 10,
     fontWeight: '800',
     color: '#000',
+    textAlign: 'center',
   },
   shopHeaderText: {
     fontSize: 9,
@@ -380,34 +555,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   totalHeaderBg: {
-    backgroundColor: '#c6efce',
+    backgroundColor: '#d9d9d9',
   },
   totalHeaderText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#006100',
+    color: '#1f2a21',
+    textAlign: 'center',
   },
-
-  // Category row (yellow)
   categoryRow: {
     flexDirection: 'row',
-    backgroundColor: '#ffff99',
+    backgroundColor: '#d6dfd6',
     borderBottomWidth: 1,
-    borderBottomColor: '#999',
+    borderBottomColor: '#9eb09f',
   },
   categoryCell: {
     paddingVertical: 3,
     paddingHorizontal: 2,
     borderRightWidth: 1,
-    borderRightColor: '#ccc',
+    borderRightColor: '#9eb09f',
+    justifyContent: 'center',
   },
   categoryText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#000',
+    color: '#24382d',
+    textAlign: 'center',
   },
-
-  // Data row
   dataRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -419,49 +593,51 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderRightColor: '#d0d0d0',
+    borderRightColor: '#7f8d81',
+    minHeight: 30,
   },
   nameColumn: {
-    width: 200,
+    width: 240,
     alignItems: 'flex-start',
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
   },
   nameCell: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f7f7f7',
   },
   nameText: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#000',
+    color: '#222222',
   },
   shopCol: {
     width: SHOP_COL_WIDTH,
   },
   totalCol: {
-    width: 55,
+    width: TOTAL_COL_WIDTH,
   },
   weightCol: {
-    width: 55,
+    width: WEIGHT_COL_WIDTH,
   },
-  filledCell: {
-    backgroundColor: '#fce4ec',
+  editCell: {
+    backgroundColor: '#f1f8f1',
   },
   valueText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#000',
+    textAlign: 'center',
   },
   totalCellBg: {
-    backgroundColor: '#e8f5e9',
+    backgroundColor: '#f2f2f2',
   },
   totalValueText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#006100',
+    color: '#223528',
   },
   weightValueText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#006100',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#223528',
   },
 });

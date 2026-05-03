@@ -39,6 +39,7 @@ export type StockRow = {
 export type Shop = {
   id: string;
   name: string;
+  machineNumber: number;
 };
 
 export type ProductCategory = 'Йогурты' | 'Кефир, Ряженка, Снежок' | 'Молоко' | 'Сметана' | 'Творог';
@@ -161,6 +162,7 @@ export type WorkerCheckInStatus = {
 };
 
 export type OrderValueEntry = {
+  shopId: string;
   productId: string;
   orderDate: string;
   packs: number;

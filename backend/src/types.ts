@@ -23,6 +23,7 @@ export type LegacyStockRow = {
 export type Shop = {
   id: string;
   name: string;
+  machineNumber: number;
 };
 
 export type ProductCategory = 'Йогурты' | 'Кефир, Ряженка, Снежок' | 'Молоко' | 'Сметана' | 'Творог';

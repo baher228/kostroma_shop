@@ -63,6 +63,7 @@ export const createRowSchema = z.object({
 });
 
 const nullablePositiveInt = z.union([z.number().int().positive(), z.null()]);
+const machineNumberSchema = z.number().int().min(1).max(3);
 
 export const updateRowSchema = z
   .object({
@@ -108,6 +109,11 @@ export const assignUserShopSchema = z.object({
 
 export const createShopSchema = z.object({
   name: z.string().trim().min(2).max(140),
+  machineNumber: machineNumberSchema.optional().default(1),
+});
+
+export const updateShopMachineSchema = z.object({
+  machineNumber: machineNumberSchema,
 });
 
 export const listStockTableQuerySchema = z.object({
@@ -193,5 +199,12 @@ export const updateCheckInStatusSchema = z.object({
 
 export const orderSheetQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export const upsertOrderSheetValueSchema = z.object({
+  shopId: z.string().trim().min(1).max(100),
+  productId: z.string().trim().min(1).max(100),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  value: z.string().regex(/^\d{0,5}$/),
 });
 

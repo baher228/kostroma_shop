@@ -15,12 +15,28 @@ export const shopsApi = {
     return result.shops;
   },
 
-  create: async (token: string, name: string): Promise<Shop> => {
+  create: async (token: string, name: string, machineNumber: number): Promise<Shop> => {
     const result = await request<ShopResponse>('/api/shops', {
       method: 'POST',
       token,
-      body: { name },
+      body: { name, machineNumber },
     });
     return result.shop;
+  },
+
+  updateMachine: async (token: string, shopId: string, machineNumber: number): Promise<Shop> => {
+    const result = await request<ShopResponse>(`/api/shops/${shopId}/machine`, {
+      method: 'PATCH',
+      token,
+      body: { machineNumber },
+    });
+    return result.shop;
+  },
+
+  delete: async (token: string, shopId: string): Promise<void> => {
+    await request<{}>(`/api/shops/${shopId}`, {
+      method: 'DELETE',
+      token,
+    });
   },
 };

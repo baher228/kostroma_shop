@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -20,6 +21,7 @@ type UsersPanelProps = {
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
 
 const roleLabel = (role: Role) => (role === 'manager' ? 'Менеджер' : 'Работник');
+const MACHINE_NUMBERS = [1, 2, 3] as const;
 
 export const UsersPanel = ({ session }: UsersPanelProps) => {
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -29,6 +31,8 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
   const [saving, setSaving] = useState(false);
   const [creatingShop, setCreatingShop] = useState(false);
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
+  const [updatingShopId, setUpdatingShopId] = useState<string | null>(null);
+  const [deletingShopId, setDeletingShopId] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -36,7 +40,10 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('worker');
   const [newShopName, setNewShopName] = useState('');
+  const [newShopMachineNumber, setNewShopMachineNumber] = useState<number>(1);
   const [createUserShopId, setCreateUserShopId] = useState<string | null>(null);
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [isShopsOpen, setIsShopsOpen] = useState(false);
 
   const [shopPickerUserId, setShopPickerUserId] = useState<string | null>(null);
   const [shopPickerTarget, setShopPickerTarget] = useState<'create-user' | 'existing-user' | null>(null);
@@ -104,9 +111,10 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
     try {
       setCreatingShop(true);
       setError('');
-      const created = await shopsApi.create(session.token, name);
+      const created = await shopsApi.create(session.token, name, newShopMachineNumber);
       setShops((current) => [...current, created]);
       setNewShopName('');
+      setNewShopMachineNumber(1);
       if (!createUserShopId) {
         setCreateUserShopId(created.id);
       }
@@ -115,6 +123,65 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
     } finally {
       setCreatingShop(false);
     }
+  };
+
+  const updateMachine = async (shopId: string, machineNumber: number) => {
+    try {
+      setUpdatingShopId(shopId);
+      setError('');
+      const updated = await shopsApi.updateMachine(session.token, shopId, machineNumber);
+      setShops((current) =>
+        current
+          .map((shop) => (shop.id === shopId ? updated : shop))
+          .sort((a, b) => a.machineNumber - b.machineNumber || a.name.localeCompare(b.name, 'ru')),
+      );
+    } catch (updateError) {
+      setError(errorMessage(updateError));
+    } finally {
+      setUpdatingShopId(null);
+    }
+  };
+
+  const removeShop = async (shopId: string) => {
+    try {
+      setDeletingShopId(shopId);
+      setError('');
+      await shopsApi.delete(session.token, shopId);
+      setShops((current) => current.filter((shop) => shop.id !== shopId));
+      setUsers((current) =>
+        current.map((user) =>
+          user.shopId === shopId
+            ? {
+                ...user,
+                shopId: null,
+                shopName: null,
+              }
+            : user,
+        ),
+      );
+      setCreateUserShopId((current) => (current === shopId ? null : current));
+    } catch (deleteError) {
+      setError(errorMessage(deleteError));
+    } finally {
+      setDeletingShopId(null);
+    }
+  };
+
+  const confirmRemoveShop = (shop: Shop) => {
+    Alert.alert(
+      'Удалить магазин?',
+      `Магазин "${shop.name}" будет удален. Привязка работников к нему тоже снимется.`,
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: () => {
+            void removeShop(shop.id);
+          },
+        },
+      ],
+    );
   };
 
   const assignShop = async (userId: string, shopId: string | null) => {
@@ -151,126 +218,195 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
         </Pressable>
       </View>
 
-      <View style={styles.createBox}>
-        <Text style={styles.sectionTitle}>Создать пользователя</Text>
-        <TextInput
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-          style={styles.input}
-          placeholder="Логин"
-          placeholderTextColor="#7a8b7f"
-          maxLength={32}
-        />
-        <TextInput
-          value={firstName}
-          onChangeText={setFirstName}
-          style={styles.input}
-          placeholder="Имя"
-          placeholderTextColor="#7a8b7f"
-          maxLength={80}
-        />
-        <TextInput
-          value={lastName}
-          onChangeText={setLastName}
-          style={styles.input}
-          placeholder="Фамилия"
-          placeholderTextColor="#7a8b7f"
-          maxLength={80}
-        />
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          style={styles.input}
-          placeholder="Пароль"
-          placeholderTextColor="#7a8b7f"
-          maxLength={200}
-        />
-
-        <View style={styles.rolesRow}>
-          <Pressable style={[styles.roleButton, role === 'worker' && styles.roleButtonActive]} onPress={() => setRole('worker')}>
-            <Text style={[styles.roleButtonText, role === 'worker' && styles.roleButtonTextActive]}>Работник</Text>
-          </Pressable>
-          <Pressable style={[styles.roleButton, role === 'manager' && styles.roleButtonActive]} onPress={() => setRole('manager')}>
-            <Text style={[styles.roleButtonText, role === 'manager' && styles.roleButtonTextActive]}>Менеджер</Text>
-          </Pressable>
-        </View>
-
-        {role === 'worker' && (
-          <Pressable
-            style={styles.shopSelectButton}
-            onPress={() => {
-              setShopPickerTarget('create-user');
-              setShopPickerUserId(null);
-            }}
-          >
-            <Text style={styles.shopSelectLabel}>
-              Магазин: {shops.find((shop) => shop.id === createUserShopId)?.name ?? 'Не выбран'}
-            </Text>
-          </Pressable>
-        )}
-
-        <Pressable style={[styles.createButton, saving && styles.createButtonDisabled]} onPress={createUser} disabled={saving}>
-          <Text style={styles.createButtonText}>{saving ? 'Сохранение...' : 'Создать пользователя'}</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.createBox}>
-        <Text style={styles.sectionTitle}>Магазины</Text>
-        <View style={styles.shopCreateRow}>
-          <TextInput
-            value={newShopName}
-            onChangeText={setNewShopName}
-            style={[styles.input, styles.shopInput]}
-            placeholder="Название нового магазина"
-            placeholderTextColor="#7a8b7f"
-            maxLength={140}
-          />
-          <Pressable
-            style={[styles.createShopButton, creatingShop && styles.createButtonDisabled]}
-            onPress={createShop}
-            disabled={creatingShop}
-          >
-            <Text style={styles.createShopButtonText}>{creatingShop ? '...' : 'Добавить'}</Text>
-          </Pressable>
-        </View>
-      </View>
-
       {!!error && <Text style={styles.error}>{error}</Text>}
+
+      <View style={styles.collapsibleSection}>
+        <Pressable style={styles.sectionToggle} onPress={() => setIsCreateUserOpen((current) => !current)}>
+          <Text style={styles.sectionToggleTitle}>Создать пользователя</Text>
+          <Text style={styles.sectionToggleIcon}>{isCreateUserOpen ? '▲' : '▼'}</Text>
+        </Pressable>
+        {isCreateUserOpen && (
+          <View style={styles.createBox}>
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              style={styles.input}
+              placeholder="Логин"
+              placeholderTextColor="#7a8b7f"
+              maxLength={32}
+            />
+            <TextInput
+              value={firstName}
+              onChangeText={setFirstName}
+              style={styles.input}
+              placeholder="Имя"
+              placeholderTextColor="#7a8b7f"
+              maxLength={80}
+            />
+            <TextInput
+              value={lastName}
+              onChangeText={setLastName}
+              style={styles.input}
+              placeholder="Фамилия"
+              placeholderTextColor="#7a8b7f"
+              maxLength={80}
+            />
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              style={styles.input}
+              placeholder="Пароль"
+              placeholderTextColor="#7a8b7f"
+              maxLength={200}
+            />
+
+            <View style={styles.rolesRow}>
+              <Pressable style={[styles.roleButton, role === 'worker' && styles.roleButtonActive]} onPress={() => setRole('worker')}>
+                <Text style={[styles.roleButtonText, role === 'worker' && styles.roleButtonTextActive]}>Работник</Text>
+              </Pressable>
+              <Pressable style={[styles.roleButton, role === 'manager' && styles.roleButtonActive]} onPress={() => setRole('manager')}>
+                <Text style={[styles.roleButtonText, role === 'manager' && styles.roleButtonTextActive]}>Менеджер</Text>
+              </Pressable>
+            </View>
+
+            {role === 'worker' && (
+              <Pressable
+                style={styles.shopSelectButton}
+                onPress={() => {
+                  setShopPickerTarget('create-user');
+                  setShopPickerUserId(null);
+                }}
+              >
+                <Text style={styles.shopSelectLabel}>
+                  Магазин: {shops.find((shop) => shop.id === createUserShopId)?.name ?? 'Не выбран'}
+                </Text>
+              </Pressable>
+            )}
+
+            <Pressable style={[styles.createButton, saving && styles.createButtonDisabled]} onPress={createUser} disabled={saving}>
+              <Text style={styles.createButtonText}>{saving ? 'Сохранение...' : 'Создать пользователя'}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.collapsibleSection}>
+        <Pressable style={styles.sectionToggle} onPress={() => setIsShopsOpen((current) => !current)}>
+          <Text style={styles.sectionToggleTitle}>Магазины</Text>
+          <Text style={styles.sectionToggleIcon}>{isShopsOpen ? '▲' : '▼'}</Text>
+        </Pressable>
+        {isShopsOpen && (
+          <View style={styles.createBox}>
+            <View style={styles.shopCreateRow}>
+              <TextInput
+                value={newShopName}
+                onChangeText={setNewShopName}
+                style={[styles.input, styles.shopInput]}
+                placeholder="Название нового магазина"
+                placeholderTextColor="#7a8b7f"
+                maxLength={140}
+              />
+              <Pressable
+                style={[styles.createShopButton, creatingShop && styles.createButtonDisabled]}
+                onPress={createShop}
+                disabled={creatingShop}
+              >
+                <Text style={styles.createShopButtonText}>{creatingShop ? '...' : 'Добавить'}</Text>
+              </Pressable>
+            </View>
+            <View style={styles.machineButtonsRow}>
+              {MACHINE_NUMBERS.map((machineNumber) => {
+                const active = newShopMachineNumber === machineNumber;
+                return (
+                  <Pressable
+                    key={machineNumber}
+                    style={[styles.machineButton, active && styles.machineButtonActive]}
+                    onPress={() => setNewShopMachineNumber(machineNumber)}
+                  >
+                    <Text style={[styles.machineButtonText, active && styles.machineButtonTextActive]}>
+                      {`Машина ${machineNumber}`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.shopsList}>
+              {shops.map((shop) => (
+                <View key={shop.id} style={styles.shopCard}>
+                  <View style={styles.shopCardHeader}>
+                    <Text style={styles.shopCardTitle}>{shop.name}</Text>
+                    <Pressable
+                      style={[styles.deleteShopButton, deletingShopId === shop.id && styles.createButtonDisabled]}
+                      onPress={() => confirmRemoveShop(shop)}
+                      disabled={deletingShopId === shop.id}
+                    >
+                      <Text style={styles.deleteShopButtonText}>
+                        {deletingShopId === shop.id ? '...' : 'Удалить'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.shopCardMeta}>{`Текущая группа: Машина ${shop.machineNumber}`}</Text>
+                  <View style={styles.machineButtonsRow}>
+                    {MACHINE_NUMBERS.map((machineNumber) => {
+                      const active = shop.machineNumber === machineNumber;
+                      return (
+                        <Pressable
+                          key={`${shop.id}:${machineNumber}`}
+                          style={[styles.machineButton, active && styles.machineButtonActive]}
+                          onPress={() => void updateMachine(shop.id, machineNumber)}
+                          disabled={updatingShopId === shop.id}
+                        >
+                          <Text style={[styles.machineButtonText, active && styles.machineButtonTextActive]}>
+                            {updatingShopId === shop.id && active ? '...' : machineNumber}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
 
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator color="#2f6f4f" />
         </View>
       ) : (
-        <View style={styles.usersListWrap}>
-          <ScrollView style={styles.usersList} contentContainerStyle={styles.usersListContent} showsVerticalScrollIndicator>
-            {users.map((user) => (
-              <View key={user.id} style={styles.userCard}>
-                <Text style={styles.userName}>{user.fullName}</Text>
-                <Text style={styles.userMeta}>
-                  @{user.username} · {roleLabel(user.role)}
-                </Text>
-                {user.role === 'worker' && (
-                  <Pressable
-                    style={styles.shopAssignButton}
-                    onPress={() => {
-                      setShopPickerTarget('existing-user');
-                      setShopPickerUserId(user.id);
-                    }}
-                    disabled={assigningUserId === user.id}
-                  >
-                    <Text style={styles.shopAssignButtonText}>
-                      {assigningUserId === user.id
-                        ? 'Сохранение...'
-                        : `Магазин: ${user.shopName ?? 'Не назначен'} (нажмите для изменения)`}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            ))}
-          </ScrollView>
+        <View style={styles.usersSection}>
+          <Text style={styles.usersSectionTitle}>Пользователи</Text>
+          <View style={styles.usersListWrap}>
+            <ScrollView style={styles.usersList} contentContainerStyle={styles.usersListContent} showsVerticalScrollIndicator>
+              {users.map((user) => (
+                <View key={user.id} style={styles.userCard}>
+                  <Text style={styles.userName}>{user.fullName}</Text>
+                  <Text style={styles.userMeta}>
+                    @{user.username} · {roleLabel(user.role)}
+                  </Text>
+                  {user.role === 'worker' && (
+                    <Pressable
+                      style={styles.shopAssignButton}
+                      onPress={() => {
+                        setShopPickerTarget('existing-user');
+                        setShopPickerUserId(user.id);
+                      }}
+                      disabled={assigningUserId === user.id}
+                    >
+                      <Text style={styles.shopAssignButtonText}>
+                        {assigningUserId === user.id
+                          ? 'Сохранение...'
+                          : `Магазин: ${user.shopName ?? 'Не назначен'} (нажмите для изменения)`}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
         </View>
       )}
 
@@ -369,9 +505,33 @@ const styles = StyleSheet.create({
     color: '#2f4437',
     fontWeight: '700',
   },
+  collapsibleSection: {
+    marginTop: 10,
+  },
+  sectionToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#d4ddd5',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  sectionToggleTitle: {
+    fontSize: 14,
+    color: '#2f4437',
+    fontWeight: '700',
+  },
+  sectionToggleIcon: {
+    fontSize: 12,
+    color: '#4c6153',
+    fontWeight: '800',
+  },
   createBox: {
     gap: 8,
-    marginBottom: 10,
+    marginTop: 8,
     borderRadius: 11,
     borderWidth: 1,
     borderColor: '#d4ddd5',
@@ -444,6 +604,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  machineButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  machineButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#c8d3ca',
+    backgroundColor: '#edf3ee',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  machineButtonActive: {
+    backgroundColor: '#2f6f4f',
+    borderColor: '#2f6f4f',
+  },
+  machineButtonText: {
+    color: '#334b3d',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  machineButtonTextActive: {
+    color: '#ffffff',
+  },
   shopInput: {
     flex: 1,
   },
@@ -465,9 +650,64 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 6,
   },
+  shopsList: {
+    gap: 8,
+  },
+  shopCard: {
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#cfdbd1',
+    backgroundColor: '#ffffff',
+    padding: 10,
+    gap: 6,
+  },
+  shopCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  shopCardTitle: {
+    color: '#1d2f24',
+    fontSize: 14,
+    fontWeight: '700',
+    flex: 1,
+  },
+  shopCardMeta: {
+    color: '#4c6153',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteShopButton: {
+    borderRadius: 10,
+    backgroundColor: '#9f4038',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  deleteShopButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
   loadingBox: {
     paddingVertical: 12,
     alignItems: 'center',
+  },
+  usersSection: {
+    flex: 1,
+    minHeight: 0,
+    marginTop: 10,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#d4ddd5',
+    backgroundColor: '#ffffff',
+    padding: 10,
+    gap: 8,
+  },
+  usersSectionTitle: {
+    color: '#2f4437',
+    fontWeight: '700',
+    fontSize: 14,
   },
   usersListWrap: {
     flex: 1,

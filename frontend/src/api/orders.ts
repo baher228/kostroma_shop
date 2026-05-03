@@ -29,4 +29,14 @@ export const ordersApi = {
     const result = await request<OrderSheetResponse>(`/api/orders/sheet?date=${date}`, { token });
     return result.sheet;
   },
+  updateSheetValue: async (
+    token: string,
+    payload: { shopId: string; productId: string; date: string; value: string },
+  ): Promise<void> => {
+    await request<{}>('/api/orders/sheet/value', {
+      method: 'PUT',
+      token,
+      body: payload,
+    });
+  },
 };

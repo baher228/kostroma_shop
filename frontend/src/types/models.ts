@@ -139,8 +139,6 @@ export type SupportThread = {
 
 export type SellerOrder = {
   id: string;
-  workerId: string;
-  workerDisplayName: string;
   shopId: string;
   shopName: string | null;
   productId: string;
@@ -149,7 +147,6 @@ export type SellerOrder = {
   requestedPacks: number;
   requestedUnits: number;
   autoSuggested: boolean;
-  note: string | null;
   status: 'new' | 'processed';
   createdAt: string;
 };

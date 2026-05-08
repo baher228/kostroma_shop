@@ -1,11 +1,18 @@
-1. Запустить весь backend в Docker (`postgres + api`):
-`npm run backend:docker:up`
+# Quick Launch
 
-2. Проверить логи backend:
-`npm run backend:docker:logs`
+Use `README.md` for the full guide.
 
-3. Запустить frontend:
-`npx expo start --lan`
+```bash
+npm install
+npm --prefix services/ru-backend install
+npm --prefix services/dubai-backend install
+npm run backend:docker:up
+npm start
+```
 
-4. Остановить backend-стек Docker:
-`npm run backend:docker:down`
+Separate server deploys:
+
+```bash
+npm run backend:docker:ru:up
+npm run backend:docker:dubai:up
+```

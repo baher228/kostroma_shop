@@ -1,0 +1,47 @@
+services:
+  postgres-ru:
+    image: postgres:16-alpine
+    container_name: kgb-postgres-ru
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PERSONAL_POSTGRES_DB:-kgb_personal}
+      POSTGRES_USER: ${PERSONAL_POSTGRES_USER:-kgb}
+      POSTGRES_PASSWORD: ${PERSONAL_POSTGRES_PASSWORD:?Set PERSONAL_POSTGRES_PASSWORD}
+    ports:
+      - "${PERSONAL_POSTGRES_PUBLIC_PORT:-5432}:5432"
+    volumes:
+      - postgres_ru_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PERSONAL_POSTGRES_USER:-kgb} -d ${PERSONAL_POSTGRES_DB:-kgb_personal}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend-ru:
+    build:
+      context: ./services/ru-backend
+      dockerfile: Dockerfile
+    container_name: kgb-backend-ru
+    restart: unless-stopped
+    depends_on:
+      postgres-ru:
+        condition: service_healthy
+    environment:
+      SERVICE_REGION: ru
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      OPS_JWT_SECRET: ${OPS_JWT_SECRET:?Set OPS_JWT_SECRET}
+      OPS_TOKEN_PRIVATE_KEY: ${OPS_TOKEN_PRIVATE_KEY:-}
+      OPS_TOKEN_KEY_ID: ${OPS_TOKEN_KEY_ID:-ops-token-prod}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN}
+      PERSONAL_POSTGRES_HOST: postgres-ru
+      PERSONAL_POSTGRES_PORT: 5432
+      PERSONAL_POSTGRES_USER: ${PERSONAL_POSTGRES_USER:-kgb}
+      PERSONAL_POSTGRES_PASSWORD: ${PERSONAL_POSTGRES_PASSWORD:?Set PERSONAL_POSTGRES_PASSWORD}
+      PERSONAL_POSTGRES_DB: ${PERSONAL_POSTGRES_DB:-kgb_personal}
+      PERSONAL_POSTGRES_SSL: "false"
+    ports:
+      - "${RU_BACKEND_PUBLIC_PORT:-4000}:4000"
+
+volumes:
+  postgres_ru_data:

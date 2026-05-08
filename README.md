@@ -1,49 +1,71 @@
 # KGB
 
-This project has:
+Expo mobile frontend plus a split Node.js backend.
 
-- an Expo frontend in the repository root
-- a Node.js/TypeScript backend in `backend/`
-- PostgreSQL started with Docker
+This is one repo for development, but it builds into **separate deployable services**:
 
-## Prerequisites
+- **Russia backend**: personal data, auth, users, tasks, support, check-in.
+- **Dubai backend**: shops, stock, products, prices, orders.
+- **Russia PostgreSQL**: personal database.
+- **Dubai PostgreSQL**: stock/financial database.
 
-- Node.js and npm
+Production should run the RU and Dubai Docker Compose files on different servers. The local Compose file runs both only for development.
+
+## Requirements
+
+- Node.js 22+
+- npm
 - Docker Desktop
 
-## Quick start
+## First Setup
 
-1. Install dependencies:
+Install frontend and backend dependencies:
 
 ```bash
 npm install
-npm --prefix backend install
+npm --prefix services/ru-backend install
+npm --prefix services/dubai-backend install
 ```
 
-2. Start PostgreSQL and the backend in Docker:
+Create or update `.env` in the repository root.
+
+For Android emulator:
+
+```env
+EXPO_PUBLIC_RU_API_URL=http://10.0.2.2:4000
+EXPO_PUBLIC_DXB_API_URL=http://10.0.2.2:4001
+```
+
+For a real phone on the same Wi-Fi, replace `YOUR_LOCAL_IP` with your computer's LAN IP:
+
+```env
+EXPO_PUBLIC_RU_API_URL=http://YOUR_LOCAL_IP:4000
+EXPO_PUBLIC_DXB_API_URL=http://YOUR_LOCAL_IP:4001
+```
+
+## Launch
+
+### Local Development
+
+Start both databases and both backends on your machine:
 
 ```bash
 npm run backend:docker:up
 ```
 
-3. Set the frontend API URL in `.env`.
+Check logs if needed:
 
-Example:
-
-```env
-EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:4000
+```bash
+npm run backend:docker:logs
 ```
 
-Use your machine's local network IP if you open the Expo app on a phone.  
-If you run the Android emulator, the frontend also has a fallback for `http://10.0.2.2:4000`.
-
-4. Start the frontend:
+Start the Expo app:
 
 ```bash
 npm start
 ```
 
-You can also use:
+Then choose Android, iOS, or web from the Expo prompt. You can also run:
 
 ```bash
 npm run android
@@ -51,44 +73,127 @@ npm run ios
 npm run web
 ```
 
-## Default login
+## Default Login
 
-- Username: `manager`
-- Password: `manager123`
-
-## Useful commands
-
-Start only the database:
-
-```bash
-npm run db:up
+```text
+Username: manager
+Password: manager123
 ```
 
-Run the backend locally instead of Docker:
+## Local Ports
+
+- Russia backend: `http://localhost:4000`
+- Dubai backend: `http://localhost:4001`
+- Russia PostgreSQL: `localhost:5433`
+- Dubai PostgreSQL: `localhost:5434`
+
+## Deploy On Separate Servers
+
+The code can live in one Git repo. The running services should be separate.
+
+### Russia Server
+
+On the Russia server, use only:
 
 ```bash
-npm run backend:dev
+docker-compose.ru.yml
+services/ru-backend/Dockerfile
 ```
 
-Run backend migrations manually:
+Create `.env` on the Russia server:
+
+```env
+JWT_SECRET=change_me_long_random_secret
+OPS_JWT_SECRET=change_me_same_value_as_dubai_for_dev_or_use_rs256_keys
+CORS_ORIGIN=https://your-frontend-domain.example
+PERSONAL_POSTGRES_PASSWORD=change_me
+PERSONAL_POSTGRES_DB=kgb_personal
+PERSONAL_POSTGRES_USER=kgb
+RU_BACKEND_PUBLIC_PORT=4000
+```
+
+Start Russia only:
 
 ```bash
-npm run backend:db:migrate
+npm run backend:docker:ru:up
 ```
 
-View backend and database logs:
+Russia must not have Dubai DB credentials.
+
+### Dubai Server
+
+On the Dubai server, use only:
 
 ```bash
-npm run backend:docker:logs
+docker-compose.dubai.yml
+services/dubai-backend/Dockerfile
 ```
 
-Stop Docker services:
+Create `.env` on the Dubai server:
+
+```env
+OPS_JWT_SECRET=change_me_same_value_as_russia_for_dev_or_use_rs256_keys
+CORS_ORIGIN=https://your-frontend-domain.example
+OPS_POSTGRES_PASSWORD=change_me
+OPS_POSTGRES_DB=kgb_ops
+OPS_POSTGRES_USER=kgb
+DXB_BACKEND_PUBLIC_PORT=4001
+```
+
+Start Dubai only:
+
+```bash
+npm run backend:docker:dubai:up
+```
+
+Dubai must not have Russia DB credentials.
+
+### Frontend Production Env
+
+The frontend needs both public URLs:
+
+```env
+EXPO_PUBLIC_RU_API_URL=https://ru-api.your-domain.example
+EXPO_PUBLIC_DXB_API_URL=https://dxb-api.your-domain.example
+```
+
+## Useful Commands
+
+Stop everything:
 
 ```bash
 npm run backend:docker:down
 ```
 
-## Ports
+Stop only Russia:
 
-- Backend API: `4000`
-- PostgreSQL: `5433` on your machine
+```bash
+npm run backend:docker:ru:down
+```
+
+Stop only Dubai:
+
+```bash
+npm run backend:docker:dubai:down
+```
+
+Start only the databases:
+
+```bash
+npm run db:up
+```
+
+Run backend checks:
+
+```bash
+npm run backend:typecheck
+npm run backend:test
+```
+
+## Notes
+
+- The frontend must call both backends directly. Do not route Dubai stock/order API calls through the Russia backend.
+- The Russia backend issues short-lived Dubai API tokens through `/api/auth/ops-token`.
+- `services/ru-backend` contains only the Russia backend source and personal-data migrations.
+- `services/dubai-backend` contains only the Dubai backend source and stock/financial migrations.
+- For stronger production auth, use `OPS_TOKEN_PRIVATE_KEY` on Russia and `OPS_TOKEN_PUBLIC_KEY` on Dubai instead of shared `OPS_JWT_SECRET`.

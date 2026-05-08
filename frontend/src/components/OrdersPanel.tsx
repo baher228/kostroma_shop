@@ -325,7 +325,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                 {order.productName} · {order.requestedPacks} кор. ({order.requestedUnits} шт.)
               </Text>
               <Text style={styles.historyMeta}>
-                {order.workerDisplayName} · {order.shopName ?? order.shopId} · {toIsoLabel(order.createdAt)}
+                {order.shopName ?? order.shopId} · {toIsoLabel(order.createdAt)}
               </Text>
               <Text style={styles.historyMeta}>
                 Остаток: {order.stockOnHand ?? '-'} · {order.autoSuggested ? 'Авто' : 'Ручной'} · {order.status}

@@ -197,3 +197,22 @@ npm run backend:test
 - `services/ru-backend` contains only the Russia backend source and personal-data migrations.
 - `services/dubai-backend` contains only the Dubai backend source and stock/financial migrations.
 - For stronger production auth, use `OPS_TOKEN_PRIVATE_KEY` on Russia and `OPS_TOKEN_PUBLIC_KEY` on Dubai instead of shared `OPS_JWT_SECRET`.
+
+
+## Build APK with EAS (no Android Studio needed)
+
+From the project root:
+
+```bash
+npx eas-cli login
+npx eas-cli build -p android --profile preview
+```
+
+This repository is preconfigured so the `preview` APK uses the current split backend over HTTP:
+
+```env
+EXPO_PUBLIC_RU_API_URL=http://31.97.115.242:4000
+EXPO_PUBLIC_DXB_API_URL=http://31.97.115.242:4001
+```
+
+Because the backends are still plain HTTP, Android cleartext traffic is enabled in app config for now. After HTTPS is added, switch these URLs to `https://...` and you can remove cleartext access later.

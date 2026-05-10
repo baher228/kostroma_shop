@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "аналитика",
+    "name": "Аналитика",
     "slug": "analitika",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -27,7 +27,7 @@
       "usesCleartextTraffic": true
     },
     "web": {
-      "name": "аналитика",
+      "name": "Аналитика",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
@@ -35,7 +35,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "d8e037c7-5e09-4b2f-ad83-1cb2a37a3ca0"
+        "projectId": "cf59a444-8fe3-408b-93ad-76c692c0b1d2"
       }
     }
   }

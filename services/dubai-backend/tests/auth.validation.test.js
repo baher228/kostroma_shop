@@ -68,6 +68,16 @@ test('Dubai stock schemas validate operational fields', () => {
   assert.equal(product.name, 'Apples');
   assert.equal(product.unitsInPack, 6);
   assert.throws(() => createRowSchema.parse({
+    name: 'Missing category',
+    packType: 'ПЭТ',
+    unitsInPack: 6,
+    packWeightKg: 2.88,
+    shelfLifeDays: 14,
+    unitPriceRubVat: 68.61,
+    minStockUnits: 1,
+    maxStockUnits: 12,
+  }));
+  assert.throws(() => createRowSchema.parse({
     name: 'Bad range',
     packType: 'ПЭТ',
     unitsInPack: 6,

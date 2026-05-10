@@ -51,15 +51,13 @@ export const loginSchema = z.object({
 
 export const createRowSchema = z.object({
   name: z.string().trim().min(2).max(140),
-  category: z
-    .enum([
-      '\u0419\u043e\u0433\u0443\u0440\u0442\u044b',
-      '\u041a\u0435\u0444\u0438\u0440, \u0420\u044f\u0436\u0435\u043d\u043a\u0430, \u0421\u043d\u0435\u0436\u043e\u043a',
-      '\u041c\u043e\u043b\u043e\u043a\u043e',
-      '\u0421\u043c\u0435\u0442\u0430\u043d\u0430',
-      '\u0422\u0432\u043e\u0440\u043e\u0433',
-    ])
-    .optional(),
+  category: z.enum([
+    '\u0419\u043e\u0433\u0443\u0440\u0442\u044b',
+    '\u041a\u0435\u0444\u0438\u0440, \u0420\u044f\u0436\u0435\u043d\u043a\u0430, \u0421\u043d\u0435\u0436\u043e\u043a',
+    '\u041c\u043e\u043b\u043e\u043a\u043e',
+    '\u0421\u043c\u0435\u0442\u0430\u043d\u0430',
+    '\u0422\u0432\u043e\u0440\u043e\u0433',
+  ]),
   packType: z.string().trim().min(1).max(40),
   unitsInPack: z.number().int().positive().max(9999),
   packWeightKg: z.number().positive().max(99999),
@@ -217,4 +215,3 @@ export const upsertOrderSheetValueSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   value: z.string().regex(/^\d{0,5}$/),
 });
-

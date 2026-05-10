@@ -335,7 +335,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [newProductName, setNewProductName] = useState('');
-  const [newProductCategory, setNewProductCategory] = useState<ProductCategory>(DEFAULT_PRODUCT_CATEGORY);
+  const [newProductCategory, setNewProductCategory] = useState<ProductCategory | null>(null);
   const [newProductPackType, setNewProductPackType] = useState('');
   const [newProductUnitsInPack, setNewProductUnitsInPack] = useState('');
   const [newProductPackWeightKg, setNewProductPackWeightKg] = useState('');
@@ -824,7 +824,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const resetProductForm = () => {
     setNewProductName('');
-    setNewProductCategory(DEFAULT_PRODUCT_CATEGORY);
+    setNewProductCategory(null);
     setNewProductPackType('');
     setNewProductUnitsInPack('');
     setNewProductPackWeightKg('');
@@ -857,6 +857,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     const packType = newProductPackType.trim();
     if (!normalizedName) {
       throw new Error('Введите название товара.');
+    }
+    if (!newProductCategory) {
+      throw new Error('Выберите категорию товара.');
     }
     if (!packType) {
       throw new Error('Введите тип упаковки.');
@@ -1424,7 +1427,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 autoFocus
                 maxLength={140}
               />
-              <Text style={styles.formLabel}>Категория</Text>
+              <Text style={styles.formLabel}>Категория *</Text>
               <View style={styles.categoryPicker}>
                 {PRODUCT_CATEGORIES.map((category) => {
                   const active = newProductCategory === category;
@@ -2202,7 +2205,6 @@ const styles = StyleSheet.create({
     color: '#1f4f37',
   },
 });
-
 
 
 

@@ -126,7 +126,7 @@ const sanitizeStockValue = (raw: string): string => {
   if (Number.isNaN(parsed)) {
     return '';
   }
-  return String(Math.min(15, Math.max(0, parsed)));
+  return String(Math.min(50, Math.max(0, parsed)));
 };
 
 const parseNumber = (value: string) => {
@@ -2205,7 +2205,6 @@ const styles = StyleSheet.create({
     color: '#1f4f37',
   },
 });
-
 
 
 

@@ -396,6 +396,8 @@ export const getStockTable = async (
   };
 };
 
+const MAX_STOCK_VALUE = 50;
+
 const sanitizeStockValue = (raw: string): string => {
   const digits = raw.replace(/[^0-9]/g, '');
   if (!digits) {
@@ -405,7 +407,7 @@ const sanitizeStockValue = (raw: string): string => {
   if (Number.isNaN(parsed)) {
     return '';
   }
-  return String(Math.min(15, Math.max(0, parsed)));
+  return String(Math.min(MAX_STOCK_VALUE, Math.max(0, parsed)));
 };
 
 export const upsertStockValue = async (

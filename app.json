@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Аналитика",
+    "name": "аналитика",
     "slug": "analitika",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,6 +16,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.gringobochka.analitika",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -23,10 +24,10 @@
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.analitika",
       "usesCleartextTraffic": true
     },
     "web": {
+      "name": "аналитика",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [

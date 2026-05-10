@@ -18,6 +18,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
   postgres-dubai:
     image: postgres:16-alpine
     container_name: analitika-postgres-dubai
@@ -35,6 +36,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
   backend-ru:
     build:
       context: ./services/ru-backend
@@ -58,6 +60,7 @@ services:
       PERSONAL_POSTGRES_SSL: "false"
     ports:
       - "4000:4000"
+
   backend-dubai:
     build:
       context: ./services/dubai-backend

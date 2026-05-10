@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "test": "npm run build && node --test tests/*.test.js",
     "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test tests/run-tests.js",
     "db:migrate": "ts-node src/migrate.ts"
   },
   "keywords": [

@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import { shopsApi } from '../api/shops';
-import { stockApi } from '../api/stock';
+import { CreateProductPayload, stockApi } from '../api/stock';
 import { OrdersPanel } from '../components/OrdersPanel';
 import { OrderSheetPanel } from '../components/OrderSheetPanel';
 import { SupportPanel } from '../components/SupportPanel';
@@ -135,6 +135,17 @@ const parseNumber = (value: string) => {
   }
   const parsed = Number.parseInt(value, 10);
   return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+};
+
+const sanitizeIntegerInput = (raw: string, maxLength = 6): string => raw.replace(/[^0-9]/g, '').slice(0, maxLength);
+
+const sanitizeDecimalInput = (raw: string, decimalPlaces: number): string => {
+  const normalized = raw.replace(',', '.').replace(/[^0-9.]/g, '');
+  const [whole, ...fractionParts] = normalized.split('.');
+  if (!fractionParts.length) {
+    return whole.slice(0, 6);
+  }
+  return `${whole.slice(0, 6)}.${fractionParts.join('').slice(0, decimalPlaces)}`;
 };
 
 const minStock = (row: StockTableRow, dates: string[]) => {
@@ -325,6 +336,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [newProductName, setNewProductName] = useState('');
   const [newProductCategory, setNewProductCategory] = useState<ProductCategory>(DEFAULT_PRODUCT_CATEGORY);
+  const [newProductPackType, setNewProductPackType] = useState('');
+  const [newProductUnitsInPack, setNewProductUnitsInPack] = useState('');
+  const [newProductPackWeightKg, setNewProductPackWeightKg] = useState('');
+  const [newProductShelfLifeDays, setNewProductShelfLifeDays] = useState('');
+  const [newProductUnitPriceRubVat, setNewProductUnitPriceRubVat] = useState('');
+  const [newProductMinStockUnits, setNewProductMinStockUnits] = useState('');
+  const [newProductMaxStockUnits, setNewProductMaxStockUnits] = useState('');
   const [addingProduct, setAddingProduct] = useState(false);
 
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
@@ -804,20 +822,80 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
   };
 
+  const resetProductForm = () => {
+    setNewProductName('');
+    setNewProductCategory(DEFAULT_PRODUCT_CATEGORY);
+    setNewProductPackType('');
+    setNewProductUnitsInPack('');
+    setNewProductPackWeightKg('');
+    setNewProductShelfLifeDays('');
+    setNewProductUnitPriceRubVat('');
+    setNewProductMinStockUnits('');
+    setNewProductMaxStockUnits('');
+  };
+
+  const parseRequiredInteger = (label: string, raw: string, allowZero = false): number => {
+    const parsed = Number.parseInt(raw.trim(), 10);
+    const valid = Number.isInteger(parsed) && (allowZero ? parsed >= 0 : parsed > 0);
+    if (!valid) {
+      throw new Error(`${label}: введите ${allowZero ? '0 или больше' : 'число больше 0'}.`);
+    }
+    return parsed;
+  };
+
+  const parseRequiredDecimal = (label: string, raw: string, allowZero = false): number => {
+    const parsed = Number.parseFloat(raw.trim().replace(',', '.'));
+    const valid = Number.isFinite(parsed) && (allowZero ? parsed >= 0 : parsed > 0);
+    if (!valid) {
+      throw new Error(`${label}: введите ${allowZero ? '0 или больше' : 'число больше 0'}.`);
+    }
+    return parsed;
+  };
+
+  const buildNewProductPayload = (): CreateProductPayload => {
+    const normalizedName = newProductName.trim();
+    const packType = newProductPackType.trim();
+    if (!normalizedName) {
+      throw new Error('Введите название товара.');
+    }
+    if (!packType) {
+      throw new Error('Введите тип упаковки.');
+    }
+
+    const minStockUnits = parseRequiredInteger('Минимальный остаток', newProductMinStockUnits, true);
+    const maxStockUnits = parseRequiredInteger('Максимальный остаток', newProductMaxStockUnits, true);
+    if (minStockUnits > maxStockUnits) {
+      throw new Error('Минимальный остаток не может быть больше максимального.');
+    }
+
+    return {
+      name: normalizedName,
+      category: newProductCategory,
+      packType,
+      unitsInPack: parseRequiredInteger('Штук в упаковке', newProductUnitsInPack),
+      packWeightKg: parseRequiredDecimal('Вес упаковки, кг', newProductPackWeightKg),
+      shelfLifeDays: parseRequiredInteger('Срок годности, дней', newProductShelfLifeDays),
+      unitPriceRubVat: parseRequiredDecimal('Цена с НДС, руб', newProductUnitPriceRubVat, true),
+      minStockUnits,
+      maxStockUnits,
+    };
+  };
+
   const addProduct = async () => {
     if (!canManage) {
       return;
     }
-    const normalizedName = newProductName.trim();
-    if (!normalizedName) {
-      Alert.alert('Новый товар', 'Введите название товара.');
+    let payload: CreateProductPayload;
+    try {
+      payload = buildNewProductPayload();
+    } catch (validationError) {
+      Alert.alert('Новый товар', errorMessage(validationError));
       return;
     }
     try {
       setAddingProduct(true);
-      await stockApi.createProduct(session.token, normalizedName, newProductCategory);
-      setNewProductName('');
-      setNewProductCategory(DEFAULT_PRODUCT_CATEGORY);
+      await stockApi.createProduct(session.token, payload);
+      resetProductForm();
       setIsAddProductModalOpen(false);
       await loadTable();
       setError('');
@@ -1335,29 +1413,110 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Новый товар</Text>
-            <TextInput
-              value={newProductName}
-              onChangeText={setNewProductName}
-              style={styles.modalInput}
-              placeholder="Введите название товара"
-              placeholderTextColor="#7a8b7f"
-              autoFocus
-              maxLength={140}
-            />
-            <View style={styles.categoryPicker}>
-              {PRODUCT_CATEGORIES.map((category) => {
-                const active = newProductCategory === category;
-                return (
-                  <Pressable
-                    key={category}
-                    style={[styles.categoryChip, active && styles.categoryChipActive]}
-                    onPress={() => setNewProductCategory(category)}
-                  >
-                    <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{category}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.formLabel}>Название</Text>
+              <TextInput
+                value={newProductName}
+                onChangeText={setNewProductName}
+                style={styles.modalInput}
+                placeholder="Введите название товара"
+                placeholderTextColor="#7a8b7f"
+                autoFocus
+                maxLength={140}
+              />
+              <Text style={styles.formLabel}>Категория</Text>
+              <View style={styles.categoryPicker}>
+                {PRODUCT_CATEGORIES.map((category) => {
+                  const active = newProductCategory === category;
+                  return (
+                    <Pressable
+                      key={category}
+                      style={[styles.categoryChip, active && styles.categoryChipActive]}
+                      onPress={() => setNewProductCategory(category)}
+                    >
+                      <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{category}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={styles.formLabel}>Тип упаковки</Text>
+              <TextInput
+                value={newProductPackType}
+                onChangeText={setNewProductPackType}
+                style={styles.modalInput}
+                placeholder="ПЭТ, стакан, коробка..."
+                placeholderTextColor="#7a8b7f"
+                maxLength={40}
+              />
+              <View style={styles.productFieldsGrid}>
+                <View style={styles.productField}>
+                  <Text style={styles.formLabel}>Штук в упаковке</Text>
+                  <TextInput
+                    value={newProductUnitsInPack}
+                    onChangeText={(value) => setNewProductUnitsInPack(sanitizeIntegerInput(value, 4))}
+                    style={styles.modalInput}
+                    placeholder="6"
+                    placeholderTextColor="#7a8b7f"
+                    keyboardType="number-pad"
+                  />
+                </View>
+                <View style={styles.productField}>
+                  <Text style={styles.formLabel}>Вес упаковки, кг</Text>
+                  <TextInput
+                    value={newProductPackWeightKg}
+                    onChangeText={(value) => setNewProductPackWeightKg(sanitizeDecimalInput(value, 3))}
+                    style={styles.modalInput}
+                    placeholder="2.88"
+                    placeholderTextColor="#7a8b7f"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={styles.productField}>
+                  <Text style={styles.formLabel}>Срок годности, дней</Text>
+                  <TextInput
+                    value={newProductShelfLifeDays}
+                    onChangeText={(value) => setNewProductShelfLifeDays(sanitizeIntegerInput(value, 4))}
+                    style={styles.modalInput}
+                    placeholder="14"
+                    placeholderTextColor="#7a8b7f"
+                    keyboardType="number-pad"
+                  />
+                </View>
+                <View style={styles.productField}>
+                  <Text style={styles.formLabel}>Цена с НДС, руб</Text>
+                  <TextInput
+                    value={newProductUnitPriceRubVat}
+                    onChangeText={(value) => setNewProductUnitPriceRubVat(sanitizeDecimalInput(value, 2))}
+                    style={styles.modalInput}
+                    placeholder="68.61"
+                    placeholderTextColor="#7a8b7f"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={styles.productField}>
+                  <Text style={styles.formLabel}>Минимальный остаток</Text>
+                  <TextInput
+                    value={newProductMinStockUnits}
+                    onChangeText={(value) => setNewProductMinStockUnits(sanitizeIntegerInput(value))}
+                    style={styles.modalInput}
+                    placeholder="0"
+                    placeholderTextColor="#7a8b7f"
+                    keyboardType="number-pad"
+                  />
+                </View>
+                <View style={styles.productField}>
+                  <Text style={styles.formLabel}>Максимальный остаток</Text>
+                  <TextInput
+                    value={newProductMaxStockUnits}
+                    onChangeText={(value) => setNewProductMaxStockUnits(sanitizeIntegerInput(value))}
+                    style={styles.modalInput}
+                    placeholder="15"
+                    placeholderTextColor="#7a8b7f"
+                    keyboardType="number-pad"
+                  />
+                </View>
+              </View>
+            </ScrollView>
             <View style={styles.modalActions}>
               <Pressable style={styles.modalCancelButton} onPress={() => setIsAddProductModalOpen(false)}>
                 <Text style={styles.modalCancelText}>Отмена</Text>
@@ -1922,6 +2081,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  modalBody: {
+    maxHeight: 460,
+  },
+  modalBodyContent: {
+    gap: 9,
+    paddingBottom: 2,
+  },
+  formLabel: {
+    color: '#344b3d',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   modalInput: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -1932,6 +2103,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1f2f26',
     fontWeight: '500',
+  },
+  productFieldsGrid: {
+    gap: 10,
+  },
+  productField: {
+    gap: 6,
   },
   categoryPicker: {
     flexDirection: 'row',

@@ -33,8 +33,7 @@ export const LoginScreen = ({ onSubmit }: LoginScreenProps) => {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.card}>
-        <Text style={styles.title}>Вход в систему склада</Text>
-        <Text style={styles.subtitle}>Роли: менеджер и сотрудник</Text>
+        <Text style={styles.title}>Вход</Text>
 
         <TextInput
           value={username}
@@ -59,11 +58,6 @@ export const LoginScreen = ({ onSubmit }: LoginScreenProps) => {
           {submitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Войти</Text>}
         </Pressable>
 
-        <View style={styles.hintBox}>
-          <Text style={styles.hintText}>Тестовый менеджер:</Text>
-          <Text style={styles.hintText}>Логин: manager</Text>
-          <Text style={styles.hintText}>Пароль: manager123</Text>
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -89,12 +83,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     color: '#1f2f26',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#5a6b5f',
-    marginBottom: 4,
-    fontWeight: '600',
   },
   input: {
     borderWidth: 1,
@@ -124,18 +112,5 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '800',
-  },
-  hintBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#dae4dc',
-    backgroundColor: '#f6faf7',
-    padding: 10,
-  },
-  hintText: {
-    color: '#4b5f51',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 19,
   },
 });

@@ -1,35 +1,37 @@
+name: analitika
+
 services:
   postgres-ru:
     image: postgres:16-alpine
-    container_name: kgb-postgres-ru
+    container_name: analitika-postgres-ru
     restart: unless-stopped
     environment:
-      POSTGRES_DB: kgb_personal
-      POSTGRES_USER: kgb
-      POSTGRES_PASSWORD: kgb_dev_password
+      POSTGRES_DB: analitika_personal
+      POSTGRES_USER: analitika
+      POSTGRES_PASSWORD: analitika_dev_password
     ports:
       - "5433:5432"
     volumes:
       - postgres_ru_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kgb -d kgb_personal"]
+      test: ["CMD-SHELL", "pg_isready -U analitika -d analitika_personal"]
       interval: 5s
       timeout: 5s
       retries: 10
   postgres-dubai:
     image: postgres:16-alpine
-    container_name: kgb-postgres-dubai
+    container_name: analitika-postgres-dubai
     restart: unless-stopped
     environment:
-      POSTGRES_DB: kgb_ops
-      POSTGRES_USER: kgb
-      POSTGRES_PASSWORD: kgb_dev_password
+      POSTGRES_DB: analitika_ops
+      POSTGRES_USER: analitika
+      POSTGRES_PASSWORD: analitika_dev_password
     ports:
       - "5434:5432"
     volumes:
       - postgres_dubai_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kgb -d kgb_ops"]
+      test: ["CMD-SHELL", "pg_isready -U analitika -d analitika_ops"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -37,7 +39,7 @@ services:
     build:
       context: ./services/ru-backend
       dockerfile: Dockerfile
-    container_name: kgb-backend-ru
+    container_name: analitika-backend-ru
     restart: unless-stopped
     depends_on:
       postgres-ru:
@@ -50,9 +52,9 @@ services:
       CORS_ORIGIN: "*"
       PERSONAL_POSTGRES_HOST: postgres-ru
       PERSONAL_POSTGRES_PORT: 5432
-      PERSONAL_POSTGRES_USER: kgb
-      PERSONAL_POSTGRES_PASSWORD: kgb_dev_password
-      PERSONAL_POSTGRES_DB: kgb_personal
+      PERSONAL_POSTGRES_USER: analitika
+      PERSONAL_POSTGRES_PASSWORD: analitika_dev_password
+      PERSONAL_POSTGRES_DB: analitika_personal
       PERSONAL_POSTGRES_SSL: "false"
     ports:
       - "4000:4000"
@@ -60,7 +62,7 @@ services:
     build:
       context: ./services/dubai-backend
       dockerfile: Dockerfile
-    container_name: kgb-backend-dubai
+    container_name: analitika-backend-dubai
     restart: unless-stopped
     depends_on:
       postgres-dubai:
@@ -72,9 +74,9 @@ services:
       CORS_ORIGIN: "*"
       OPS_POSTGRES_HOST: postgres-dubai
       OPS_POSTGRES_PORT: 5432
-      OPS_POSTGRES_USER: kgb
-      OPS_POSTGRES_PASSWORD: kgb_dev_password
-      OPS_POSTGRES_DB: kgb_ops
+      OPS_POSTGRES_USER: analitika
+      OPS_POSTGRES_PASSWORD: analitika_dev_password
+      OPS_POSTGRES_DB: analitika_ops
       OPS_POSTGRES_SSL: "false"
     ports:
       - "4001:4001"

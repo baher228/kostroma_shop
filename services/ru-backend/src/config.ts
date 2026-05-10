@@ -35,8 +35,8 @@ export const config = {
   personalDatabaseUrl: process.env.PERSONAL_DATABASE_URL || process.env.DATABASE_URL,
   personalDbHost: process.env.PERSONAL_POSTGRES_HOST || process.env.POSTGRES_HOST || '127.0.0.1',
   personalDbPort: parsePort(process.env.PERSONAL_POSTGRES_PORT ?? process.env.POSTGRES_PORT ?? '5432'),
-  personalDbUser: process.env.PERSONAL_POSTGRES_USER || process.env.POSTGRES_USER || 'kgb',
-  personalDbPassword: process.env.PERSONAL_POSTGRES_PASSWORD || process.env.POSTGRES_PASSWORD || 'kgb_dev_password',
-  personalDbName: process.env.PERSONAL_POSTGRES_DB || process.env.POSTGRES_DB || 'kgb_personal',
+  personalDbUser: process.env.PERSONAL_POSTGRES_USER || process.env.POSTGRES_USER || 'analitika',
+  personalDbPassword: process.env.PERSONAL_POSTGRES_PASSWORD || process.env.POSTGRES_PASSWORD || 'analitika_dev_password',
+  personalDbName: process.env.PERSONAL_POSTGRES_DB || process.env.POSTGRES_DB || 'analitika_personal',
   personalDbSsl: parseBoolean(process.env.PERSONAL_POSTGRES_SSL ?? process.env.POSTGRES_SSL, false),
 };

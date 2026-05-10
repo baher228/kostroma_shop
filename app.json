@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "kgb",
-    "slug": "kgb",
+    "name": "Аналитика",
+    "slug": "analitika",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,12 +23,19 @@
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.kgb",
+      "package": "com.anonymous.analitika",
       "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["./withCleartextTraffic"]
+    "plugins": [
+      "./withCleartextTraffic"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d8e037c7-5e09-4b2f-ad83-1cb2a37a3ca0"
+      }
+    }
   }
 }

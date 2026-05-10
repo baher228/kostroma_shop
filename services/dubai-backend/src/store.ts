@@ -31,6 +31,18 @@ type DateRange = {
   to: string;
 };
 
+type CreateProductInput = {
+  name: string;
+  category?: ProductCategory;
+  packType: string;
+  unitsInPack: number;
+  packWeightKg: number;
+  shelfLifeDays: number;
+  unitPriceRubVat: number;
+  minStockUnits: number;
+  maxStockUnits: number;
+};
+
 const PRODUCT_CATEGORIES: ProductCategory[] = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'];
 const DEFAULT_PRODUCT_CATEGORY: ProductCategory = 'Йогурты';
 
@@ -184,17 +196,40 @@ export const listProducts = async (): Promise<StockProduct[]> => {
   return result.rows.map(mapProduct);
 };
 
-export const createProduct = async (name: string, category?: ProductCategory): Promise<StockProduct> => {
+export const createProduct = async (input: CreateProductInput): Promise<StockProduct> => {
   const id = `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const resolvedCategory =
-    category && PRODUCT_CATEGORIES.includes(category) ? category : DEFAULT_PRODUCT_CATEGORY;
+    input.category && PRODUCT_CATEGORIES.includes(input.category) ? input.category : DEFAULT_PRODUCT_CATEGORY;
   const result = await opsDb.query<ProductDbRow>(
     `
-      INSERT INTO stock_products (id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, created_at)
-      VALUES ($1, $2, $3, NULL, NULL, NULL, NULL, NOW())
+      INSERT INTO stock_products (
+        id,
+        name,
+        category,
+        pack_type,
+        units_in_pack,
+        pack_weight_kg,
+        shelf_life_days,
+        unit_price_rub_vat,
+        min_stock_units,
+        max_stock_units,
+        created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
       RETURNING id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
     `,
-    [id, name.trim(), resolvedCategory],
+    [
+      id,
+      input.name.trim(),
+      resolvedCategory,
+      input.packType.trim(),
+      input.unitsInPack,
+      input.packWeightKg,
+      input.shelfLifeDays,
+      input.unitPriceRubVat,
+      input.minStockUnits,
+      input.maxStockUnits,
+    ],
   );
   return mapProduct(result.rows[0]);
 };

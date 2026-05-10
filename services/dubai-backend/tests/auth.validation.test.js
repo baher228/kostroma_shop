@@ -54,7 +54,29 @@ test('Dubai order schema rejects personal and free-text fields', () => {
 });
 
 test('Dubai stock schemas validate operational fields', () => {
-  assert.equal(createRowSchema.parse({ name: ' Apples ' }).name, 'Apples');
+  const product = createRowSchema.parse({
+    name: ' Apples ',
+    category: 'Йогурты',
+    packType: 'ПЭТ',
+    unitsInPack: 6,
+    packWeightKg: 2.88,
+    shelfLifeDays: 14,
+    unitPriceRubVat: 68.61,
+    minStockUnits: 1,
+    maxStockUnits: 12,
+  });
+  assert.equal(product.name, 'Apples');
+  assert.equal(product.unitsInPack, 6);
+  assert.throws(() => createRowSchema.parse({
+    name: 'Bad range',
+    packType: 'ПЭТ',
+    unitsInPack: 6,
+    packWeightKg: 2.88,
+    shelfLifeDays: 14,
+    unitPriceRubVat: 68.61,
+    minStockUnits: 12,
+    maxStockUnits: 1,
+  }));
   assert.equal(upsertStockValueSchema.parse({
     shopId: 'shop_main',
     productId: 'prod_1',

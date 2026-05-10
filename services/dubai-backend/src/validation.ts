@@ -60,7 +60,18 @@ export const createRowSchema = z.object({
       '\u0422\u0432\u043e\u0440\u043e\u0433',
     ])
     .optional(),
-});
+  packType: z.string().trim().min(1).max(40),
+  unitsInPack: z.number().int().positive().max(9999),
+  packWeightKg: z.number().positive().max(99999),
+  shelfLifeDays: z.number().int().positive().max(9999),
+  unitPriceRubVat: z.number().min(0).max(999999),
+  minStockUnits: z.number().int().min(0).max(999999),
+  maxStockUnits: z.number().int().min(0).max(999999),
+})
+  .strict()
+  .refine((payload) => payload.minStockUnits <= payload.maxStockUnits, {
+    message: 'Min stock cannot exceed max stock.',
+  });
 
 const nullablePositiveInt = z.union([z.number().int().positive(), z.null()]);
 const machineNumberSchema = z.number().int().min(1).max(3);

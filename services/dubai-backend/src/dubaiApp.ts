@@ -150,7 +150,7 @@ export const createDubaiApp = () => {
   app.post('/api/stock/products', requireOpsRole('manager'), requireOpsScope('products:write'), async (req: Request, res: Response) => {
     try {
       const payload = createRowSchema.parse(req.body);
-      const product = await createProduct(payload.name, payload.category);
+      const product = await createProduct(payload);
       res.status(201).json({ product });
     } catch (error) {
       if (error instanceof ZodError) {

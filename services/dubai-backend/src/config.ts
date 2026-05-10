@@ -35,8 +35,8 @@ export const config = {
   opsDatabaseUrl: process.env.OPS_DATABASE_URL || process.env.DATABASE_URL,
   opsDbHost: process.env.OPS_POSTGRES_HOST || process.env.POSTGRES_HOST || '127.0.0.1',
   opsDbPort: parsePort(process.env.OPS_POSTGRES_PORT ?? process.env.POSTGRES_PORT ?? '5432'),
-  opsDbUser: process.env.OPS_POSTGRES_USER || process.env.POSTGRES_USER || 'kgb',
-  opsDbPassword: process.env.OPS_POSTGRES_PASSWORD || process.env.POSTGRES_PASSWORD || 'kgb_dev_password',
-  opsDbName: process.env.OPS_POSTGRES_DB || process.env.POSTGRES_DB || 'kgb_ops',
+  opsDbUser: process.env.OPS_POSTGRES_USER || process.env.POSTGRES_USER || 'analitika',
+  opsDbPassword: process.env.OPS_POSTGRES_PASSWORD || process.env.POSTGRES_PASSWORD || 'analitika_dev_password',
+  opsDbName: process.env.OPS_POSTGRES_DB || process.env.POSTGRES_DB || 'analitika_ops',
   opsDbSsl: parseBoolean(process.env.OPS_POSTGRES_SSL ?? process.env.POSTGRES_SSL, false),
 };

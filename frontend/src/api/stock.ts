@@ -10,10 +10,26 @@ type ProductResponse = {
     id: string;
     name: string;
     category: ProductCategory;
+    packType: string | null;
     unitsInPack: number | null;
+    packWeightKg: number | null;
+    shelfLifeDays: number | null;
+    unitPriceRubVat: number | null;
     minStockUnits: number | null;
     maxStockUnits: number | null;
   };
+};
+
+export type CreateProductPayload = {
+  name: string;
+  category: ProductCategory;
+  packType: string;
+  unitsInPack: number;
+  packWeightKg: number;
+  shelfLifeDays: number;
+  unitPriceRubVat: number;
+  minStockUnits: number;
+  maxStockUnits: number;
 };
 
 type StockListQuery = {
@@ -49,13 +65,12 @@ export const stockApi = {
 
   createProduct: async (
     token: string,
-    name: string,
-    category: ProductCategory,
-  ): Promise<{ id: string; name: string; category: ProductCategory }> => {
+    payload: CreateProductPayload,
+  ): Promise<ProductResponse['product']> => {
     const result = await request<ProductResponse>('/api/stock/products', {
       method: 'POST',
       token,
-      body: { name, category },
+      body: payload,
     });
     return result.product;
   },

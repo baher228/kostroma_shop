@@ -1,4 +1,4 @@
-# KGB
+# Аналитика
 
 Expo mobile frontend plus a split Node.js backend.
 
@@ -107,8 +107,8 @@ JWT_SECRET=change_me_long_random_secret
 OPS_JWT_SECRET=change_me_same_value_as_dubai_for_dev_or_use_rs256_keys
 CORS_ORIGIN=https://your-frontend-domain.example
 PERSONAL_POSTGRES_PASSWORD=change_me
-PERSONAL_POSTGRES_DB=kgb_personal
-PERSONAL_POSTGRES_USER=kgb
+PERSONAL_POSTGRES_DB=analitika_personal
+PERSONAL_POSTGRES_USER=analitika
 RU_BACKEND_PUBLIC_PORT=4000
 ```
 
@@ -135,8 +135,8 @@ Create `.env` on the Dubai server:
 OPS_JWT_SECRET=change_me_same_value_as_russia_for_dev_or_use_rs256_keys
 CORS_ORIGIN=https://your-frontend-domain.example
 OPS_POSTGRES_PASSWORD=change_me
-OPS_POSTGRES_DB=kgb_ops
-OPS_POSTGRES_USER=kgb
+OPS_POSTGRES_DB=analitika_ops
+OPS_POSTGRES_USER=analitika
 DXB_BACKEND_PUBLIC_PORT=4001
 ```
 

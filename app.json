@@ -4,7 +4,7 @@
     "slug": "analitika",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
@@ -18,7 +18,7 @@
     "android": {
       "package": "com.gringobochka.analitika",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./icon.png",
         "backgroundColor": "#ffffff"
       },
       "softwareKeyboardLayoutMode": "resize",
@@ -28,7 +28,7 @@
     },
     "web": {
       "name": "аналитика",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./icon.png"
     },
     "plugins": [
       "./withCleartextTraffic"

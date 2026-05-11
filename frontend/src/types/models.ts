@@ -56,6 +56,7 @@ export type StockTableRow = {
   minStockUnits: number | null;
   maxStockUnits: number | null;
   values: Record<string, string>;
+  dashboardOverrides?: Record<string, string>;
 };
 
 export type StockTable = {

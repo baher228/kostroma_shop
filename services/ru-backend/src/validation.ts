@@ -7,9 +7,9 @@ const numericValue = z
 
 const stockValue = z
   .string()
-  .regex(/^\d{0,2}$/, 'Stock must be in range 0-15.')
-  .refine((value) => value === '' || Number.parseInt(value, 10) <= 15, {
-    message: 'Stock must be in range 0-15.',
+  .regex(/^\d{0,2}$/, 'Stock must be in range 0-50.')
+  .refine((value) => value === '' || Number.parseInt(value, 10) <= 50, {
+    message: 'Stock must be in range 0-50.',
   });
 
 const dateTimeString = z.string().datetime().optional().nullable();
@@ -130,8 +130,8 @@ export const upsertStockValueSchema = z.object({
   value: z
     .string()
     .regex(/^\d{0,2}$/)
-    .refine((raw) => raw === '' || Number.parseInt(raw, 10) <= 15, {
-      message: 'Stock must be in range 0-15.',
+    .refine((raw) => raw === '' || Number.parseInt(raw, 10) <= 50, {
+      message: 'Stock must be in range 0-50.',
     }),
 });
 
@@ -206,4 +206,3 @@ export const upsertOrderSheetValueSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   value: z.string().regex(/^\d{0,5}$/),
 });
-

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Аналитика",
-    "slug": "analitika",
+    "name": "аналитика",
+    "slug": "kgb",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -30,9 +30,7 @@
       "name": "Аналитика",
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "./withCleartextTraffic"
-    ],
+    "plugins": ["./withCleartextTraffic"],
     "extra": {
       "eas": {
         "projectId": "cf59a444-8fe3-408b-93ad-76c692c0b1d2"

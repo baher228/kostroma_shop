@@ -69,9 +69,23 @@ type DashboardColumn = {
   dateToWeek?: DashboardWeekRef;
 };
 
+type DashboardSheetColumn = {
+  id: string;
+  weekStart: string;
+  key: DashboardOverrideKey;
+  title: string;
+  subtitle: string;
+  kind: 'stock' | 'order' | 'metric';
+  tone: DashboardTone;
+  dateLabel?: string;
+  valueSourceWeekStart?: string;
+  valueSourceKey?: DashboardOverrideKey;
+};
+
 type WeekDateMap = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sun', string>>;
 
 type DashboardRowValues = Record<DashboardColumnKey, string>;
+type DashboardOverrideKey = keyof DashboardRowValues;
 
 type EditingCell = {
   productId: string;
@@ -90,6 +104,8 @@ const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0
 const WEEK_DAYS = 7;
 const TWO_WEEKS_DAYS = 14;
 const MAX_ORDER_VALUE_LEN = 5;
+// Fixed 2-week window so the rightmost Monday in the dashboard is 11.05.2026.
+const DASHBOARD_WINDOW_START = '2026-04-28';
 
 const DASHBOARD_COLUMNS: DashboardColumn[] = [
   { key: 'currentTue', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0412\u0442\u043e\u0440\u043d\u0438\u043a', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
@@ -115,6 +131,53 @@ const DASHBOARD_COLUMNS: DashboardColumn[] = [
   { key: 'soldFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
 ];
 
+const DASHBOARD_WEEK_STARTS = ['2026-04-28', '2026-05-05'] as const;
+
+const DASHBOARD_SHEET_COLUMNS_BY_WEEK: Record<string, DashboardSheetColumn[]> = {
+  '2026-04-28': [
+    { id: 'w1-currentTue', weekStart: '2026-04-28', key: 'currentTue', title: 'Текущий остаток', subtitle: 'Вторник', kind: 'stock', tone: 'neutral', dateLabel: '28.04' },
+    { id: 'w1-orderPackThu', weekStart: '2026-04-28', key: 'orderPackThu', title: 'Заказ упаковок на четверг', subtitle: 'Вторник', kind: 'order', tone: 'order', dateLabel: '28.04' },
+    { id: 'w1-orderUnitsThu', weekStart: '2026-04-28', key: 'orderUnitsThu', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
+    { id: 'w1-prevWed', weekStart: '2026-04-28', key: 'prevWed', title: 'Прошлый остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateLabel: '29.04' },
+    { id: 'w1-soldPrevMonWed', weekStart: '2026-04-28', key: 'soldPrevMonWed', title: 'Продано на прошлой неделе', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '27.04-29.04' },
+    { id: 'w1-currentWed', weekStart: '2026-04-28', key: 'currentWed', title: 'Текущий остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateLabel: '29.04' },
+    { id: 'w1-soldMonWed', weekStart: '2026-04-28', key: 'soldMonWed', title: 'Продано', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '27.04-29.04' },
+    { id: 'w1-currentThu', weekStart: '2026-04-28', key: 'currentThu', title: 'Текущий остаток', subtitle: 'Четверг', kind: 'stock', tone: 'neutral', dateLabel: '30.04' },
+    { id: 'w1-orderPackSat', weekStart: '2026-04-28', key: 'orderPackSat', title: 'Заказ упаковок на субботу', subtitle: 'Четверг', kind: 'order', tone: 'order', dateLabel: '30.04' },
+    { id: 'w1-orderUnitsSat', weekStart: '2026-04-28', key: 'orderUnitsSat', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
+    { id: 'w1-prevFri', weekStart: '2026-04-28', key: 'prevFri', title: 'Прошлый остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '01.05' },
+    { id: 'w1-soldPrevWedFri', weekStart: '2026-04-28', key: 'soldPrevWedFri', title: 'Продано на прошлой неделе', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '29.04-01.05' },
+    { id: 'w1-currentFri', weekStart: '2026-04-28', key: 'currentFri', title: 'Текущий остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '01.05' },
+    { id: 'w1-soldWedFri', weekStart: '2026-04-28', key: 'soldWedFri', title: 'Продано', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '29.04-01.05' },
+    { id: 'w1-currentSun', weekStart: '2026-04-28', key: 'currentSun', title: 'Текущий остаток', subtitle: 'Воскрес', kind: 'stock', tone: 'neutral', dateLabel: '03.05' },
+    { id: 'w1-orderPackTue', weekStart: '2026-04-28', key: 'orderPackTue', title: 'Заказ упаковок на вторник', subtitle: 'Воскрес', kind: 'order', tone: 'order', dateLabel: '03.05' },
+    { id: 'w1-orderUnitsTue', weekStart: '2026-04-28', key: 'orderUnitsTue', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
+    { id: 'w1-prevMon', weekStart: '2026-04-28', key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '04.05' },
+    { id: 'w1-soldPrevFriMon', weekStart: '2026-04-28', key: 'soldPrevFriMon', title: 'Продано на прошлой неделе', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateLabel: '01.05-04.05' },
+    { id: 'w1-currentMon', weekStart: '2026-04-28', key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '04.05' },
+  ],
+  '2026-05-05': [
+    { id: 'w2-currentTue', weekStart: '2026-05-05', key: 'currentTue', title: 'Текущий остаток', subtitle: 'Вторник', kind: 'stock', tone: 'neutral', dateLabel: '05.05', valueSourceWeekStart: '2026-04-28', valueSourceKey: 'currentMon' },
+    { id: 'w2-soldPrevMonWed', weekStart: '2026-05-05', key: 'soldPrevMonWed', title: 'Продано на прошлой неделе', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '04.05-06.05' },
+    { id: 'w2-currentWed', weekStart: '2026-05-05', key: 'currentWed', title: 'Текущий остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateLabel: '06.05' },
+    { id: 'w2-soldMonWed', weekStart: '2026-05-05', key: 'soldMonWed', title: 'Продано', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '04.05-06.05' },
+    { id: 'w2-currentThu', weekStart: '2026-05-05', key: 'currentThu', title: 'Текущий остаток', subtitle: 'Четверг', kind: 'stock', tone: 'neutral', dateLabel: '07.05' },
+    { id: 'w2-orderPackSat', weekStart: '2026-05-05', key: 'orderPackSat', title: 'Заказ упаковок на субботу', subtitle: 'Четверг', kind: 'order', tone: 'order', dateLabel: '07.05' },
+    { id: 'w2-orderUnitsSat', weekStart: '2026-05-05', key: 'orderUnitsSat', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
+    { id: 'w2-prevFri', weekStart: '2026-05-05', key: 'prevFri', title: 'Прошлый остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '08.05' },
+    { id: 'w2-soldPrevWedFri', weekStart: '2026-05-05', key: 'soldPrevWedFri', title: 'Продано на прошлой неделе', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '06.05-08.05' },
+    { id: 'w2-currentFri', weekStart: '2026-05-05', key: 'currentFri', title: 'Текущий остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '08.05' },
+    { id: 'w2-soldWedFri', weekStart: '2026-05-05', key: 'soldWedFri', title: 'Продано', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '06.05-08.05' },
+    { id: 'w2-currentSun', weekStart: '2026-05-05', key: 'currentSun', title: 'Текущий остаток', subtitle: 'Воскрес', kind: 'stock', tone: 'neutral', dateLabel: '10.05' },
+    { id: 'w2-orderPackTue', weekStart: '2026-05-05', key: 'orderPackTue', title: 'Заказ упаковок на вторник', subtitle: 'Воскрес', kind: 'order', tone: 'order', dateLabel: '10.05' },
+    { id: 'w2-orderUnitsTue', weekStart: '2026-05-05', key: 'orderUnitsTue', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
+    { id: 'w2-prevMon', weekStart: '2026-05-05', key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '11.05' },
+    { id: 'w2-soldPrevFriMon', weekStart: '2026-05-05', key: 'soldPrevFriMon', title: 'Продано на прошлой неделе', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateLabel: '08.05-11.05' },
+    { id: 'w2-currentMon', weekStart: '2026-05-05', key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '11.05' },
+    { id: 'w2-soldFriMon', weekStart: '2026-05-05', key: 'soldFriMon', title: 'Продано', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateLabel: '08.05-11.05' },
+  ],
+};
+
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
 
 const sanitizeStockValue = (raw: string): string => {
@@ -126,7 +189,7 @@ const sanitizeStockValue = (raw: string): string => {
   if (Number.isNaN(parsed)) {
     return '';
   }
-  return String(Math.min(15, Math.max(0, parsed)));
+  return String(Math.min(50, Math.max(0, parsed)));
 };
 
 const parseNumber = (value: string) => {
@@ -307,6 +370,30 @@ const buildCsv = (rows: string[][]): string => rows.map((row) => row.map((item) 
 
 const safeFileName = (raw: string): string => raw.replace(/[\\/:*?"<>|]/g, '_');
 
+const applyDashboardOverrides = (
+  base: DashboardRowValues,
+  row: StockTableRow,
+  weekStart?: string,
+): DashboardRowValues => {
+  if (!weekStart || !row.dashboardOverrides) {
+    return base;
+  }
+  const next = { ...base };
+  (Object.keys(base) as DashboardOverrideKey[]).forEach((key) => {
+    const override = row.dashboardOverrides?.[`${weekStart}:${key}`];
+    if (override !== undefined) {
+      next[key] = override;
+    }
+  });
+  return next;
+};
+
+const dashboardSheetValue = (row: StockTableRow, column: DashboardSheetColumn): string => {
+  const sourceWeekStart = column.valueSourceWeekStart ?? column.weekStart;
+  const sourceKey = column.valueSourceKey ?? column.key;
+  return row.dashboardOverrides?.[`${sourceWeekStart}:${sourceKey}`] ?? '';
+};
+
 const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
   PRODUCT_CATEGORIES.reduce(
     (acc, category) => {
@@ -323,7 +410,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
-  const [managerWindowStart, setManagerWindowStart] = useState<string>(shiftDateKey(currentWeekStart(), -WEEK_DAYS));
+  const [managerWindowStart, setManagerWindowStart] = useState<string>(DASHBOARD_WINDOW_START);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -381,8 +468,18 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     try {
       setLoading(true);
       setError('');
-      const from = canManage ? managerWindowStart : undefined;
-      const to = canManage ? getTwoWeeksEnd(managerWindowStart) : undefined;
+      const dashboardFrom = shiftDateKey(managerWindowStart, -WEEK_DAYS);
+      const dashboardTo = getTwoWeeksEnd(dashboardFrom);
+      const from = canManage
+        ? managerStockView === 'dashboard'
+          ? dashboardFrom
+          : managerWindowStart
+        : undefined;
+      const to = canManage
+        ? managerStockView === 'dashboard'
+          ? dashboardTo
+          : shiftDateKey(managerWindowStart, WEEK_DAYS - 1)
+        : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
         from,
@@ -424,7 +521,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return;
     }
     void loadTable();
-  }, [session.token, canManage, selectedShopId, managerWindowStart]);
+  }, [session.token, canManage, selectedShopId, managerWindowStart, managerStockView]);
 
   const visibleRows = useMemo(() => {
     if (!table) {
@@ -461,15 +558,30 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const dashboardWeeks = useMemo(() => {
     if (!table) {
-      return { current: {} as WeekDateMap, previous: null as WeekDateMap | null };
+      return {
+        current: {} as WeekDateMap,
+        previous: null as WeekDateMap | null,
+        currentStart: undefined as string | undefined,
+        previousStart: undefined as string | undefined,
+      };
     }
     const weeks = splitWeeks(table.dates);
     if (weeks.length === 0) {
-      return { current: mapWeekDates(table.dates), previous: null };
+      return {
+        current: mapWeekDates(table.dates),
+        previous: null,
+        currentStart: table.dates[0],
+        previousStart: undefined,
+      };
     }
-    const current = mapWeekDates(weeks[weeks.length - 1]);
-    const previous = weeks.length > 1 ? mapWeekDates(weeks[weeks.length - 2]) : null;
-    return { current, previous };
+    const currentWeek = weeks[weeks.length - 1];
+    const previousWeek = weeks.length > 1 ? weeks[weeks.length - 2] : null;
+    return {
+      current: mapWeekDates(currentWeek),
+      previous: previousWeek ? mapWeekDates(previousWeek) : null,
+      currentStart: currentWeek[0],
+      previousStart: previousWeek?.[0],
+    };
   }, [table]);
 
   const dashboardDateFor = (week: DashboardWeekRef, slot: WeekSlot): string | undefined => {
@@ -632,13 +744,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     const prevPrevOrderSatUnits = previous?.thu
       ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
       : '';
-    const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(current.mon)) : '';
+    const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(previous.mon)) : '';
 
     const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
     const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
     const orderPackTue = orderCellValue(row.productId, 'orderPackTue');
 
-    return {
+    const base: DashboardRowValues = {
       currentTue: stock(current.tue),
       orderPackThu,
       orderUnitsThu: orderUnitsFromPacks(orderPackThu, units),
@@ -661,6 +773,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       soldFriMon: soldFriMonCurrent,
       currentMon: stock(current.mon),
     };
+    return applyDashboardOverrides(base, row, dashboardWeeks.currentStart);
   };
 
   const exportDashboard = async () => {
@@ -1226,7 +1339,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 >
                   <Text style={styles.calendarNavButtonText}>-1 нед.</Text>
                 </Pressable>
-                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(shiftDateKey(currentWeekStart(), -WEEK_DAYS))}>
+                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(DASHBOARD_WINDOW_START)}>
                   <Text style={styles.calendarNavButtonText}>Текущая нед.</Text>
                 </Pressable>
                 <Pressable
@@ -1252,7 +1365,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
       <View style={styles.sortRow}>
         <Text style={styles.metaText}>Позиций: {visibleRows.length}</Text>
-        <Text style={styles.metaText}>{table ? `${table.from} - ${table.to}` : ''}</Text>
+        <Text style={styles.metaText}>{table ? `${managerWindowStart} - ${shiftDateKey(managerWindowStart, WEEK_DAYS - 1)}` : ''}</Text>
       </View>
 
       <View style={styles.sortButtons}>
@@ -1725,6 +1838,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 10,
     paddingVertical: 8,
+  },
+  calendarNavButtonDisabled: {
+    opacity: 0.7,
   },
   calendarNavButtonText: {
     color: '#2d4034',
@@ -2205,7 +2321,6 @@ const styles = StyleSheet.create({
     color: '#1f4f37',
   },
 });
-
 
 
 

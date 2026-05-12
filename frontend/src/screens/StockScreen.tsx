@@ -25,7 +25,6 @@ import { UsersPanel } from '../components/UsersPanel';
 import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
-type SortMode = 'manual' | 'name' | 'critical';
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
 type ManagerStockView = 'dashboard' | 'calendar';
 
@@ -192,14 +191,6 @@ const sanitizeStockValue = (raw: string): string => {
   return String(Math.min(50, Math.max(0, parsed)));
 };
 
-const parseNumber = (value: string) => {
-  if (!value) {
-    return Number.POSITIVE_INFINITY;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
-};
-
 const sanitizeIntegerInput = (raw: string, maxLength = 6): string => raw.replace(/[^0-9]/g, '').slice(0, maxLength);
 
 const sanitizeDecimalInput = (raw: string, decimalPlaces: number): string => {
@@ -209,11 +200,6 @@ const sanitizeDecimalInput = (raw: string, decimalPlaces: number): string => {
     return whole.slice(0, 6);
   }
   return `${whole.slice(0, 6)}.${fractionParts.join('').slice(0, decimalPlaces)}`;
-};
-
-const minStock = (row: StockTableRow, dates: string[]) => {
-  const values = dates.map((date) => parseNumber(row.values[date] ?? ''));
-  return values.length ? Math.min(...values) : Number.POSITIVE_INFINITY;
 };
 
 const toDateKey = (date: Date): string => {
@@ -307,6 +293,8 @@ const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): 
   const delivery = parseStockNumber(deliveryRaw) ?? 0;
   return String(start + delivery - end);
 };
+
+const hasValue = (value?: string): value is string => typeof value === 'string' && value.trim() !== '';
 
 const formatOptionalPrice = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
@@ -414,7 +402,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [sortMode, setSortMode] = useState<SortMode>('manual');
   const [managerStockView, setManagerStockView] = useState<ManagerStockView>('dashboard');
   const [dashboardOrderValues, setDashboardOrderValues] = useState<Record<string, string>>({});
   const [pendingKeys, setPendingKeys] = useState<Record<string, boolean>>({});
@@ -533,14 +520,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (normalizedQuery) {
       nextRows = nextRows.filter((row) => normalizeText(row.name).includes(normalizedQuery));
     }
-    if (sortMode === 'name') {
-      return [...nextRows].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-    }
-    if (sortMode === 'critical') {
-      return [...nextRows].sort((a, b) => minStock(a, table.dates) - minStock(b, table.dates));
-    }
     return nextRows;
-  }, [table, query, sortMode]);
+  }, [table, query]);
 
   const rowsByCategory = useMemo(() => {
     const grouped = createCategoryMap();
@@ -716,8 +697,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const dashboardRowValues = (row: StockTableRow): DashboardRowValues => {
     const current = dashboardWeeks.current;
     const previous = dashboardWeeks.previous;
+    const previousStart = dashboardWeeks.previousStart;
     const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
     const units = row.unitsInPack;
+    const previousWeekSoldValue = (key: 'soldMonWed' | 'soldWedFri' | 'soldFriMon'): string => {
+      const value = previousStart ? row.dashboardOverrides?.[`${previousStart}:${key}`] : undefined;
+      return hasValue(value) ? value : '';
+    };
 
     // Excel formula: ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾ = start_stock + delivery_units - end_stock
     // soldMonWed: period Monâ†’Wed, start=Sun, delivery=orderTue (placed prev Sun)
@@ -745,6 +731,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
       : '';
     const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(previous.mon)) : '';
+    const copiedSoldMonWedPrevious = previousWeekSoldValue('soldMonWed');
+    const copiedSoldWedFriPrevious = previousWeekSoldValue('soldWedFri');
+    const copiedSoldFriMonPrevious = previousWeekSoldValue('soldFriMon');
 
     const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
     const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
@@ -755,25 +744,31 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       orderPackThu,
       orderUnitsThu: orderUnitsFromPacks(orderPackThu, units),
       prevWed: previous ? stock(previous.wed) : '',
-      soldPrevMonWed: soldMonWedPrevious,
+      soldPrevMonWed: copiedSoldMonWedPrevious || soldMonWedPrevious,
       soldMonWed: soldMonWedCurrent,
       currentWed: stock(current.wed),
       currentThu: stock(current.thu),
       orderPackSat,
       orderUnitsSat: orderUnitsFromPacks(orderPackSat, units),
       prevFri: previous ? stock(previous.fri) : '',
-      soldPrevWedFri: soldWedFriPrevious,
+      soldPrevWedFri: copiedSoldWedFriPrevious || soldWedFriPrevious,
       soldWedFri: soldWedFriCurrent,
       currentFri: stock(current.fri),
       currentSun: stock(current.sun),
       orderPackTue,
       orderUnitsTue: orderUnitsFromPacks(orderPackTue, units),
       prevMon: previous ? stock(previous.mon) : '',
-      soldPrevFriMon: soldFriMonPrevious,
+      soldPrevFriMon: copiedSoldFriMonPrevious || soldFriMonPrevious,
       soldFriMon: soldFriMonCurrent,
       currentMon: stock(current.mon),
     };
-    return applyDashboardOverrides(base, row, dashboardWeeks.currentStart);
+    const withOverrides = applyDashboardOverrides(base, row, dashboardWeeks.currentStart);
+    return {
+      ...withOverrides,
+      soldPrevMonWed: copiedSoldMonWedPrevious || withOverrides.soldPrevMonWed,
+      soldPrevWedFri: copiedSoldWedFriPrevious || withOverrides.soldPrevWedFri,
+      soldPrevFriMon: copiedSoldFriMonPrevious || withOverrides.soldPrevFriMon,
+    };
   };
 
   const exportDashboard = async () => {
@@ -1056,49 +1051,58 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       <View style={styles.categoryTitleRow}>
         <Text style={styles.categoryTitle}>{category}</Text>
       </View>
-      <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-        <View>
+      <View style={styles.categoryTable}>
+        <View style={styles.stickyColumn}>
           <View style={styles.headerRow}>
             <View style={[styles.headerCell, styles.nameColumn]}>
               <Text style={styles.headerText}>Товар</Text>
             </View>
-            {table?.dates.map((date) => (
-              <View
-                key={date}
-                style={[
-                  styles.headerCell,
-                  styles.dateColumn,
-                  columnToneHeader(date),
-                  secondWeekBoundaryStyle(date),
-                ]}
-              >
-                <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
-                <Text style={styles.dateDayText}>{formatDate(date)}</Text>
-              </View>
-            ))}
-            <View style={[styles.headerCell, styles.actionColumn]}>
-              <Text style={styles.headerText}>Действие</Text>
-            </View>
           </View>
-
-          {rows.length === 0 ? (
-            <View style={styles.emptyRow}>
-              <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
-            </View>
-          ) : (
-            rows.map((row) => (
-              <View key={row.productId} style={styles.row}>
-                <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
-                  <Text numberOfLines={1} ellipsizeMode="tail" style={styles.nameText}>
+          {rows.map((row) => (
+            <View key={row.productId} style={styles.row}>
+              <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
+                  <Text numberOfLines={1} style={styles.nameText}>
                     {row.name}
                   </Text>
+                </ScrollView>
+              </View>
+            </View>
+          ))}
+        </View>
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
+          <View>
+            <View style={styles.headerRow}>
+              {table?.dates.map((date) => (
+                <View
+                  key={date}
+                  style={[
+                    styles.headerCell,
+                    styles.dateColumn,
+                    columnToneHeader(date),
+                    secondWeekBoundaryStyle(date),
+                  ]}
+                >
+                  <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
+                  <Text style={styles.dateDayText}>{formatDate(date)}</Text>
                 </View>
+              ))}
+              <View style={[styles.headerCell, styles.actionColumn]}>
+                <Text style={styles.headerText}>Действие</Text>
+              </View>
+            </View>
+
+            {rows.length === 0 ? (
+              <View style={[styles.emptyRow, styles.emptyScrollableRow]}>
+                <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+              </View>
+            ) : (
+              rows.map((row) => (
+              <View key={row.productId} style={styles.row}>
                 {table?.dates.map((date) => {
                   const key = `${row.productId}:${date}`;
                   const pending = pendingKeys[key];
                   const value = row.values[date] ?? '';
-                  const numeric = value ? Number.parseInt(value, 10) : NaN;
-                  const isLow = !Number.isNaN(numeric) && numeric <= 2;
 
                   return (
                     <Pressable
@@ -1109,7 +1113,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                         styles.valueCell,
                         columnToneValue(date),
                         secondWeekBoundaryStyle(date),
-                        isLow && styles.lowValueCell,
                         pending && styles.pendingCell,
                       ]}
                       onPress={() => openEditCell(row, date)}
@@ -1128,10 +1131,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   )}
                 </View>
               </View>
-            ))
-          )}
-        </View>
-      </ScrollView>
+              ))
+            )}
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 
@@ -1182,51 +1186,66 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       <View style={styles.categoryTitleRow}>
         <Text style={styles.categoryTitle}>{category}</Text>
       </View>
-      <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-        <View>
+      <View style={styles.categoryTable}>
+        <View style={styles.stickyColumn}>
           <View style={styles.headerRow}>
-            <View style={[styles.headerCell, styles.nameColumn]}>
+            <View style={[styles.headerCell, styles.nameColumn, styles.dashboardNameHeader]}>
               <Text style={styles.headerText}>Товар</Text>
             </View>
-            {DASHBOARD_COLUMNS.map((column) => (
-              <View
-                key={column.key}
-                style={[
-                  styles.headerCell,
-                  styles.dashboardHeaderCell,
-                  dashboardColumnStyle(column),
-                  dashboardHeaderToneStyle(column.tone),
-                ]}
-              >
-                <Text style={styles.dashboardHeaderTitle}>{column.title}</Text>
-                <Text style={styles.dashboardHeaderSubtitle}>{dashboardHeaderSubtitle(column)}</Text>
-              </View>
-            ))}
-            <View style={[styles.headerCell, styles.actionColumn]}>
-              <Text style={styles.headerText}>Действие</Text>
-            </View>
           </View>
-
-          {rows.length === 0 ? (
-            <View style={styles.emptyRow}>
-              <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
-            </View>
-          ) : (
-            rows.map((row) => {
-              const values = dashboardRowValues(row);
-              const reference = productReferenceLabel(row);
-              return (
-                <View key={row.productId} style={styles.row}>
-                  <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.nameText}>
+          {rows.map((row) => {
+            const reference = productReferenceLabel(row);
+            return (
+              <View key={row.productId} style={styles.row}>
+                <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
+                    <Text numberOfLines={1} style={styles.nameText}>
                       {row.name}
                     </Text>
-                    {!!reference && (
-                      <Text numberOfLines={1} ellipsizeMode="tail" style={styles.referenceText}>
+                  </ScrollView>
+                  {!!reference && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
+                      <Text numberOfLines={1} style={styles.referenceText}>
                         {reference}
                       </Text>
-                    )}
-                  </View>
+                    </ScrollView>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
+          <View>
+            <View style={styles.headerRow}>
+              {DASHBOARD_COLUMNS.map((column) => (
+                <View
+                  key={column.key}
+                  style={[
+                    styles.headerCell,
+                    styles.dashboardHeaderCell,
+                    dashboardColumnStyle(column),
+                    dashboardHeaderToneStyle(column.tone),
+                  ]}
+                >
+                  <Text style={styles.dashboardHeaderTitle}>{column.title}</Text>
+                  <Text style={styles.dashboardHeaderSubtitle}>{dashboardHeaderSubtitle(column)}</Text>
+                </View>
+              ))}
+              <View style={[styles.headerCell, styles.actionColumn, styles.dashboardNameHeader]}>
+                <Text style={styles.headerText}>Действие</Text>
+              </View>
+            </View>
+
+            {rows.length === 0 ? (
+              <View style={[styles.emptyRow, styles.emptyScrollableRow]}>
+                <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+              </View>
+            ) : (
+              rows.map((row) => {
+              const values = dashboardRowValues(row);
+              return (
+                <View key={row.productId} style={styles.row}>
                   {DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
@@ -1257,8 +1276,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     if (column.kind === 'stock' && isManualStockKey(column.key)) {
                       const date = currentStockDateForColumn(column.key);
                       const pending = date ? pendingKeys[`${row.productId}:${date}`] : false;
-                      const numeric = parseStockNumber(value);
-                      const isLowStock = numeric !== null && numeric <= 2;
 
                       return (
                         <Pressable
@@ -1268,7 +1285,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                             styles.dashboardValueCell,
                             dashboardColumnStyle(column),
                             dashboardValueToneStyle(column.tone),
-                            isLowStock && styles.lowValueCell,
                             pending && styles.pendingCell,
                           ]}
                           onPress={() => {
@@ -1282,8 +1298,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       );
                     }
 
-                    const numeric = parseStockNumber(value);
-                    const isLowStock = column.kind === 'stock' && numeric !== null && numeric <= 2;
                     return (
                       <View
                         key={column.key}
@@ -1292,7 +1306,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                           styles.dashboardValueCell,
                           dashboardColumnStyle(column),
                           dashboardValueToneStyle(column.tone),
-                          isLowStock && styles.lowValueCell,
                         ]}
                       >
                         <Text style={styles.valueText}>{value || '-'}</Text>
@@ -1306,10 +1319,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   </View>
                 </View>
               );
-            })
-          )}
-        </View>
-      </ScrollView>
+              })
+            )}
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 
@@ -1366,27 +1380,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       <View style={styles.sortRow}>
         <Text style={styles.metaText}>Позиций: {visibleRows.length}</Text>
         <Text style={styles.metaText}>{table ? `${managerWindowStart} - ${shiftDateKey(managerWindowStart, WEEK_DAYS - 1)}` : ''}</Text>
-      </View>
-
-      <View style={styles.sortButtons}>
-        <Pressable
-          style={[styles.sortButton, sortMode === 'manual' && styles.sortButtonActive]}
-          onPress={() => setSortMode('manual')}
-        >
-          <Text style={[styles.sortButtonText, sortMode === 'manual' && styles.sortButtonTextActive]}>Без сорт.</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.sortButton, sortMode === 'name' && styles.sortButtonActive]}
-          onPress={() => setSortMode('name')}
-        >
-          <Text style={[styles.sortButtonText, sortMode === 'name' && styles.sortButtonTextActive]}>А-Я</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.sortButton, sortMode === 'critical' && styles.sortButtonActive]}
-          onPress={() => setSortMode('critical')}
-        >
-          <Text style={[styles.sortButtonText, sortMode === 'critical' && styles.sortButtonTextActive]}>Критичный</Text>
-        </Pressable>
       </View>
 
       {canManage && (
@@ -1849,7 +1842,7 @@ const styles = StyleSheet.create({
   },
   sortRow: {
     marginTop: 10,
-    marginBottom: 6,
+    marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1859,31 +1852,6 @@ const styles = StyleSheet.create({
     color: '#35473b',
     fontWeight: '700',
     fontSize: 13,
-  },
-  sortButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  sortButton: {
-    borderWidth: 1,
-    borderColor: '#bccabf',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: '#f3f6f4',
-  },
-  sortButtonActive: {
-    backgroundColor: '#1f4f37',
-    borderColor: '#1f4f37',
-  },
-  sortButtonText: {
-    color: '#2f4437',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  sortButtonTextActive: {
-    color: '#ffffff',
   },
   viewModeButtons: {
     flexDirection: 'row',
@@ -1945,6 +1913,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 16,
   },
+  categoryTable: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  stickyColumn: {
+    zIndex: 2,
+    borderRightWidth: 2,
+    borderRightColor: '#657667',
+    backgroundColor: '#f7f7f7',
+  },
+  scrollableColumns: {
+    flex: 1,
+  },
   headerRow: {
     flexDirection: 'row',
     backgroundColor: '#ecf1ec',
@@ -1955,9 +1936,9 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
-    minHeight: 62,
-    paddingHorizontal: 6,
-    paddingVertical: 7,
+    minHeight: 54,
+    paddingHorizontal: 4,
+    paddingVertical: 5,
   },
   headerText: {
     fontSize: 12,
@@ -1992,12 +1973,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   emptyRow: {
-    minHeight: 52,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#a7b5a8',
     backgroundColor: '#f6f8f6',
+  },
+  emptyScrollableRow: {
+    minWidth: 240,
   },
   emptyRowText: {
     color: '#5a6d5e',
@@ -2010,43 +1994,44 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
-    minHeight: 52,
-    paddingHorizontal: 6,
+    minHeight: 46,
+    paddingHorizontal: 4,
   },
   nameColumn: {
-    width: 280,
+    width: 156,
     alignItems: 'flex-start',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     backgroundColor: '#f7f7f7',
   },
   dateColumn: {
-    width: 96,
+    width: 62,
   },
   dashboardStockColumn: {
-    width: 108,
+    width: 72,
   },
   dashboardOrderColumn: {
-    width: 120,
+    width: 78,
   },
   dashboardMetricColumn: {
-    width: 112,
+    width: 76,
   },
   actionColumn: {
-    width: 100,
+    width: 74,
     backgroundColor: '#ecf0ec',
   },
   nameCell: {
     justifyContent: 'center',
   },
-  nameText: {
+  nameScroll: {
     width: '100%',
-    fontSize: 16,
+  },
+  nameText: {
+    fontSize: 13,
     color: '#222222',
     fontWeight: '600',
   },
   referenceText: {
     marginTop: 2,
-    width: '100%',
     fontSize: 11,
     color: '#4e5d53',
     fontWeight: '600',
@@ -2061,21 +2046,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f8f1',
   },
   dashboardHeaderCell: {
-    minHeight: 98,
-    gap: 3,
+    minHeight: 86,
+    gap: 2,
+  },
+  dashboardNameHeader: {
+    minHeight: 86,
   },
   dashboardHeaderTitle: {
-    fontSize: 11,
+    fontSize: 9,
     color: '#1f2a21',
     fontWeight: '800',
     textAlign: 'center',
   },
   dashboardHeaderSubtitle: {
-    fontSize: 11,
+    fontSize: 9,
     color: '#1f2a21',
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 14,
+    lineHeight: 11,
   },
   dashboardHeaderNeutral: {
     backgroundColor: '#d9d9d9',
@@ -2114,31 +2102,28 @@ const styles = StyleSheet.create({
     width: '100%',
     textAlign: 'center',
     color: '#223528',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     paddingVertical: 0,
-  },
-  lowValueCell: {
-    backgroundColor: '#f4d2cb',
   },
   pendingCell: {
     opacity: 0.6,
   },
   valueText: {
     color: '#223528',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   deleteButton: {
     backgroundColor: '#9f4038',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 7,
   },
   deleteButtonText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 10,
   },
   workerActionText: {
     color: '#55685b',

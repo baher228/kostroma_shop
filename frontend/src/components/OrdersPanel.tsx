@@ -214,12 +214,12 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       {!!error && <Text style={styles.error}>{error}</Text>}
 
       {!canManage && (
-        <View style={styles.block}>
+        <View style={[styles.block, styles.workerOrderBlock]}>
           <Text style={styles.blockTitle}>Заказ для продавцов</Text>
           <Text style={styles.blockMeta}>
             {stockDate ? `Текущий остаток для расчета: ${stockDate}` : 'Нет дат для расчета остатков'}
           </Text>
-          <ScrollView style={styles.orderList}>
+          <ScrollView style={[styles.orderList, styles.orderListExpanded]}>
             {(table?.rows ?? []).map((row) => {
               const currentStock = stockDate ? parseStock(row.values[stockDate]) : null;
               const suggested = suggestPacks(row, currentStock);
@@ -227,16 +227,14 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
               return (
                 <View key={row.productId} style={styles.orderCard}>
                   <Text style={styles.productName}>{row.name}</Text>
-
-                  <View style={styles.orderSummaryRow}>
-                    <View style={[styles.summaryCard, styles.stockSummaryCard]}>
-                      <Text style={styles.summaryLabel}>Остаток</Text>
+                  <View style={styles.orderTopRow}>
+                    <View style={styles.stockBlock}>
+                      <Text style={styles.stockLabel}>Остаток</Text>
                       <Text style={styles.stockValueText}>{currentStock ?? '-'}</Text>
-                      <Text style={styles.summaryHint}>на текущую дату</Text>
                     </View>
 
-                    <View style={[styles.summaryCard, styles.orderSummaryCard]}>
-                      <Text style={styles.summaryLabel}>Заказ</Text>
+                    <View style={styles.orderBlock}>
+                      <Text style={styles.orderLabel}>Заказ</Text>
                       <TextInput
                         value={packsByProduct[row.productId] ?? ''}
                         onChangeText={(value) =>
@@ -247,20 +245,16 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                         }
                         style={styles.orderValueInput}
                         keyboardType="number-pad"
-                        placeholder="0"
+                        placeholder="Коробки"
                         placeholderTextColor="#7a8b7f"
                       />
-                      <Text style={styles.summaryHint}>коробок</Text>
                     </View>
                   </View>
-
-                  <View style={styles.productMetaBlock}>
-                    <Text style={styles.productMetaLine}>Шт/кор: {row.unitsInPack ?? '-'}</Text>
-                    <Text style={styles.productMetaLine}>Границы: {row.minStockUnits ?? '-'} / {row.maxStockUnits ?? '-'}</Text>
-                    <Text style={styles.productMetaLine}>
-                      Авто-рекомендация: {suggested > 0 ? `${suggested} кор.` : 'не требуется'}
-                    </Text>
-                  </View>
+                  <Text style={styles.productMetaStrong}>Шт/кор: {row.unitsInPack ?? '-'}</Text>
+                  <Text style={styles.productMetaStrong}>Границы: {row.minStockUnits ?? '-'} / {row.maxStockUnits ?? '-'}</Text>
+                  <Text style={styles.productMetaStrong}>
+                    Авто-рекомендация: {suggested > 0 ? `${suggested} кор.` : 'не требуется'}
+                  </Text>
 
                   <View style={styles.rowInputs}>
                     <Pressable
@@ -333,25 +327,27 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
         </View>
       )}
 
-      <View style={styles.block}>
-        <Text style={styles.blockTitle}>{canManage ? 'Заказы продавцов' : 'Мои отправленные заказы'}</Text>
-        <ScrollView style={styles.historyList}>
-          {!orders.length && <Text style={styles.empty}>Пока нет заказов.</Text>}
-          {orders.map((order) => (
-            <View key={order.id} style={styles.historyCard}>
-              <Text style={styles.historyMain}>
-                {order.productName} · {order.requestedPacks} кор. ({order.requestedUnits} шт.)
-              </Text>
-              <Text style={styles.historyMeta}>
-                {order.shopName ?? order.shopId} · {toIsoLabel(order.createdAt)}
-              </Text>
-              <Text style={styles.historyMeta}>
-                Остаток: {order.stockOnHand ?? '-'} · {order.autoSuggested ? 'Авто' : 'Ручной'} · {order.status}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
+      {canManage && (
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Заказы продавцов</Text>
+          <ScrollView style={styles.historyList}>
+            {!orders.length && <Text style={styles.empty}>Пока нет заказов.</Text>}
+            {orders.map((order) => (
+              <View key={order.id} style={styles.historyCard}>
+                <Text style={styles.historyMain}>
+                  {order.productName} · {order.requestedPacks} кор. ({order.requestedUnits} шт.)
+                </Text>
+                <Text style={styles.historyMeta}>
+                  {order.shopName ?? order.shopId} · {toIsoLabel(order.createdAt)}
+                </Text>
+                <Text style={styles.historyMeta}>
+                  Остаток: {order.stockOnHand ?? '-'} · {order.autoSuggested ? 'Авто' : 'Ручной'} · {order.status}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
     </View>
   );
 };
@@ -374,18 +370,25 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  workerOrderBlock: {
+    flex: 1,
+  },
   blockTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
     color: '#213428',
   },
   blockMeta: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#4f6155',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   orderList: {
     maxHeight: 280,
+  },
+  orderListExpanded: {
+    flex: 1,
+    maxHeight: undefined,
   },
   historyList: {
     maxHeight: 220,
@@ -394,13 +397,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1dbd2',
     borderRadius: 12,
-    padding: 10,
-    marginBottom: 8,
+    padding: 12,
+    marginBottom: 10,
     gap: 10,
   },
   productName: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '900',
     color: '#233629',
   },
   productMeta: {
@@ -408,76 +411,61 @@ const styles = StyleSheet.create({
     color: '#4f6155',
     fontWeight: '600',
   },
-  orderSummaryRow: {
+  orderTopRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     alignItems: 'stretch',
   },
-  summaryCard: {
+  stockBlock: {
+    minWidth: 118,
+    paddingVertical: 4,
+  },
+  orderBlock: {
     flex: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 108,
     justifyContent: 'center',
-    borderWidth: 1,
   },
-  stockSummaryCard: {
-    backgroundColor: '#edf6ef',
-    borderColor: '#bcd2c0',
-  },
-  orderSummaryCard: {
-    backgroundColor: '#f8fbf9',
-    borderColor: '#cfd9d1',
-  },
-  summaryLabel: {
-    fontSize: 14,
+  stockLabel: {
+    fontSize: 16,
     fontWeight: '800',
     color: '#355443',
-    marginBottom: 6,
+    marginBottom: 4,
+  },
+  orderLabel: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#355443',
+    marginBottom: 4,
   },
   stockValueText: {
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 38,
+    lineHeight: 42,
     fontWeight: '900',
     color: '#1d3326',
   },
   orderValueInput: {
-    borderWidth: 0,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    fontSize: 30,
-    lineHeight: 34,
+    borderWidth: 1,
+    borderColor: '#c6d3c8',
+    borderRadius: 12,
+    backgroundColor: '#f8fbf9',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 26,
+    lineHeight: 30,
     fontWeight: '900',
     color: '#1d3326',
     textAlign: 'left',
-    minHeight: 40,
+    minHeight: 56,
   },
-  summaryHint: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#5d7365',
-    fontWeight: '700',
-  },
-  productMetaBlock: {
-    borderRadius: 10,
-    backgroundColor: '#f7faf8',
-    borderWidth: 1,
-    borderColor: '#d9e2db',
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    gap: 4,
-  },
-  productMetaLine: {
-    fontSize: 12,
+  productMetaStrong: {
+    fontSize: 15,
     color: '#4f6155',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   rowInputs: {
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   metaGrid: {
     flexDirection: 'row',
@@ -497,18 +485,18 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignSelf: 'flex-start',
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: '#2f6f4f',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
   },
   saveButtonDisabled: {
     opacity: 0.7,
   },
   saveButtonText: {
     color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
   },
   historyCard: {
     borderWidth: 1,

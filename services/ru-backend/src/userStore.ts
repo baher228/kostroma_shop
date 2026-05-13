@@ -62,6 +62,18 @@ export const findUserByUsername = async (username: string): Promise<UserRecord |
   return result.rows[0] ? mapUser(result.rows[0]) : null;
 };
 
+export const findUserById = async (id: string): Promise<SessionUser | null> => {
+  const result = await personalDb.query<UserDbRow>(
+    `
+      ${userSelect}
+      WHERE u.id = $1
+      LIMIT 1;
+    `,
+    [id],
+  );
+  return result.rows[0] ? mapSessionUser(result.rows[0]) : null;
+};
+
 export const findWorkerById = async (id: string): Promise<SessionUser | null> => {
   const result = await personalDb.query<UserDbRow>(
     `

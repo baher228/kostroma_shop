@@ -164,7 +164,8 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   };
 
   const createOrder = async (row: StockTable['rows'][number]) => {
-    if (!table || !session.user.shopId) {
+    const assignedShopId = session.user.shopId ?? table?.shop.id ?? null;
+    if (!table || !assignedShopId) {
       setError('Для создания заказа сотрудник должен быть привязан к магазину.');
       return;
     }
@@ -184,7 +185,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       setSavingByProduct((current) => ({ ...current, [row.productId]: true }));
       setError('');
       const created = await ordersApi.create(session.token, {
-        shopId: session.user.shopId,
+        shopId: assignedShopId,
         productId: row.productId,
         stockOnHand,
         requestedPacks,

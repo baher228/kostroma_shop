@@ -46,12 +46,48 @@ const mapThread = (row: ThreadRow, messages: SupportMessage[]): SupportThread =>
   messages,
 });
 
-export const listSupportThreads = async (): Promise<SupportThread[]> => {
-  const threads = await personalDb.query<ThreadRow>('SELECT * FROM support_threads ORDER BY updated_at DESC, created_at DESC;');
-  const messages = await personalDb.query<MessageRow>('SELECT * FROM support_messages ORDER BY created_at ASC;');
+const mapThreadsWithMessages = (threads: ThreadRow[], messages: MessageRow[]): SupportThread[] =>
+  threads.map((thread) =>
+    mapThread(thread, messages.filter((message) => message.thread_id === thread.id).map(mapMessage)),
+  );
+
+export const listSupportThreads = async (createdById?: string): Promise<SupportThread[]> => {
+  const threads = await personalDb.query<ThreadRow>(
+    `
+      SELECT *
+      FROM support_threads
+      ${createdById ? 'WHERE created_by_id = $1' : ''}
+      ORDER BY updated_at DESC, created_at DESC;
+    `,
+    createdById ? [createdById] : [],
+  );
+  if (!threads.rows.length) {
+    return [];
+  }
+  const messages = await personalDb.query<MessageRow>(
+    `
+      SELECT *
+      FROM support_messages
+      WHERE thread_id = ANY($1::text[])
+      ORDER BY created_at ASC;
+    `,
+    [threads.rows.map((thread) => thread.id)],
+  );
+  return mapThreadsWithMessages(threads.rows, messages.rows);
+};
+
+export const getSupportThread = async (threadId: string): Promise<SupportThread | null> => {
+  const threads = await personalDb.query<ThreadRow>('SELECT * FROM support_threads WHERE id = $1 LIMIT 1;', [threadId]);
+  if (!threads.rows[0]) {
+    return null;
+  }
+  const messages = await personalDb.query<MessageRow>(
+    'SELECT * FROM support_messages WHERE thread_id = $1 ORDER BY created_at ASC;',
+    [threadId],
+  );
   return threads.rows.map((thread) =>
     mapThread(thread, messages.rows.filter((message) => message.thread_id === thread.id).map(mapMessage)),
-  );
+  )[0];
 };
 
 export const createSupportThread = async (input: {

@@ -7,7 +7,7 @@ import { getOpsJwks, signOpsToken, signSessionToken } from './auth';
 import { getWorkerCheckInStatus, upsertWorkerCheckInStatus } from './checkInStore';
 import { config } from './config';
 import { AuthorizedRequest, requireAuth, requireRole } from './middleware';
-import { addSupportMessage, createSupportThread, listSupportThreads } from './supportStore';
+import { addSupportMessage, createSupportThread, getSupportThread, listSupportThreads } from './supportStore';
 import { createTask, deleteTask, listTasks, updateTaskStatus } from './taskStore';
 import { assignUserShop, createUser, findUserByUsername, findWorkerById, listUsers, listWorkers } from './userStore';
 import {
@@ -276,8 +276,9 @@ export const createRussiaApp = () => {
     }
   });
 
-  app.get('/api/support', requireAuth, async (_req, res) => {
-    listSupportThreads()
+  app.get('/api/support', requireAuth, async (req: Request, res: Response) => {
+    const user = (req as AuthorizedRequest).user;
+    listSupportThreads(user.role === 'manager' ? undefined : user.id)
       .then((threads) => res.json({ threads }))
       .catch(() => res.status(500).json({ message: 'Failed to load support threads.' }));
   });
@@ -309,6 +310,15 @@ export const createRussiaApp = () => {
       const params = idParamSchema.parse(req.params);
       const payload = createSupportMessageSchema.parse(req.body);
       const user = (req as AuthorizedRequest).user;
+      const thread = await getSupportThread(params.id);
+      if (!thread) {
+        res.status(404).json({ message: 'Support thread not found.' });
+        return;
+      }
+      if (user.role !== 'manager' && thread.createdById !== user.id) {
+        res.status(403).json({ message: 'Not enough permissions.' });
+        return;
+      }
       const message = await addSupportMessage(params.id, {
         authorId: user.id,
         authorDisplayName: user.fullName,

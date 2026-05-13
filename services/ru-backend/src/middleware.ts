@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { verifyOpsToken, verifySessionToken } from './auth';
 import { OpsScope, OpsTokenClaims, Role, SessionUser } from './types';
+import { findUserById } from './userStore';
 
 export type AuthorizedRequest = Request & {
   user: SessionUser;
@@ -21,7 +22,7 @@ const getBearerToken = (authHeader: string | undefined): string | null => {
   return token;
 };
 
-export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+export const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   const token = getBearerToken(req.headers.authorization);
   if (!token) {
     res.status(401).json({ message: 'Требуется авторизация.' });
@@ -32,8 +33,17 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
     res.status(401).json({ message: 'Недействительный токен.' });
     return;
   }
-  (req as AuthorizedRequest).user = user;
-  next();
+  try {
+    const freshUser = await findUserById(user.id);
+    if (!freshUser) {
+      res.status(401).json({ message: 'ÐÐµÐ´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ñ‚Ð¾ÐºÐµÐ½.' });
+      return;
+    }
+    (req as AuthorizedRequest).user = freshUser;
+    next();
+  } catch {
+    res.status(500).json({ message: 'Server error.' });
+  }
 };
 
 export const requireRole = (...roles: Role[]) => (req: Request, res: Response, next: NextFunction) => {

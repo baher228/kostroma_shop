@@ -199,6 +199,13 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
     }
   };
 
+  const workerShopLabel = (user: ManagedUser) => {
+    if (!user.shopId) {
+      return 'Не назначен';
+    }
+    return shops.find((shop) => shop.id === user.shopId)?.name ?? user.shopName ?? user.shopId;
+  };
+
   const userById = useMemo(
     () => Object.fromEntries(users.map((user) => [user.id, user])) as Record<string, ManagedUser>,
     [users],
@@ -399,7 +406,7 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
                       <Text style={styles.shopAssignButtonText}>
                         {assigningUserId === user.id
                           ? 'Сохранение...'
-                          : `Магазин: ${user.shopName ?? 'Не назначен'} (нажмите для изменения)`}
+                          : `Магазин: ${workerShopLabel(user)} (нажмите для изменения)`}
                       </Text>
                     </Pressable>
                   )}

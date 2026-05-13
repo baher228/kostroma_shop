@@ -21,8 +21,9 @@ const userSelect = `
     u.role,
     u.password_hash,
     u.shop_id,
-    NULL::text AS shop_name
+    s.name AS shop_name
   FROM users u
+  LEFT JOIN shops s ON s.id = u.shop_id
 `;
 
 const composeFullName = (firstName: string, lastName: string): string => `${firstName} ${lastName}`.trim();

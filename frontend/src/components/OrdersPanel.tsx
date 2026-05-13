@@ -227,25 +227,42 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
               return (
                 <View key={row.productId} style={styles.orderCard}>
                   <Text style={styles.productName}>{row.name}</Text>
-                  <Text style={styles.productMeta}>
-                    Остаток: {currentStock ?? '-'} · Шт/кор: {row.unitsInPack ?? '-'} · Границы: {row.minStockUnits ?? '-'}
-                    /{row.maxStockUnits ?? '-'}
-                  </Text>
-                  <Text style={styles.productMeta}>Авто-рекомендация: {suggested > 0 ? `${suggested} кор.` : 'не требуется'}</Text>
+
+                  <View style={styles.orderSummaryRow}>
+                    <View style={[styles.summaryCard, styles.stockSummaryCard]}>
+                      <Text style={styles.summaryLabel}>Остаток</Text>
+                      <Text style={styles.stockValueText}>{currentStock ?? '-'}</Text>
+                      <Text style={styles.summaryHint}>на текущую дату</Text>
+                    </View>
+
+                    <View style={[styles.summaryCard, styles.orderSummaryCard]}>
+                      <Text style={styles.summaryLabel}>Заказ</Text>
+                      <TextInput
+                        value={packsByProduct[row.productId] ?? ''}
+                        onChangeText={(value) =>
+                          setPacksByProduct((current) => ({
+                            ...current,
+                            [row.productId]: value.replace(/[^0-9]/g, '').slice(0, 4),
+                          }))
+                        }
+                        style={styles.orderValueInput}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor="#7a8b7f"
+                      />
+                      <Text style={styles.summaryHint}>коробок</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.productMetaBlock}>
+                    <Text style={styles.productMetaLine}>Шт/кор: {row.unitsInPack ?? '-'}</Text>
+                    <Text style={styles.productMetaLine}>Границы: {row.minStockUnits ?? '-'} / {row.maxStockUnits ?? '-'}</Text>
+                    <Text style={styles.productMetaLine}>
+                      Авто-рекомендация: {suggested > 0 ? `${suggested} кор.` : 'не требуется'}
+                    </Text>
+                  </View>
+
                   <View style={styles.rowInputs}>
-                    <TextInput
-                      value={packsByProduct[row.productId] ?? ''}
-                      onChangeText={(value) =>
-                        setPacksByProduct((current) => ({
-                          ...current,
-                          [row.productId]: value.replace(/[^0-9]/g, '').slice(0, 4),
-                        }))
-                      }
-                      style={styles.input}
-                      keyboardType="number-pad"
-                      placeholder="Коробки"
-                      placeholderTextColor="#7a8b7f"
-                    />
                     <Pressable
                       style={[styles.saveButton, pending && styles.saveButtonDisabled]}
                       onPress={() => void createOrder(row)}
@@ -379,7 +396,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     marginBottom: 8,
-    gap: 7,
+    gap: 10,
   },
   productName: {
     fontSize: 14,
@@ -391,10 +408,76 @@ const styles = StyleSheet.create({
     color: '#4f6155',
     fontWeight: '600',
   },
+  orderSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'stretch',
+  },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 108,
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  stockSummaryCard: {
+    backgroundColor: '#edf6ef',
+    borderColor: '#bcd2c0',
+  },
+  orderSummaryCard: {
+    backgroundColor: '#f8fbf9',
+    borderColor: '#cfd9d1',
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#355443',
+    marginBottom: 6,
+  },
+  stockValueText: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '900',
+    color: '#1d3326',
+  },
+  orderValueInput: {
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: '900',
+    color: '#1d3326',
+    textAlign: 'left',
+    minHeight: 40,
+  },
+  summaryHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#5d7365',
+    fontWeight: '700',
+  },
+  productMetaBlock: {
+    borderRadius: 10,
+    backgroundColor: '#f7faf8',
+    borderWidth: 1,
+    borderColor: '#d9e2db',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    gap: 4,
+  },
+  productMetaLine: {
+    fontSize: 12,
+    color: '#4f6155',
+    fontWeight: '700',
+  },
   rowInputs: {
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   metaGrid: {
     flexDirection: 'row',

@@ -1181,6 +1181,24 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return styles.dashboardStockColumn;
   };
 
+  const dashboardHeaderTitleStyle = (column: DashboardColumn) => [
+    styles.dashboardHeaderTitle,
+    column.kind === 'stock' && styles.dashboardHeaderTitleStock,
+    column.kind === 'order' && !dashboardHeaderSubtitle(column) && styles.dashboardHeaderTitleExpanded,
+  ];
+
+  const dashboardHeaderSubtitleStyle = (column: DashboardColumn) => [
+    styles.dashboardHeaderSubtitle,
+    column.kind === 'stock' && styles.dashboardHeaderSubtitleStock,
+    !dashboardHeaderSubtitle(column) && styles.dashboardHeaderSubtitleHidden,
+  ];
+
+  const dashboardValueTextStyle = (column: DashboardColumn) => [
+    styles.valueText,
+    column.kind === 'stock' && styles.valueTextStock,
+    column.kind === 'order' && styles.valueTextOrder,
+  ];
+
   const renderDashboardCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
     <View key={category} style={styles.categoryBlock}>
       <View style={styles.categoryTitleRow}>
@@ -1228,8 +1246,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     dashboardHeaderToneStyle(column.tone),
                   ]}
                 >
-                  <Text style={styles.dashboardHeaderTitle}>{column.title}</Text>
-                  <Text style={styles.dashboardHeaderSubtitle}>{dashboardHeaderSubtitle(column)}</Text>
+                  <Text style={dashboardHeaderTitleStyle(column)}>{column.title}</Text>
+                  <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardHeaderSubtitle(column)}</Text>
                 </View>
               ))}
               <View style={[styles.headerCell, styles.actionColumn, styles.dashboardNameHeader]}>
@@ -1264,7 +1282,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                             value={value}
                             onChangeText={(nextValue) => setOrderCellValue(row.productId, manualOrderKey, nextValue)}
                             keyboardType="number-pad"
-                            style={styles.dashboardOrderInput}
+                            style={[styles.dashboardOrderInput, styles.dashboardOrderInputExpanded]}
                             maxLength={MAX_ORDER_VALUE_LEN}
                             placeholder="-"
                             placeholderTextColor="#6d7d72"
@@ -1293,7 +1311,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                             }
                           }}
                         >
-                          <Text style={styles.valueText}>{value || '-'}</Text>
+                          <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
                         </Pressable>
                       );
                     }
@@ -1308,7 +1326,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                           dashboardValueToneStyle(column.tone),
                         ]}
                       >
-                        <Text style={styles.valueText}>{value || '-'}</Text>
+                        <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
                       </View>
                     );
                   })}
@@ -2007,10 +2025,10 @@ const styles = StyleSheet.create({
     width: 62,
   },
   dashboardStockColumn: {
-    width: 72,
+    width: 124,
   },
   dashboardOrderColumn: {
-    width: 78,
+    width: 128,
   },
   dashboardMetricColumn: {
     width: 76,
@@ -2058,12 +2076,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
   },
+  dashboardHeaderTitleStock: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  dashboardHeaderTitleExpanded: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlignVertical: 'center',
+  },
   dashboardHeaderSubtitle: {
     fontSize: 9,
     color: '#1f2a21',
     fontWeight: '700',
     textAlign: 'center',
     lineHeight: 11,
+  },
+  dashboardHeaderSubtitleStock: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  dashboardHeaderSubtitleHidden: {
+    display: 'none',
   },
   dashboardHeaderNeutral: {
     backgroundColor: '#d9d9d9',
@@ -2106,12 +2142,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingVertical: 0,
   },
+  dashboardOrderInputExpanded: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
   pendingCell: {
     opacity: 0.6,
   },
   valueText: {
     color: '#223528',
     fontSize: 14,
+    fontWeight: '800',
+  },
+  valueTextStock: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  valueTextOrder: {
+    fontSize: 17,
     fontWeight: '800',
   },
   deleteButton: {

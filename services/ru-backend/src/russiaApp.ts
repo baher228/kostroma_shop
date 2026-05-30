@@ -4,14 +4,31 @@ import express, { Request, Response } from 'express';
 import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { getOpsJwks, signOpsToken, signSessionToken } from './auth';
-import { getWorkerCheckInStatus, upsertWorkerCheckInStatus } from './checkInStore';
+import {
+  getCheckInStats,
+  getWorkerCheckInStatus,
+  listWorkerCheckInEvents,
+  listWorkerCheckInStatuses,
+  upsertWorkerCheckInStatus,
+} from './checkInStore';
 import { config } from './config';
 import { AuthorizedRequest, requireAuth, requireRole } from './middleware';
 import { addSupportMessage, createSupportThread, getSupportThread, listSupportThreads } from './supportStore';
 import { createTask, deleteTask, listTasks, updateTaskStatus } from './taskStore';
-import { assignUserShop, createUser, findUserByUsername, findWorkerById, listUsers, listWorkers } from './userStore';
+import {
+  assignUserShop,
+  createUser,
+  deleteUser,
+  findUserByUsername,
+  findWorkerById,
+  listUsers,
+  listWorkers,
+  updateUser,
+  updateUserPassword,
+} from './userStore';
 import {
   assignUserShopSchema,
+  checkInStatsQuerySchema,
   createSupportMessageSchema,
   createSupportThreadSchema,
   createTaskSchema,
@@ -20,9 +37,29 @@ import {
   loginSchema,
   updateCheckInStatusSchema,
   updateTaskStatusSchema,
+  updateUserPasswordSchema,
+  updateUserSchema,
 } from './validation';
 
 const toValidationMessage = (error: ZodError): string => error.issues.map((issue) => issue.message).join(' ');
+const toStringParam = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const defaultCheckInRange = () => {
+  const now = new Date();
+  const day = now.getDay();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  start.setDate(start.getDate() + (day === 0 ? -6 : 1 - day));
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { from: toDateKey(start), to: toDateKey(end) };
+};
 
 export const createRussiaApp = () => {
   const app = express();
@@ -147,6 +184,77 @@ export const createRussiaApp = () => {
     }
   });
 
+  app.patch('/api/users/:id', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const payload = updateUserSchema.parse(req.body);
+      const patch = {
+        ...payload,
+        ...(payload.role === 'manager' ? { shopId: null } : {}),
+      };
+      const user = await updateUser(params.id, patch);
+      if (!user) {
+        res.status(404).json({ message: 'User not found.' });
+        return;
+      }
+      res.json({ user });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      const code = (error as { code?: string })?.code;
+      if (code === '23505') {
+        res.status(409).json({ message: 'A user with that username already exists.' });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to update user.' });
+    }
+  });
+
+  app.patch('/api/users/:id/password', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const payload = updateUserPasswordSchema.parse(req.body);
+      const passwordHash = await bcrypt.hash(payload.password, 12);
+      const updated = await updateUserPassword(params.id, passwordHash);
+      if (!updated) {
+        res.status(404).json({ message: 'User not found.' });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to update user password.' });
+    }
+  });
+
+  app.delete('/api/users/:id', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const currentUser = (req as AuthorizedRequest).user;
+      if (params.id === currentUser.id) {
+        res.status(400).json({ message: 'You cannot delete your own admin account while logged in.' });
+        return;
+      }
+      const removed = await deleteUser(params.id);
+      if (!removed) {
+        res.status(404).json({ message: 'User not found.' });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to delete user.' });
+    }
+  });
+
   app.get('/api/checkin/me', requireAuth, async (req: Request, res: Response) => {
     try {
       const user = (req as AuthorizedRequest).user;
@@ -154,6 +262,51 @@ export const createRussiaApp = () => {
       res.json({ status });
     } catch {
       res.status(500).json({ message: 'Failed to load check-in status.' });
+    }
+  });
+
+  app.get('/api/checkin/statuses', requireAuth, requireRole('manager'), async (_req: Request, res: Response) => {
+    try {
+      const statuses = await listWorkerCheckInStatuses();
+      res.json({ statuses });
+    } catch {
+      res.status(500).json({ message: 'Failed to load check-in statuses.' });
+    }
+  });
+
+  app.get('/api/checkin/events', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const defaults = defaultCheckInRange();
+      const query = checkInStatsQuerySchema.parse({
+        from: toStringParam(req.query.from) ?? defaults.from,
+        to: toStringParam(req.query.to) ?? defaults.to,
+      });
+      const events = await listWorkerCheckInEvents(query.from ?? defaults.from, query.to ?? defaults.to);
+      res.json({ events });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to load check-in events.' });
+    }
+  });
+
+  app.get('/api/checkin/stats', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const defaults = defaultCheckInRange();
+      const query = checkInStatsQuerySchema.parse({
+        from: toStringParam(req.query.from) ?? defaults.from,
+        to: toStringParam(req.query.to) ?? defaults.to,
+      });
+      const stats = await getCheckInStats(query.from ?? defaults.from, query.to ?? defaults.to);
+      res.json({ stats });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to load check-in statistics.' });
     }
   });
 

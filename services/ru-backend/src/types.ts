@@ -158,3 +158,42 @@ export type WorkerCheckInStatus = {
   status: 'in' | 'out';
   lastChangedAt: string;
 };
+
+export type WorkerCheckInEvent = {
+  id: string;
+  workerId: string;
+  workerDisplayName: string;
+  status: 'in' | 'out';
+  eventAt: string;
+};
+
+export type WorkerCheckInSummary = WorkerCheckInStatus & {
+  totalCheckIns: number;
+  daysPresent: number;
+  workedMinutes: number;
+  lateDays: number;
+  missingDays: number;
+};
+
+export type DailyCheckInSummary = {
+  date: string;
+  checkIns: number;
+  workedMinutes: number;
+  lateCount: number;
+  missingCount: number;
+};
+
+export type CheckInStats = {
+  from: string;
+  to: string;
+  expectedStartTime: string;
+  currentlyIn: number;
+  currentlyOut: number;
+  totalCheckIns: number;
+  workedMinutes: number;
+  lateCount: number;
+  missingCount: number;
+  workers: WorkerCheckInSummary[];
+  daily: DailyCheckInSummary[];
+  events: WorkerCheckInEvent[];
+};

@@ -5,7 +5,7 @@ import { ZodError } from 'zod';
 import { config } from './config';
 import { AuthorizedOpsRequest, requireOpsAuth, requireOpsRole, requireOpsScope } from './middleware';
 import { getOrderSheet, listOrderSheetValues, upsertOrderSheetValue } from './orderSheetStore';
-import { createSellerOrder, listSellerOrders } from './ordersStore';
+import { createSellerOrder, listSellerOrders, updateSellerOrderStatus } from './ordersStore';
 import {
   createProduct,
   createShop,
@@ -14,7 +14,9 @@ import {
   getShopById,
   getStockTable,
   listShops,
+  updateProduct,
   updateProductMeta,
+  updateShop,
   updateShopMachine,
   upsertStockValue,
 } from './store';
@@ -26,7 +28,10 @@ import {
   listStockTableQuerySchema,
   orderSheetQuerySchema,
   updateProductMetaSchema,
+  updateProductSchema,
   updateShopMachineSchema,
+  updateShopSchema,
+  updateSellerOrderStatusSchema,
   upsertOrderSheetValueSchema,
   upsertStockValueSchema,
 } from './validation';
@@ -102,6 +107,30 @@ export const createDubaiApp = () => {
         return;
       }
       res.status(500).json({ message: 'Failed to update shop machine.' });
+    }
+  });
+
+  app.patch('/api/shops/:id', requireOpsRole('manager'), requireOpsScope('shops:write'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const payload = updateShopSchema.parse(req.body);
+      const shop = await updateShop(params.id, payload);
+      if (!shop) {
+        res.status(404).json({ message: 'Shop not found.' });
+        return;
+      }
+      res.json({ shop });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      const code = (error as { code?: string })?.code;
+      if (code === '23505') {
+        res.status(409).json({ message: 'A shop with that name already exists.' });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to update shop.' });
     }
   });
 
@@ -203,6 +232,30 @@ export const createDubaiApp = () => {
     }
   });
 
+  app.patch('/api/stock/products/:id', requireOpsRole('manager'), requireOpsScope('products:write'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const payload = updateProductSchema.parse(req.body);
+      const updated = await updateProduct(params.id, payload);
+      if (!updated) {
+        res.status(404).json({ message: 'Product not found.' });
+        return;
+      }
+      res.json({ product: updated });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      const code = (error as { code?: string })?.code;
+      if (code === '23505') {
+        res.status(409).json({ message: 'A product with that name already exists.' });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to update product.' });
+    }
+  });
+
   app.put('/api/stock/value', requireOpsScope('stock:write'), async (req: Request, res: Response) => {
     try {
       const viewer = (req as AuthorizedOpsRequest).ops;
@@ -292,6 +345,26 @@ export const createDubaiApp = () => {
         return;
       }
       res.status(500).json({ message: 'Failed to create seller order.' });
+    }
+  });
+
+  app.patch('/api/orders/:id/status', requireOpsRole('manager'), requireOpsScope('orders:write'), async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const payload = updateSellerOrderStatusSchema.parse(req.body);
+      const viewer = (req as AuthorizedOpsRequest).ops;
+      const order = await updateSellerOrderStatus(viewer, params.id, payload.status);
+      if (!order) {
+        res.status(404).json({ message: 'Order not found.' });
+        return;
+      }
+      res.json({ order });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to update order status.' });
     }
   });
 

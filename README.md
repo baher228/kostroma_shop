@@ -73,9 +73,27 @@ npm run ios
 npm run web
 ```
 
+### Web Admin Dashboard
+
+The separate admin dashboard lives in `web-dashboard/` and talks directly to both split backends.
+
+```bash
+npm run dashboard:dev
+```
+
+Dashboard environment variables:
+
+```env
+VITE_RU_API_URL=http://localhost:4000
+VITE_DXB_API_URL=http://localhost:4001
+```
+
 ## Default Login
 
 ```text
+Username: admin
+Password: admin
+
 Username: manager
 Password: manager123
 ```

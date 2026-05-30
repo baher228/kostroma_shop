@@ -46,7 +46,7 @@ export const loginSchema = z.object({
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9._-]{3,32}$/, 'Username must be 3-32 chars: a-z, 0-9, ., _, -.'),
-  password: z.string().min(6).max(200),
+  password: z.string().min(5).max(200),
 });
 
 export const createRowSchema = z.object({
@@ -98,9 +98,30 @@ export const createUserSchema = z.object({
     .regex(/^[a-z0-9._-]{3,32}$/, 'Username must be 3-32 chars: a-z, 0-9, ., _, -.'),
   firstName: z.string().trim().min(2).max(80),
   lastName: z.string().trim().min(2).max(80),
-  password: z.string().min(6).max(200),
+  password: z.string().min(5).max(200),
   role: z.enum(['manager', 'worker']).default('worker'),
   shopId: z.string().trim().min(1).max(100).optional().nullable(),
+});
+
+export const updateUserSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9._-]{3,32}$/, 'Username must be 3-32 chars: a-z, 0-9, ., _, -.')
+      .optional(),
+    firstName: z.string().trim().min(2).max(80).optional(),
+    lastName: z.string().trim().min(2).max(80).optional(),
+    role: z.enum(['manager', 'worker']).optional(),
+    shopId: z.string().trim().min(1).max(100).optional().nullable(),
+  })
+  .refine((payload) => Object.keys(payload).length > 0, {
+    message: 'Empty update payload.',
+  });
+
+export const updateUserPasswordSchema = z.object({
+  password: z.string().min(5).max(200),
 });
 
 export const assignUserShopSchema = z.object({
@@ -194,6 +215,11 @@ export const createSellerOrderSchema = z.object({
 
 export const updateCheckInStatusSchema = z.object({
   status: z.enum(['in', 'out']),
+});
+
+export const checkInStatsQuerySchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export const orderSheetQuerySchema = z.object({

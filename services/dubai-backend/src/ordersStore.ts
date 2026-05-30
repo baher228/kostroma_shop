@@ -157,3 +157,65 @@ export const createSellerOrder = async (
   );
   return resolved.rows[0] ? mapOrder(resolved.rows[0]) : null;
 };
+
+export const updateSellerOrderStatus = async (
+  viewer: OpsTokenClaims,
+  orderId: string,
+  status: 'new' | 'processed',
+): Promise<SellerOrder | null> => {
+  const params: unknown[] = [status, orderId];
+  const conditions = ['o.id = $2'];
+
+  if (viewer.role === 'worker' || viewer.shopIds.length > 0) {
+    params.push(viewer.shopIds);
+    conditions.push(`o.shop_id = ANY($${params.length}::text[])`);
+  }
+
+  const result = await opsDb.query<SellerOrderRow>(
+    `
+      UPDATE seller_orders o
+      SET status = $1
+      WHERE ${conditions.join(' AND ')}
+      RETURNING
+        o.id,
+        o.shop_id,
+        NULL::text AS shop_name,
+        o.product_id,
+        ''::text AS product_name,
+        o.stock_on_hand,
+        o.requested_packs,
+        o.requested_units,
+        o.auto_suggested,
+        o.status,
+        o.created_at;
+    `,
+    params,
+  );
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  const resolved = await opsDb.query<SellerOrderRow>(
+    `
+      SELECT
+        o.id,
+        o.shop_id,
+        s.name AS shop_name,
+        o.product_id,
+        sp.name AS product_name,
+        o.stock_on_hand,
+        o.requested_packs,
+        o.requested_units,
+        o.auto_suggested,
+        o.status,
+        o.created_at
+      FROM seller_orders o
+      JOIN stock_products sp ON sp.id = o.product_id
+      LEFT JOIN shops s ON s.id = o.shop_id
+      WHERE o.id = $1
+      LIMIT 1;
+    `,
+    [result.rows[0].id],
+  );
+  return resolved.rows[0] ? mapOrder(resolved.rows[0]) : null;
+};

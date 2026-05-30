@@ -188,6 +188,40 @@ export const updateShopMachine = async (shopId: string, machineNumber: number): 
   return result.rows[0] ? mapShop(result.rows[0]) : null;
 };
 
+export const updateShop = async (
+  shopId: string,
+  patch: { name?: string; machineNumber?: number },
+): Promise<Shop | null> => {
+  const updates: string[] = [];
+  const params: unknown[] = [];
+  let index = 1;
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
+    updates.push(`name = $${index++}`);
+    params.push(patch.name?.trim());
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'machineNumber')) {
+    updates.push(`machine_number = $${index++}`);
+    params.push(patch.machineNumber);
+  }
+
+  if (!updates.length) {
+    return getShopById(shopId);
+  }
+
+  params.push(shopId);
+  const result = await opsDb.query<ShopDbRow>(
+    `
+      UPDATE shops
+      SET ${updates.join(', ')}
+      WHERE id = $${index}
+      RETURNING id, name, machine_number;
+    `,
+    params,
+  );
+  return result.rows[0] ? mapShop(result.rows[0]) : null;
+};
+
 export const deleteShop = async (shopId: string): Promise<boolean> => {
   const result = await opsDb.query(
     `
@@ -293,6 +327,73 @@ export const updateProductMeta = async (
     params,
   );
 
+  return result.rows[0] ? mapProduct(result.rows[0]) : null;
+};
+
+export const updateProduct = async (
+  productId: string,
+  patch: Partial<CreateProductInput>,
+): Promise<StockProduct | null> => {
+  const updates: string[] = [];
+  const params: unknown[] = [];
+  let index = 1;
+
+  const addUpdate = (column: string, value: unknown) => {
+    updates.push(`${column} = $${index++}`);
+    params.push(value);
+  };
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
+    addUpdate('name', patch.name?.trim());
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'category')) {
+    addUpdate('category', patch.category);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'packType')) {
+    addUpdate('pack_type', patch.packType?.trim());
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'unitsInPack')) {
+    addUpdate('units_in_pack', patch.unitsInPack);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'packWeightKg')) {
+    addUpdate('pack_weight_kg', patch.packWeightKg);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'shelfLifeDays')) {
+    addUpdate('shelf_life_days', patch.shelfLifeDays);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'unitPriceRubVat')) {
+    addUpdate('unit_price_rub_vat', patch.unitPriceRubVat);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'minStockUnits')) {
+    addUpdate('min_stock_units', patch.minStockUnits);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'maxStockUnits')) {
+    addUpdate('max_stock_units', patch.maxStockUnits);
+  }
+
+  if (!updates.length) {
+    const current = await opsDb.query<ProductDbRow>(
+      `
+        SELECT id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
+        FROM stock_products
+        WHERE id = $1
+        LIMIT 1;
+      `,
+      [productId],
+    );
+    return current.rows[0] ? mapProduct(current.rows[0]) : null;
+  }
+
+  params.push(productId);
+  const result = await opsDb.query<ProductDbRow>(
+    `
+      UPDATE stock_products
+      SET ${updates.join(', ')}
+      WHERE id = $${index}
+      RETURNING id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
+    `,
+    params,
+  );
   return result.rows[0] ? mapProduct(result.rows[0]) : null;
 };
 

@@ -21,9 +21,8 @@ const userSelect = `
     u.role,
     u.password_hash,
     u.shop_id,
-    s.name AS shop_name
+    NULL::text AS shop_name
   FROM users u
-  LEFT JOIN shops s ON s.id = u.shop_id
 `;
 
 const composeFullName = (firstName: string, lastName: string): string => `${firstName} ${lastName}`.trim();
@@ -170,4 +169,85 @@ export const assignUserShop = async (userId: string, shopId: string | null): Pro
     [userId],
   );
   return result.rows[0] ? mapSessionUser(result.rows[0]) : null;
+};
+
+export const updateUser = async (
+  userId: string,
+  patch: {
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+    role?: Role;
+    shopId?: string | null;
+  },
+): Promise<SessionUser | null> => {
+  const updates: string[] = [];
+  const params: unknown[] = [];
+  let index = 1;
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'username')) {
+    updates.push(`username = $${index++}`);
+    params.push(patch.username?.trim().toLowerCase());
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'firstName')) {
+    updates.push(`first_name = $${index++}`);
+    params.push(patch.firstName?.trim());
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'lastName')) {
+    updates.push(`last_name = $${index++}`);
+    params.push(patch.lastName?.trim());
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'role')) {
+    updates.push(`role = $${index++}`);
+    params.push(patch.role);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'shopId')) {
+    updates.push(`shop_id = $${index++}`);
+    params.push(patch.shopId ?? null);
+  }
+
+  if (updates.length) {
+    params.push(userId);
+    await personalDb.query(
+      `
+        UPDATE users
+        SET ${updates.join(', ')}
+        WHERE id = $${index};
+      `,
+      params,
+    );
+  }
+
+  const result = await personalDb.query<UserDbRow>(
+    `
+      ${userSelect}
+      WHERE u.id = $1
+      LIMIT 1;
+    `,
+    [userId],
+  );
+  return result.rows[0] ? mapSessionUser(result.rows[0]) : null;
+};
+
+export const updateUserPassword = async (userId: string, passwordHash: string): Promise<boolean> => {
+  const result = await personalDb.query(
+    `
+      UPDATE users
+      SET password_hash = $1
+      WHERE id = $2;
+    `,
+    [passwordHash, userId],
+  );
+  return (result.rowCount ?? 0) > 0;
+};
+
+export const deleteUser = async (userId: string): Promise<boolean> => {
+  const result = await personalDb.query(
+    `
+      DELETE FROM users
+      WHERE id = $1;
+    `,
+    [userId],
+  );
+  return (result.rowCount ?? 0) > 0;
 };

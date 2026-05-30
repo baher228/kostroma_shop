@@ -46,7 +46,7 @@ export const loginSchema = z.object({
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9._-]{3,32}$/, 'Username must be 3-32 chars: a-z, 0-9, ., _, -.'),
-  password: z.string().min(6).max(200),
+  password: z.string().min(5).max(200),
 });
 
 export const createRowSchema = z.object({
@@ -73,6 +73,13 @@ export const createRowSchema = z.object({
 
 const nullablePositiveInt = z.union([z.number().int().positive(), z.null()]);
 const machineNumberSchema = z.number().int().min(1).max(3);
+const productCategorySchema = z.enum([
+  '\u0419\u043e\u0433\u0443\u0440\u0442\u044b',
+  '\u041a\u0435\u0444\u0438\u0440, \u0420\u044f\u0436\u0435\u043d\u043a\u0430, \u0421\u043d\u0435\u0436\u043e\u043a',
+  '\u041c\u043e\u043b\u043e\u043a\u043e',
+  '\u0421\u043c\u0435\u0442\u0430\u043d\u0430',
+  '\u0422\u0432\u043e\u0440\u043e\u0433',
+]);
 
 export const updateRowSchema = z
   .object({
@@ -107,7 +114,7 @@ export const createUserSchema = z.object({
     .regex(/^[a-z0-9._-]{3,32}$/, 'Username must be 3-32 chars: a-z, 0-9, ., _, -.'),
   firstName: z.string().trim().min(2).max(80),
   lastName: z.string().trim().min(2).max(80),
-  password: z.string().min(6).max(200),
+  password: z.string().min(5).max(200),
   role: z.enum(['manager', 'worker']).default('worker'),
   shopId: z.string().trim().min(1).max(100).optional().nullable(),
 });
@@ -120,6 +127,16 @@ export const createShopSchema = z.object({
   name: z.string().trim().min(2).max(140),
   machineNumber: machineNumberSchema.optional().default(1),
 });
+
+export const updateShopSchema = z
+  .object({
+    name: z.string().trim().min(2).max(140).optional(),
+    machineNumber: machineNumberSchema.optional(),
+  })
+  .strict()
+  .refine((payload) => Object.keys(payload).length > 0, {
+    message: 'Empty update payload.',
+  });
 
 export const updateShopMachineSchema = z.object({
   machineNumber: machineNumberSchema,
@@ -171,6 +188,32 @@ export const updateProductMetaSchema = z
     },
   );
 
+export const updateProductSchema = z
+  .object({
+    name: z.string().trim().min(2).max(140).optional(),
+    category: productCategorySchema.optional(),
+    packType: z.string().trim().min(1).max(40).optional(),
+    unitsInPack: z.number().int().positive().max(9999).optional(),
+    packWeightKg: z.number().positive().max(99999).optional(),
+    shelfLifeDays: z.number().int().positive().max(9999).optional(),
+    unitPriceRubVat: z.number().min(0).max(999999).optional(),
+    minStockUnits: z.number().int().min(0).max(999999).optional(),
+    maxStockUnits: z.number().int().min(0).max(999999).optional(),
+  })
+  .strict()
+  .refine((payload) => Object.keys(payload).length > 0, {
+    message: 'Empty update payload.',
+  })
+  .refine(
+    (payload) =>
+      payload.minStockUnits === undefined ||
+      payload.maxStockUnits === undefined ||
+      payload.minStockUnits <= payload.maxStockUnits,
+    {
+      message: 'Min stock cannot exceed max stock.',
+    },
+  );
+
 const supportBodySchema = z.string().trim().max(2000).optional();
 const supportPhotoUrlSchema = z.string().trim().url().optional().nullable();
 
@@ -200,6 +243,10 @@ export const createSellerOrderSchema = z.object({
   requestedUnits: z.number().int().min(1).max(99999),
   autoSuggested: z.boolean().optional().default(false),
 }).strict();
+
+export const updateSellerOrderStatusSchema = z.object({
+  status: z.enum(['new', 'processed']),
+});
 
 export const updateCheckInStatusSchema = z.object({
   status: z.enum(['in', 'out']),

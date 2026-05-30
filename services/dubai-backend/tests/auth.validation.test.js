@@ -7,6 +7,9 @@ const {
   createRowSchema,
   createSellerOrderSchema,
   updateProductMetaSchema,
+  updateProductSchema,
+  updateSellerOrderStatusSchema,
+  updateShopSchema,
   upsertStockValueSchema,
 } = require('../dist/validation');
 
@@ -53,6 +56,18 @@ test('Dubai order schema rejects personal and free-text fields', () => {
   }));
 });
 
+test('Dubai mirrored auth schemas accept admin password length', () => {
+  const { loginSchema, createUserSchema } = require('../dist/validation');
+  assert.equal(loginSchema.parse({ username: 'admin', password: 'admin' }).password, 'admin');
+  assert.equal(createUserSchema.parse({
+    username: 'worker.short',
+    firstName: 'Short',
+    lastName: 'Password',
+    password: 'admin',
+    role: 'worker',
+  }).password, 'admin');
+});
+
 test('Dubai stock schemas validate operational fields', () => {
   const product = createRowSchema.parse({
     name: ' Apples ',
@@ -94,6 +109,20 @@ test('Dubai stock schemas validate operational fields', () => {
     value: '12',
   }).value, '12');
   assert.equal(updateProductMetaSchema.parse({ unitsInPack: 6 }).unitsInPack, 6);
+  assert.equal(updateProductSchema.parse({
+    name: 'Updated apples',
+    category: '\u041c\u043e\u043b\u043e\u043a\u043e',
+    packType: 'box',
+    unitsInPack: 8,
+    packWeightKg: 4,
+    shelfLifeDays: 12,
+    unitPriceRubVat: 99.5,
+    minStockUnits: 2,
+    maxStockUnits: 14,
+  }).maxStockUnits, 14);
+  assert.throws(() => updateProductSchema.parse({ minStockUnits: 4, maxStockUnits: 2 }));
+  assert.equal(updateShopSchema.parse({ name: ' Shop 2 ', machineNumber: 2 }).name, 'Shop 2');
+  assert.equal(updateSellerOrderStatusSchema.parse({ status: 'processed' }).status, 'processed');
 });
 
 test('Dubai app rejects personal session tokens before route handlers run', async (t) => {

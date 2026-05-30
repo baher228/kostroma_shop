@@ -105,6 +105,61 @@ Password: manager123
 - Russia PostgreSQL: `localhost:5433`
 - Dubai PostgreSQL: `localhost:5434`
 
+## CI/CD
+
+GitHub Actions workflows are included for three jobs:
+
+- `CI` — runs on push / pull request to `main` or `master`, installs all dependencies, typechecks frontend + backends, runs backend tests, validates Docker Compose, and builds both backend Docker images.
+- `Deploy backend` — deploys the RU and/or Dubai backend over SSH with `rsync`, then runs the matching Docker Compose file on the target server.
+- `Build Android app` — manual EAS workflow for `preview` APK or `production` AAB builds.
+
+### GitHub Secrets / Environments
+
+Create two GitHub Environments:
+
+- `production-ru`
+- `production-dubai`
+
+Add these secrets to each environment:
+
+- `SSH_HOST`
+- `SSH_PORT` (optional, defaults to `22`)
+- `SSH_USER`
+- `SSH_PRIVATE_KEY`
+- `APP_PATH`
+- `ENV_FILE`
+
+`ENV_FILE` should contain the full `.env` content for that server.
+
+Also add this repository secret for Android builds:
+
+- `EXPO_TOKEN`
+
+### Example `ENV_FILE` Secret
+
+Russia environment:
+
+```env
+JWT_SECRET=change_me_long_random_secret
+OPS_JWT_SECRET=change_me_same_value_as_dubai_for_dev_or_use_rs256_keys
+CORS_ORIGIN=https://your-frontend-domain.example
+PERSONAL_POSTGRES_PASSWORD=change_me
+PERSONAL_POSTGRES_DB=analitika_personal
+PERSONAL_POSTGRES_USER=analitika
+RU_BACKEND_PUBLIC_PORT=4000
+```
+
+Dubai environment:
+
+```env
+OPS_JWT_SECRET=change_me_same_value_as_russia_for_dev_or_use_rs256_keys
+CORS_ORIGIN=https://your-frontend-domain.example
+OPS_POSTGRES_PASSWORD=change_me
+OPS_POSTGRES_DB=analitika_ops
+OPS_POSTGRES_USER=analitika
+DXB_BACKEND_PUBLIC_PORT=4001
+```
+
 ## Deploy On Separate Servers
 
 The code can live in one Git repo. The running services should be separate.

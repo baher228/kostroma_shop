@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ci-jwt-secret
+      OPS_JWT_SECRET: ci-ops-jwt-secret
+      CORS_ORIGIN: http://localhost:19006
+      PERSONAL_POSTGRES_PASSWORD: ci-personal-password
+      OPS_POSTGRES_PASSWORD: ci-ops-password
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            services/ru-backend/package-lock.json
+            services/dubai-backend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install RU backend dependencies
+        run: npm --prefix services/ru-backend ci
+
+      - name: Install Dubai backend dependencies
+        run: npm --prefix services/dubai-backend ci
+
+      - name: Install web dashboard dependencies
+        run: npm --prefix web-dashboard ci
+
+      - name: Run backend/mobile CI checks
+        run: npm run ci
+
+      - name: Build web dashboard
+        run: npm run dashboard:build
+
+      - name: Build RU backend Docker image
+        run: docker build -t analitika-ru-ci ./services/ru-backend
+
+      - name: Build Dubai backend Docker image
+        run: docker build -t analitika-dubai-ci ./services/dubai-backend

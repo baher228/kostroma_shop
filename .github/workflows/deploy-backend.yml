@@ -1,0 +1,125 @@
+name: Deploy backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: Backend region to deploy
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ru
+          - dubai
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/deploy-backend.yml'
+      - 'docker-compose.ru.yml'
+      - 'docker-compose.dubai.yml'
+      - 'services/ru-backend/**'
+      - 'services/dubai-backend/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  deploy-ru:
+    if: github.event_name == 'push' || inputs.region == 'all' || inputs.region == 'ru'
+    runs-on: ubuntu-latest
+    environment: production-ru
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync project files
+        env:
+          APP_PATH: ${{ secrets.APP_PATH }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude 'node_modules/' \
+            --exclude '.expo/' \
+            --exclude 'android/app/build/' \
+            --exclude 'services/ru-backend/dist/' \
+            --exclude 'services/dubai-backend/dist/' \
+            -e "ssh -p $PORT" \
+            ./ "$SSH_USER@$SSH_HOST:$APP_PATH/"
+
+      - name: Deploy RU backend
+        env:
+          APP_PATH: ${{ secrets.APP_PATH }}
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_PATH'"
+          printf '%s' "$ENV_FILE" | ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && cat > .env && docker compose -f docker-compose.ru.yml up -d --build && docker image prune -f"
+
+  deploy-dubai:
+    if: github.event_name == 'push' || inputs.region == 'all' || inputs.region == 'dubai'
+    runs-on: ubuntu-latest
+    environment: production-dubai
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync project files
+        env:
+          APP_PATH: ${{ secrets.APP_PATH }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude 'node_modules/' \
+            --exclude '.expo/' \
+            --exclude 'android/app/build/' \
+            --exclude 'services/ru-backend/dist/' \
+            --exclude 'services/dubai-backend/dist/' \
+            -e "ssh -p $PORT" \
+            ./ "$SSH_USER@$SSH_HOST:$APP_PATH/"
+
+      - name: Deploy Dubai backend
+        env:
+          APP_PATH: ${{ secrets.APP_PATH }}
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_PATH'"
+          printf '%s' "$ENV_FILE" | ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && cat > .env && docker compose -f docker-compose.dubai.yml up -d --build && docker image prune -f"

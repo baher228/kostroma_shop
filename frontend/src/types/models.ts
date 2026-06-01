@@ -159,6 +159,14 @@ export type WorkerCheckInStatus = {
   lastChangedAt: string;
 };
 
+export type WorkerCheckInEvent = {
+  id: string;
+  workerId: string;
+  workerDisplayName: string;
+  status: 'in' | 'out';
+  eventAt: string;
+};
+
 export type OrderValueEntry = {
   shopId: string;
   productId: string;

@@ -2,6 +2,7 @@ import {
   CheckInStats,
   ManagedUser,
   OrderSheet,
+  OrderValueEntry,
   ProductPayload,
   SellerOrder,
   Session,
@@ -175,6 +176,17 @@ export const api = {
     },
     updateValue: async (token: string, payload: { shopId: string; productId: string; date: string; value: string }) => {
       await dxbRequest<{}>('/api/stock/value', { method: 'PUT', token, body: payload });
+    },
+    listShopOrderValues: async (token: string, shopId: string, from: string, to: string) =>
+      (await dxbRequest<{ orderValues: OrderValueEntry[] }>(
+        `/api/stock/order-values${query({ shopId, from, to })}`,
+        { token },
+      )).orderValues,
+    updateOrderValue: async (
+      token: string,
+      payload: { shopId: string; productId: string; orderDate: string; packs: number },
+    ) => {
+      await dxbRequest<{}>('/api/stock/order-values', { method: 'PUT', token, body: payload });
     },
   },
   orders: {

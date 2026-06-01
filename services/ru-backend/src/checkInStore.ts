@@ -122,29 +122,46 @@ export const upsertWorkerCheckInStatus = async (input: {
   workerDisplayName: string;
   status: 'in' | 'out';
 }): Promise<WorkerCheckInStatus> => {
-  const result = await personalDb.query<WorkerCheckInStatusRow>(
-    `
-      INSERT INTO worker_checkin_status (worker_id, worker_display_name, status, last_changed_at)
-      VALUES ($1, $2, $3, NOW())
-      ON CONFLICT (worker_id)
-      DO UPDATE SET
-        worker_display_name = EXCLUDED.worker_display_name,
-        status = EXCLUDED.status,
-        last_changed_at = NOW()
-      RETURNING worker_id, worker_display_name, status, last_changed_at;
-    `,
-    [input.workerId, input.workerDisplayName, input.status],
-  );
+  const recorded = await recordWorkerCheckIn(input);
+  return recorded.status;
+};
 
-  await personalDb.query(
-    `
-      INSERT INTO worker_checkin_events (id, worker_id, worker_display_name, status, event_at)
-      VALUES ($1, $2, $3, $4, NOW());
-    `,
-    [generateEventId(), input.workerId, input.workerDisplayName, input.status],
-  );
+export const recordWorkerCheckIn = async (input: {
+  workerId: string;
+  workerDisplayName: string;
+  status: 'in' | 'out';
+}): Promise<{ status: WorkerCheckInStatus; event: WorkerCheckInEvent }> => {
+  await personalDb.query('BEGIN;');
+  try {
+    const statusResult = await personalDb.query<WorkerCheckInStatusRow>(
+      `
+        INSERT INTO worker_checkin_status (worker_id, worker_display_name, status, last_changed_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (worker_id)
+        DO UPDATE SET
+          worker_display_name = EXCLUDED.worker_display_name,
+          status = EXCLUDED.status,
+          last_changed_at = NOW()
+        RETURNING worker_id, worker_display_name, status, last_changed_at;
+      `,
+      [input.workerId, input.workerDisplayName, input.status],
+    );
 
-  return mapStatus(result.rows[0]);
+    const eventResult = await personalDb.query<WorkerCheckInEventRow>(
+      `
+        INSERT INTO worker_checkin_events (id, worker_id, worker_display_name, status, event_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        RETURNING id, worker_id, worker_display_name, status, event_at;
+      `,
+      [generateEventId(), input.workerId, input.workerDisplayName, input.status],
+    );
+
+    await personalDb.query('COMMIT;');
+    return { status: mapStatus(statusResult.rows[0]), event: mapEvent(eventResult.rows[0]) };
+  } catch (error) {
+    await personalDb.query('ROLLBACK;').catch(() => {});
+    throw error;
+  }
 };
 
 const workedMinutesForEvents = (events: WorkerCheckInEvent[], rangeEnd: string): number => {

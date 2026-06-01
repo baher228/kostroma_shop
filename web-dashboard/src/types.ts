@@ -36,6 +36,7 @@ export type Product = {
   minStockUnits: number | null;
   maxStockUnits: number | null;
   values: Record<string, string>;
+  dashboardOverrides?: Record<string, string>;
 };
 
 export type StockTable = {
@@ -44,6 +45,13 @@ export type StockTable = {
   to: string;
   dates: string[];
   rows: Product[];
+};
+
+export type OrderValueEntry = {
+  shopId: string;
+  productId: string;
+  orderDate: string;
+  packs: number;
 };
 
 export type ManagedUser = SessionUser;

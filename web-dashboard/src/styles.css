@@ -365,6 +365,33 @@ td.sticky {
   background: #fff;
 }
 
+.stock-table {
+  table-layout: fixed;
+}
+
+.stock-table th:not(.sticky),
+.stock-table td:not(.sticky) {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  white-space: normal;
+  text-align: center;
+}
+
+.stock-table .actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.stock-table .actions button {
+  width: 100%;
+}
+
+.stock-table .cell-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .cell-input {
   width: 58px;
   text-align: center;

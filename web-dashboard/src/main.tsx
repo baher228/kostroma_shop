@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
 import './styles.css';
+import { sortProductsLikeImage } from './productOrdering';
 import {
   CheckInStats,
   ManagedUser,
@@ -866,7 +867,7 @@ const ProductsPanel = ({ session }: { session: Session }) => {
       </form>
       {loading ? <p>Загружаем остатки...</p> : table && (
         <div className="table-scroll">
-          <table>
+          <table className="stock-table">
             <thead>
               <tr>
                 <th className="sticky">Товар</th>
@@ -975,6 +976,11 @@ const OrdersPanel = ({ session }: { session: Session }) => {
         ? row.category as ProductCategory
         : PRODUCT_CATEGORIES[0];
       grouped[category].push(row);
+    }
+    for (const category of PRODUCT_CATEGORIES) {
+      grouped[category] = sortProductsLikeImage(
+        grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category as ProductCategory })),
+      ).map(({ name: _name, ...row }) => row as OrderSheetRow);
     }
     return grouped;
   };

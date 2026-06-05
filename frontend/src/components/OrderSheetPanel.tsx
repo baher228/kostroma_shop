@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { ordersApi } from '../api/orders';
+import { sortProductsLikeImage } from '../constants/productOrdering';
 import { OrderSheet, OrderSheetRow, Session, Shop } from '../types/models';
 
 type OrderSheetPanelProps = {
@@ -157,6 +158,11 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
         ? row.category
         : PRODUCT_CATEGORIES[0];
       grouped[category].push(row);
+    }
+    for (const category of PRODUCT_CATEGORIES) {
+      grouped[category] = sortProductsLikeImage(
+        grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category as (typeof PRODUCT_CATEGORIES)[number] })),
+      ).map(({ name: _name, ...row }) => row as OrderSheetRow);
     }
     return grouped;
   }, [query, sheet]);

@@ -293,28 +293,31 @@ export const createDubaiApp = () => {
 
   app.put('/api/stock/order-values', requireOpsRole('manager'), requireOpsScope('orders:write'), async (req: Request, res: Response) => {
     try {
-      const { shopId, productId, orderDate, packs } = req.body as {
-        shopId: string;
-        productId: string;
-        orderDate: string;
-        packs: number;
-      };
-      if (!shopId || !productId || !orderDate || typeof packs !== 'number') {
-        res.status(400).json({ message: 'shopId, productId, orderDate, and packs required.' });
-        return;
-      }
+      const payload = upsertOrderSheetValueSchema.parse({
+        shopId: toStringParam((req.body as Record<string, unknown>)?.shopId),
+        productId: toStringParam((req.body as Record<string, unknown>)?.productId),
+        date: toStringParam((req.body as Record<string, unknown>)?.orderDate),
+        value:
+          typeof (req.body as Record<string, unknown>)?.packs === 'number'
+            ? String((req.body as Record<string, number>).packs)
+            : '',
+      });
       const ok = await upsertOrderSheetValue({
-        shopId,
-        productId,
-        date: orderDate,
-        value: packs > 0 ? String(packs) : '',
+        shopId: payload.shopId,
+        productId: payload.productId,
+        date: payload.date,
+        value: payload.value === '0' ? '' : payload.value,
       });
       if (!ok) {
         res.status(404).json({ message: 'Unable to update order value.' });
         return;
       }
       res.status(204).send();
-    } catch {
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
       res.status(500).json({ message: 'Failed to update order value.' });
     }
   });

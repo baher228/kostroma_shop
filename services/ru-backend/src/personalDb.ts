@@ -9,4 +9,5 @@ export const personalDb = createDatabase({
   password: config.personalDbPassword,
   database: config.personalDbName,
   ssl: config.personalDbSsl,
+  sslRejectUnauthorized: config.personalDbSslRejectUnauthorized,
 });

@@ -24,6 +24,7 @@ import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
 import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
+import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
 
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
 type ManagerStockView = 'dashboard' | 'calendar';
@@ -528,6 +529,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     for (const row of visibleRows) {
       const category = PRODUCT_CATEGORIES.includes(row.category) ? row.category : DEFAULT_PRODUCT_CATEGORY;
       grouped[category].push(row);
+    }
+    for (const category of PRODUCT_CATEGORIES) {
+      grouped[category] = sortStockTableRowsLikeImage(grouped[category]);
     }
     return grouped;
   }, [visibleRows]);

@@ -12,7 +12,7 @@ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS stock_products (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
-  category TEXT NOT NULL DEFAULT 'Ð™Ð¾Ð³ÑƒÑ€Ñ‚Ñ‹',
+  category TEXT NOT NULL DEFAULT 'Йогурты',
   pack_type TEXT NULL,
   units_in_pack INTEGER NULL CHECK (units_in_pack IS NULL OR units_in_pack > 0),
   pack_weight_kg NUMERIC(10, 3) NULL CHECK (pack_weight_kg IS NULL OR pack_weight_kg > 0),
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS stock_products (
   max_stock_units INTEGER NULL CHECK (max_stock_units IS NULL OR max_stock_units >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (min_stock_units IS NULL OR max_stock_units IS NULL OR min_stock_units <= max_stock_units),
-  CHECK (category IN ('Ð™Ð¾Ð³ÑƒÑ€Ñ‚Ñ‹', 'ÐšÐµÑ„Ð¸Ñ€, Ð ÑÐ¶ÐµÐ½ÐºÐ°, Ð¡Ð½ÐµÐ¶Ð¾Ðº', 'ÐœÐ¾Ð»Ð¾ÐºÐ¾', 'Ð¡Ð¼ÐµÑ‚Ð°Ð½Ð°', 'Ð¢Ð²Ð¾Ñ€Ð¾Ð³'))
+  CHECK (category IN ('Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'))
 );
 
 CREATE INDEX IF NOT EXISTS stock_products_category_idx ON stock_products (category);
@@ -31,9 +31,9 @@ INSERT INTO stock_products (
   id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, created_at
 )
 VALUES
-  ('prod_yogurt_apricot', 'Йогурт Абрикос 2,5% ПЭТ 480 г', 'Ð™Ð¾Ð³ÑƒÑ€Ñ‚Ñ‹', 'ПЭТ', 6, 2.88, 21, 47.46, NOW()),
-  ('prod_kefir_1', 'Кефир 1.0% ПЭТ 480 гр.', 'ÐšÐµÑ„Ð¸Ñ€, Ð ÑÐ¶ÐµÐ½ÐºÐ°, Ð¡Ð½ÐµÐ¶Ð¾Ðº', 'ПЭТ', 6, 2.88, 14, 40.47, NOW()),
-  ('prod_milk_32', 'Молоко 3,2% ПЭТ 930 мл', 'ÐœÐ¾Ð»Ð¾ÐºÐ¾', 'ПЭТ', 6, 5.58, 14, 68.61, NOW())
+  ('prod_yogurt_apricot', 'Йогурт Абрикос 2,5% ПЭТ 480 г', 'Йогурты', 'ПЭТ', 6, 2.88, 21, 47.46, NOW()),
+  ('prod_kefir_1', 'Кефир 1.0% ПЭТ 480 гр.', 'Кефир, Ряженка, Снежок', 'ПЭТ', 6, 2.88, 14, 40.47, NOW()),
+  ('prod_milk_32', 'Молоко 3,2% ПЭТ 930 мл', 'Молоко', 'ПЭТ', 6, 5.58, 14, 68.61, NOW())
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS stock_values (

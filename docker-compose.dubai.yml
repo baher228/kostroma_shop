@@ -21,8 +21,8 @@ services:
 
   backend-dubai:
     build:
-      context: ./services/dubai-backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/dubai-backend/Dockerfile
     container_name: analitika-backend-dubai
     restart: unless-stopped
     depends_on:

@@ -9,7 +9,7 @@ import {
   getWorkerCheckInStatus,
   listWorkerCheckInEvents,
   listWorkerCheckInStatuses,
-  upsertWorkerCheckInStatus,
+  recordWorkerCheckIn,
 } from './checkInStore';
 import { config } from './config';
 import { AuthorizedRequest, requireAuth, requireRole } from './middleware';
@@ -318,12 +318,12 @@ export const createRussiaApp = () => {
         return;
       }
       const payload = updateCheckInStatusSchema.parse(req.body);
-      const status = await upsertWorkerCheckInStatus({
+      const result = await recordWorkerCheckIn({
         workerId: user.id,
         workerDisplayName: user.fullName,
         status: payload.status,
       });
-      res.json({ status });
+      res.json(result);
     } catch (error) {
       if (error instanceof ZodError) {
         res.status(400).json({ message: toValidationMessage(error) });

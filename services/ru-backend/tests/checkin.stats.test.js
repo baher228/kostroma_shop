@@ -13,6 +13,9 @@ test('check-in update writes current status and event history', async () => {
       personalDb: {
         query: async (sql, params = []) => {
           calls.push({ sql, params });
+          if (sql === 'BEGIN;' || sql === 'COMMIT;' || sql === 'ROLLBACK;') {
+            return { rows: [] };
+          }
           if (sql.includes('INSERT INTO worker_checkin_status')) {
             return {
               rows: [{
@@ -24,7 +27,15 @@ test('check-in update writes current status and event history', async () => {
             };
           }
           if (sql.includes('INSERT INTO worker_checkin_events')) {
-            return { rows: [] };
+            return {
+              rows: [{
+                id: params[0],
+                worker_id: params[1],
+                worker_display_name: params[2],
+                status: params[3],
+                event_at: '2026-05-17T07:55:00.000Z',
+              }],
+            };
           }
           throw new Error(`Unexpected SQL: ${sql}`);
         },
@@ -44,6 +55,7 @@ test('check-in update writes current status and event history', async () => {
   assert.equal(status.status, 'in');
   assert.equal(calls.some((call) => call.sql.includes('INSERT INTO worker_checkin_status')), true);
   assert.equal(calls.some((call) => call.sql.includes('INSERT INTO worker_checkin_events')), true);
+  assert.equal(calls.some((call) => call.sql === 'COMMIT;'), true);
 });
 
 test('check-in stats calculate hours, late and missing days', async () => {

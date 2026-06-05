@@ -30,6 +30,77 @@ type MachineGroup = {
 };
 const MACHINE_NUMBERS: MachineNumber[] = [1, 2, 3];
 const ALLOWED_ORDER_WEEKDAYS = new Set([2, 4, 6]);
+type StockView = 'dashboard' | 'calendar';
+type DashboardManualOrderKey = 'orderPackThu' | 'orderPackSat' | 'orderPackTue';
+type DashboardColumnKey =
+  | 'currentTue'
+  | DashboardManualOrderKey
+  | 'orderUnitsThu'
+  | 'orderUnitsSat'
+  | 'orderUnitsTue'
+  | 'prevWed'
+  | 'soldPrevMonWed'
+  | 'soldMonWed'
+  | 'currentWed'
+  | 'currentThu'
+  | 'prevFri'
+  | 'soldPrevWedFri'
+  | 'soldWedFri'
+  | 'currentFri'
+  | 'currentSun'
+  | 'prevMon'
+  | 'soldPrevFriMon'
+  | 'soldFriMon'
+  | 'currentMon';
+type DashboardTone = 'neutral' | 'order' | 'yellow' | 'green' | 'blue';
+type DashboardWeekRef = 'current' | 'previous';
+type WeekSlot = keyof WeekDateMap;
+type WeekDateMap = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sun', string>>;
+type DashboardRowValues = Record<DashboardColumnKey, string>;
+type DashboardOverrideKey = keyof DashboardRowValues;
+
+type DashboardColumn = {
+  key: DashboardColumnKey;
+  title: string;
+  subtitle: string;
+  kind: 'stock' | 'order' | 'metric';
+  tone: DashboardTone;
+  dateKind?: 'none' | 'day' | 'range';
+  dateWeek?: DashboardWeekRef;
+  dateDay?: WeekSlot;
+  dateFrom?: WeekSlot;
+  dateTo?: WeekSlot;
+  dateToWeek?: DashboardWeekRef;
+};
+
+const WEEK_DAYS = 7;
+const TWO_WEEKS_DAYS = 14;
+const MAX_ORDER_VALUE_LEN = 5;
+const DASHBOARD_WINDOW_START = '2026-04-28';
+
+const DASHBOARD_COLUMNS: DashboardColumn[] = [
+  { key: 'currentTue', title: 'Текущий остаток', subtitle: 'Вторник', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
+  { key: 'orderPackThu', title: 'Заказ упаковок на четверг', subtitle: 'Вторник', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
+  { key: 'orderUnitsThu', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
+  { key: 'prevWed', title: 'Прошлый остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'wed' },
+  { key: 'soldPrevMonWed', title: 'Продано на прошлой неделе', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateKind: 'range', dateWeek: 'previous', dateFrom: 'mon', dateTo: 'wed' },
+  { key: 'currentWed', title: 'Текущий остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'wed' },
+  { key: 'soldMonWed', title: 'Продано', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateKind: 'range', dateWeek: 'current', dateFrom: 'mon', dateTo: 'wed' },
+  { key: 'currentThu', title: 'Текущий остаток', subtitle: 'Четверг', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'thu' },
+  { key: 'orderPackSat', title: 'Заказ упаковок на субботу', subtitle: 'Четверг', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'thu' },
+  { key: 'orderUnitsSat', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
+  { key: 'prevFri', title: 'Прошлый остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'fri' },
+  { key: 'soldPrevWedFri', title: 'Продано на прошлой неделе', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateKind: 'range', dateWeek: 'previous', dateFrom: 'wed', dateTo: 'fri' },
+  { key: 'currentFri', title: 'Текущий остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'fri' },
+  { key: 'soldWedFri', title: 'Продано', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateKind: 'range', dateWeek: 'current', dateFrom: 'wed', dateTo: 'fri' },
+  { key: 'currentSun', title: 'Текущий остаток', subtitle: 'Воскрес', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
+  { key: 'orderPackTue', title: 'Заказ упаковок на вторник', subtitle: 'Воскрес', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
+  { key: 'orderUnitsTue', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
+  { key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon' },
+  { key: 'soldPrevFriMon', title: 'Продано на прошлой неделе', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'previous' },
+  { key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon' },
+  { key: 'soldFriMon', title: 'Продано', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
+];
 
 const toDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -52,6 +123,8 @@ const addDays = (dateKey: string, days: number) => {
   date.setDate(date.getDate() + days);
   return toDateKey(date);
 };
+
+const getTwoWeeksEnd = (startDateKey: string): string => addDays(startDateKey, TWO_WEEKS_DAYS - 1);
 
 const parseDateKey = (raw: string): Date => {
   const [year, month, day] = raw.split('-').map(Number);
@@ -82,6 +155,11 @@ const formatDateLabel = (iso: string): string => {
   return `${day}.${month}.${year}`;
 };
 
+const formatDateShort = (iso: string): string => {
+  const [, month, day] = iso.split('-');
+  return `${day}.${month}`;
+};
+
 const formatWeekdayLabel = (iso: string): string =>
   parseDateKey(iso).toLocaleDateString('ru-RU', { weekday: 'long' });
 
@@ -101,6 +179,109 @@ const escapeXml = (value: string): string =>
     .replace(/'/g, '&apos;');
 
 const safeFileName = (value: string): string => value.replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
+const csvEscape = (value: string): string => `"${value.replace(/"/g, '""')}"`;
+const buildCsv = (rows: string[][]): string => rows.map((row) => row.map(csvEscape).join(';')).join('\n');
+const normalizeText = (value: string): string => value.trim().toLowerCase();
+const sanitizeOrderValue = (raw: string): string => raw.replace(/[^0-9]/g, '').slice(0, MAX_ORDER_VALUE_LEN);
+const isManualOrderKey = (key: DashboardColumnKey): key is DashboardManualOrderKey =>
+  key === 'orderPackThu' || key === 'orderPackSat' || key === 'orderPackTue';
+const isManualStockKey = (
+  key: DashboardColumnKey,
+): key is 'currentTue' | 'currentWed' | 'currentThu' | 'currentFri' | 'currentSun' | 'currentMon' =>
+  key === 'currentTue' ||
+  key === 'currentWed' ||
+  key === 'currentThu' ||
+  key === 'currentFri' ||
+  key === 'currentSun' ||
+  key === 'currentMon';
+
+const parseStockNumber = (raw?: string): number | null => {
+  if (!raw) {
+    return null;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const diffStocks = (startRaw?: string, endRaw?: string): string => {
+  const start = parseStockNumber(startRaw);
+  const end = parseStockNumber(endRaw);
+  return start === null || end === null ? '' : String(start - end);
+};
+
+const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
+  const start = parseStockNumber(startRaw);
+  const end = parseStockNumber(endRaw);
+  if (start === null || end === null) {
+    return '';
+  }
+  const delivery = parseStockNumber(deliveryRaw) ?? 0;
+  return String(start + delivery - end);
+};
+
+const hasValue = (value?: string): value is string => typeof value === 'string' && value.trim() !== '';
+const orderUnitsFromPacks = (packsRaw: string, unitsInPack: number | null): string => {
+  if (!packsRaw || unitsInPack === null || unitsInPack <= 0) {
+    return '';
+  }
+  const packs = Number.parseInt(packsRaw, 10);
+  return Number.isNaN(packs) ? '' : String(packs * unitsInPack);
+};
+
+const weekdaySlot = (dateKey: string): keyof WeekDateMap | null => {
+  const day = parseDateKey(dateKey).getDay();
+  if (day === 1) return 'mon';
+  if (day === 2) return 'tue';
+  if (day === 3) return 'wed';
+  if (day === 4) return 'thu';
+  if (day === 5) return 'fri';
+  if (day === 0) return 'sun';
+  return null;
+};
+
+const splitWeeks = (dates: string[]): string[][] => {
+  const chunks: string[][] = [];
+  for (let i = 0; i < dates.length; i += WEEK_DAYS) {
+    const chunk = dates.slice(i, i + WEEK_DAYS);
+    if (chunk.length === WEEK_DAYS) {
+      chunks.push(chunk);
+    }
+  }
+  return chunks;
+};
+
+const mapWeekDates = (weekDates: string[]): WeekDateMap => {
+  const mapped: WeekDateMap = {};
+  for (const date of weekDates) {
+    const slot = weekdaySlot(date);
+    if (slot) {
+      mapped[slot] = date;
+    }
+  }
+  return mapped;
+};
+
+const formatOptionalPrice = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? `${parsed.toFixed(2)} руб` : '';
+};
+
+const applyDashboardOverrides = (base: DashboardRowValues, row: Product, weekStart?: string): DashboardRowValues => {
+  if (!weekStart || !row.dashboardOverrides) {
+    return base;
+  }
+  const next = { ...base };
+  (Object.keys(base) as DashboardOverrideKey[]).forEach((key) => {
+    const override = row.dashboardOverrides?.[`${weekStart}:${key}`];
+    if (override !== undefined) {
+      next[key] = override;
+    }
+  });
+  return next;
+};
 
 type XlsxCell = {
   value: string | number;
@@ -417,7 +598,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
     { key: 'attendance', label: 'Посещаемость' },
     { key: 'users', label: 'Пользователи' },
     { key: 'shops', label: 'Магазины' },
-    { key: 'products', label: 'Товары и остатки' },
+    { key: 'products', label: 'Остатки' },
     { key: 'orders', label: 'Заказ' },
   ];
 
@@ -441,7 +622,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         </div>
       </header>
 
-      <main className="content">
+      <main className={section === 'products' ? 'content stock-content' : 'content'}>
         {section === 'overview' && <OverviewPanel session={session} setSection={setSection} />}
         {section === 'attendance' && <AttendancePanel session={session} />}
         {section === 'users' && <UsersPanel session={session} />}
@@ -486,7 +667,7 @@ const OverviewPanel = ({ session, setSection }: { session: Session; setSection: 
         {[
           ['Посещаемость', 'Статусы работников, часы, опоздания и графики.', 'attendance'],
           ['Пользователи', 'Создание, роли, привязка к магазинам и сброс пароля.', 'users'],
-          ['Товары и остатки', 'Ассортимент, настройки упаковок и остатки по датам.', 'products'],
+          ['Остатки', 'Менеджерская таблица остатков, заказов и продаж.', 'products'],
           ['Заказ', 'Сводная таблица заказов по магазинам, машинам и товарам.', 'orders'],
         ].map(([title, text, target]) => (
           <button key={target} className="landing-card" onClick={() => setSection(target as Section)}>
@@ -759,14 +940,18 @@ const ProductsPanel = ({ session }: { session: Session }) => {
   const [shops, setShops] = useState<Shop[]>([]);
   const [table, setTable] = useState<StockTable | null>(null);
   const [selectedShopId, setSelectedShopId] = useState('');
-  const [from, setFrom] = useState(startOfWeek());
-  const [to, setTo] = useState(addDays(startOfWeek(), 6));
+  const [query, setQuery] = useState('');
+  const [windowStart, setWindowStart] = useState(DASHBOARD_WINDOW_START);
+  const [stockView, setStockView] = useState<StockView>('dashboard');
+  const [orderValues, setOrderValues] = useState<Record<string, string>>({});
   const [form, setForm] = useState(productToForm());
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ productId: string; date: string; productName: string } | null>(null);
+  const [editingValue, setEditingValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = async (shopId = selectedShopId) => {
+  const load = async (shopId = selectedShopId, nextView = stockView, nextWindowStart = windowStart) => {
     setLoading(true);
     setError('');
     try {
@@ -774,7 +959,31 @@ const ProductsPanel = ({ session }: { session: Session }) => {
       setShops(nextShops);
       const resolvedShopId = shopId || nextShops[0]?.id || '';
       setSelectedShopId(resolvedShopId);
-      setTable(resolvedShopId ? await api.stock.table(session.token, { shopId: resolvedShopId, from, to }) : null);
+      if (!resolvedShopId) {
+        setTable(null);
+        return;
+      }
+
+      const dashboardFrom = addDays(nextWindowStart, -WEEK_DAYS);
+      const from = nextView === 'dashboard' ? dashboardFrom : nextWindowStart;
+      const to = nextView === 'dashboard' ? getTwoWeeksEnd(dashboardFrom) : addDays(nextWindowStart, WEEK_DAYS - 1);
+      const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, from, to });
+      setTable(nextTable);
+
+      if (nextView === 'dashboard') {
+        try {
+          const loaded: Record<string, string> = {};
+          const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, to);
+          for (const entry of nextOrderValues) {
+            loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
+          }
+          setOrderValues(loaded);
+        } catch {
+          setOrderValues({});
+        }
+      } else {
+        setOrderValues({});
+      }
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -784,37 +993,219 @@ const ProductsPanel = ({ session }: { session: Session }) => {
 
   useEffect(() => {
     void load();
-  }, [session.token]);
+  }, [session.token, selectedShopId, windowStart, stockView]);
 
-  const saveProduct = async (event: React.FormEvent) => {
-    event.preventDefault();
-    try {
-      const payload = { ...form, name: form.name.trim(), packType: form.packType.trim() };
-      if (editingProductId) {
-        await api.stock.updateProduct(session.token, editingProductId, payload);
-      } else {
-        await api.stock.createProduct(session.token, payload);
-      }
-      setForm(productToForm());
-      setEditingProductId(null);
-      await load();
-    } catch (err) {
-      setError(messageOf(err));
+  const visibleRows = useMemo(() => {
+    const normalized = normalizeText(query);
+    return (table?.rows ?? []).filter((row) => !normalized || normalizeText(row.name).includes(normalized));
+  }, [query, table]);
+
+  const rowsByCategory = useMemo(() => {
+    const grouped = PRODUCT_CATEGORIES.reduce((acc, category) => {
+      acc[category] = [] as Product[];
+      return acc;
+    }, {} as Record<ProductCategory, Product[]>);
+    for (const row of visibleRows) {
+      const category = PRODUCT_CATEGORIES.includes(row.category) ? row.category : PRODUCT_CATEGORIES[0];
+      grouped[category].push(row);
     }
+    return grouped;
+  }, [visibleRows]);
+
+  const orderedRows = useMemo(() => PRODUCT_CATEGORIES.flatMap((category) => rowsByCategory[category]), [rowsByCategory]);
+
+  const dashboardWeeks = useMemo(() => {
+    if (!table) {
+      return {
+        current: {} as WeekDateMap,
+        previous: null as WeekDateMap | null,
+        currentStart: undefined as string | undefined,
+        previousStart: undefined as string | undefined,
+      };
+    }
+    const weeks = splitWeeks(table.dates);
+    if (weeks.length === 0) {
+      return { current: mapWeekDates(table.dates), previous: null, currentStart: table.dates[0], previousStart: undefined };
+    }
+    const currentWeek = weeks[weeks.length - 1];
+    const previousWeek = weeks.length > 1 ? weeks[weeks.length - 2] : null;
+    return {
+      current: mapWeekDates(currentWeek),
+      previous: previousWeek ? mapWeekDates(previousWeek) : null,
+      currentStart: currentWeek[0],
+      previousStart: previousWeek?.[0],
+    };
+  }, [table]);
+
+  const dashboardDateFor = (week: DashboardWeekRef, slot: WeekSlot): string | undefined =>
+    week === 'previous' ? dashboardWeeks.previous?.[slot] : dashboardWeeks.current[slot];
+
+  const dashboardRangeLabel = (week: DashboardWeekRef, from: WeekSlot, to: WeekSlot, toWeek?: DashboardWeekRef): string => {
+    const fromDate = dashboardDateFor(week, from);
+    const toDate = dashboardDateFor(toWeek ?? week, to);
+    return fromDate && toDate ? `${formatDateShort(fromDate)}-${formatDateShort(toDate)}` : '';
   };
 
-  const updateCell = (productId: string, date: string, value: string) => {
+  const dashboardHeaderSubtitle = (column: DashboardColumn): string => {
+    if (!column.subtitle) {
+      return '';
+    }
+    if (column.dateKind === 'day' && column.dateDay && column.dateWeek) {
+      const date = dashboardDateFor(column.dateWeek, column.dateDay);
+      return date ? `${column.subtitle}\n${formatDateShort(date)}` : column.subtitle;
+    }
+    if (column.dateKind === 'range' && column.dateWeek && column.dateFrom && column.dateTo) {
+      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo, column.dateToWeek);
+      return range ? `${column.subtitle}\n${range}` : column.subtitle;
+    }
+    return column.subtitle;
+  };
+
+  const productReferenceLabel = (row: Product): string => {
+    const parts: string[] = [];
+    if (row.packType) parts.push(row.packType);
+    if (Number.isFinite(Number(row.unitsInPack))) parts.push(`${row.unitsInPack} шт/уп`);
+    if (Number.isFinite(Number(row.packWeightKg))) parts.push(`${row.packWeightKg} кг`);
+    if (Number.isFinite(Number(row.shelfLifeDays))) parts.push(`${row.shelfLifeDays} сут`);
+    const price = formatOptionalPrice(row.unitPriceRubVat);
+    if (price) parts.push(price);
+    if (row.minStockUnits !== null || row.maxStockUnits !== null) {
+      parts.push(`границы: ${row.minStockUnits ?? '-'}-${row.maxStockUnits ?? '-'}`);
+    }
+    return parts.join(' · ');
+  };
+
+  const currentStockDateForColumn = (key: DashboardColumnKey): string | undefined => {
+    if (key === 'currentTue') return dashboardWeeks.current.tue;
+    if (key === 'currentWed') return dashboardWeeks.current.wed;
+    if (key === 'currentThu') return dashboardWeeks.current.thu;
+    if (key === 'currentFri') return dashboardWeeks.current.fri;
+    if (key === 'currentSun') return dashboardWeeks.current.sun;
+    if (key === 'currentMon') return dashboardWeeks.current.mon;
+    return undefined;
+  };
+
+  const orderDateForKey = (key: DashboardManualOrderKey): string | undefined => {
+    if (key === 'orderPackThu') return dashboardWeeks.current.thu;
+    if (key === 'orderPackSat') return dashboardWeeks.current.thu ? addDays(dashboardWeeks.current.thu, 2) : undefined;
+    if (key === 'orderPackTue') return dashboardWeeks.current.sun ? addDays(dashboardWeeks.current.sun, 2) : undefined;
+    return undefined;
+  };
+
+  const orderPacksForDate = (productId: string, date?: string): string => (date ? orderValues[`${productId}:${date}`] ?? '' : '');
+  const orderCellValue = (productId: string, key: DashboardManualOrderKey): string => orderPacksForDate(productId, orderDateForKey(key));
+
+  const setOrderCellValue = (productId: string, key: DashboardManualOrderKey, value: string) => {
+    const date = orderDateForKey(key);
+    if (!date || !selectedShopId) {
+      return;
+    }
+    const nextValue = sanitizeOrderValue(value);
+    setOrderValues((current) => ({ ...current, [`${productId}:${date}`]: nextValue }));
+    const packs = nextValue ? Number.parseInt(nextValue, 10) : 0;
+    void api.stock.updateOrderValue(session.token, {
+      shopId: selectedShopId,
+      productId,
+      orderDate: date,
+      packs: Number.isNaN(packs) ? 0 : packs,
+    }).catch((err) => setError(messageOf(err)));
+  };
+
+  const dashboardRowValues = (row: Product): DashboardRowValues => {
+    const current = dashboardWeeks.current;
+    const previous = dashboardWeeks.previous;
+    const previousStart = dashboardWeeks.previousStart;
+    const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
+    const previousWeekSoldValue = (key: 'soldMonWed' | 'soldWedFri' | 'soldFriMon'): string => {
+      const value = previousStart ? row.dashboardOverrides?.[`${previousStart}:${key}`] : undefined;
+      return hasValue(value) ? value : '';
+    };
+
+    const prevOrderTueUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.tue), row.unitsInPack);
+    const soldMonWedCurrent = computeSold(stock(previous?.sun), prevOrderTueUnits, stock(current.wed));
+    const curOrderThuUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.thu), row.unitsInPack);
+    const soldWedFriCurrent = computeSold(stock(current.tue), curOrderThuUnits, stock(current.fri));
+    const prevOrderSatUnits = previous?.thu
+      ? orderUnitsFromPacks(orderPacksForDate(row.productId, addDays(previous.thu, 2)), row.unitsInPack)
+      : '';
+    const soldFriMonCurrent = computeSold(stock(previous?.thu), prevOrderSatUnits, stock(current.mon));
+    const soldMonWedPrevious = previous ? diffStocks(stock(previous.mon), stock(previous.wed)) : '';
+    const prevOrderThuUnits = previous?.thu ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.thu), row.unitsInPack) : '';
+    const soldWedFriPrevious = previous ? computeSold(stock(previous.tue), prevOrderThuUnits, stock(previous.fri)) : '';
+    const prevPrevOrderSatUnits = previous?.thu
+      ? orderUnitsFromPacks(orderPacksForDate(row.productId, addDays(previous.thu, 2)), row.unitsInPack)
+      : '';
+    const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(previous.mon)) : '';
+    const copiedSoldMonWedPrevious = previousWeekSoldValue('soldMonWed');
+    const copiedSoldWedFriPrevious = previousWeekSoldValue('soldWedFri');
+    const copiedSoldFriMonPrevious = previousWeekSoldValue('soldFriMon');
+    const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
+    const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
+    const orderPackTue = orderCellValue(row.productId, 'orderPackTue');
+
+    const base: DashboardRowValues = {
+      currentTue: stock(current.tue),
+      orderPackThu,
+      orderUnitsThu: orderUnitsFromPacks(orderPackThu, row.unitsInPack),
+      prevWed: previous ? stock(previous.wed) : '',
+      soldPrevMonWed: copiedSoldMonWedPrevious || soldMonWedPrevious,
+      soldMonWed: soldMonWedCurrent,
+      currentWed: stock(current.wed),
+      currentThu: stock(current.thu),
+      orderPackSat,
+      orderUnitsSat: orderUnitsFromPacks(orderPackSat, row.unitsInPack),
+      prevFri: previous ? stock(previous.fri) : '',
+      soldPrevWedFri: copiedSoldWedFriPrevious || soldWedFriPrevious,
+      soldWedFri: soldWedFriCurrent,
+      currentFri: stock(current.fri),
+      currentSun: stock(current.sun),
+      orderPackTue,
+      orderUnitsTue: orderUnitsFromPacks(orderPackTue, row.unitsInPack),
+      prevMon: previous ? stock(previous.mon) : '',
+      soldPrevFriMon: copiedSoldFriMonPrevious || soldFriMonPrevious,
+      soldFriMon: soldFriMonCurrent,
+      currentMon: stock(current.mon),
+    };
+    const withOverrides = applyDashboardOverrides(base, row, dashboardWeeks.currentStart);
+    return {
+      ...withOverrides,
+      soldPrevMonWed: copiedSoldMonWedPrevious || withOverrides.soldPrevMonWed,
+      soldPrevWedFri: copiedSoldWedFriPrevious || withOverrides.soldPrevWedFri,
+      soldPrevFriMon: copiedSoldFriMonPrevious || withOverrides.soldPrevFriMon,
+    };
+  };
+
+  const updateCalendarCell = (productId: string, date: string, value: string) => {
     setTable((current) => current
       ? { ...current, rows: current.rows.map((row) => row.productId === productId ? { ...row, values: { ...row.values, [date]: sanitizeStock(value) } } : row) }
       : current);
   };
 
-  const saveCell = async (productId: string, date: string, value: string) => {
+  const saveStockCell = async (productId: string, date: string, value: string) => {
     if (!selectedShopId) {
       return;
     }
     try {
-      await api.stock.updateValue(session.token, { shopId: selectedShopId, productId, date, value });
+      const sanitized = sanitizeStock(value);
+      await api.stock.updateValue(session.token, { shopId: selectedShopId, productId, date, value: sanitized });
+      updateCalendarCell(productId, date, sanitized);
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  };
+
+  const openEditCell = (row: Product, date: string) => {
+    setEditingCell({ productId: row.productId, date, productName: row.name });
+    setEditingValue(row.values[date] ?? '');
+  };
+
+  const createProduct = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await api.stock.createProduct(session.token, { ...form, name: form.name.trim(), packType: form.packType.trim() });
+      setForm(productToForm());
+      setIsAddProductOpen(false);
+      await load();
     } catch (err) {
       setError(messageOf(err));
     }
@@ -832,79 +1223,237 @@ const ProductsPanel = ({ session }: { session: Session }) => {
     }
   };
 
-  return (
-    <section className="page-section">
-      <PageHeader title="Товары и остатки" subtitle="Ассортимент, упаковки и остатки по магазинам." action={<RefreshButton onClick={() => load()} />} />
-      <Feedback error={error} />
-      <div className="toolbar hero-toolbar">
-        <select value={selectedShopId} onChange={(event) => {
-          setSelectedShopId(event.target.value);
-          void load(event.target.value);
-        }}>
-          {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
-        </select>
-        <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-        <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-        <button className="secondary" onClick={() => void load()}>Показать период</button>
-      </div>
-      <form className="form-grid product-form website-form" onSubmit={saveProduct}>
-        <input placeholder="Название товара" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-        <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value as ProductCategory })}>
-          {PRODUCT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
-        </select>
-        <input placeholder="Тип упаковки" value={form.packType} onChange={(event) => setForm({ ...form, packType: event.target.value })} />
-        <NumberInput label="Штук в упаковке" value={form.unitsInPack} onChange={(value) => setForm({ ...form, unitsInPack: intOrZero(value) })} />
-        <NumberInput label="Вес, кг" value={form.packWeightKg} onChange={(value) => setForm({ ...form, packWeightKg: numberOrZero(value) })} />
-        <NumberInput label="Срок, дней" value={form.shelfLifeDays} onChange={(value) => setForm({ ...form, shelfLifeDays: intOrZero(value) })} />
-        <NumberInput label="Цена" value={form.unitPriceRubVat} onChange={(value) => setForm({ ...form, unitPriceRubVat: numberOrZero(value) })} />
-        <NumberInput label="Мин. остаток" value={form.minStockUnits} onChange={(value) => setForm({ ...form, minStockUnits: intOrZero(value) })} />
-        <NumberInput label="Макс. остаток" value={form.maxStockUnits} onChange={(value) => setForm({ ...form, maxStockUnits: intOrZero(value) })} />
-        <button>{editingProductId ? 'Сохранить товар' : 'Создать товар'}</button>
-        {editingProductId && <button type="button" className="secondary" onClick={() => {
-          setEditingProductId(null);
-          setForm(productToForm());
-        }}>Отмена</button>}
-      </form>
-      {loading ? <p>Загружаем остатки...</p> : table && (
-        <div className="table-scroll">
-          <table className="stock-table">
-            <thead>
-              <tr>
-                <th className="sticky">Товар</th>
-                <th>Категория</th>
-                <th>Упаковка</th>
-                {table.dates.map((date) => <th key={date}>{date.slice(5)}</th>)}
-                <th>Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((row) => (
-                <tr key={row.productId}>
-                  <td className="sticky">{row.name}</td>
-                  <td>{row.category}</td>
-                  <td>{row.unitsInPack ?? '-'} / {row.packType ?? '-'}</td>
-                  {table.dates.map((date) => (
-                    <td key={date}>
-                      <input
-                        className="cell-input"
-                        value={row.values[date] ?? ''}
-                        onChange={(event) => updateCell(row.productId, date, event.target.value)}
-                        onBlur={(event) => void saveCell(row.productId, date, event.target.value)}
-                      />
-                    </td>
-                  ))}
-                  <td className="actions">
-                    <button className="secondary" onClick={() => {
-                      setEditingProductId(row.productId);
-                      setForm(productToForm(row));
-                    }}>Редактировать</button>
-                    <button className="danger" onClick={() => void removeProduct(row)}>Удалить</button>
-                  </td>
-                </tr>
+  const exportDashboard = () => {
+    if (!table) {
+      return;
+    }
+    const headers = [
+      'Категория',
+      'Товар',
+      'Упаковка',
+      'Количество в упаковке',
+      'Вес упаковки, кг',
+      'Срок годности, сут',
+      'Цена в руб, с НДС',
+      ...DASHBOARD_COLUMNS.map((column) => {
+        const subtitle = dashboardHeaderSubtitle(column).replace('\n', ' ');
+        return subtitle ? `${column.title} (${subtitle})` : column.title;
+      }),
+    ];
+    const rows = orderedRows.map((row) => {
+      const values = dashboardRowValues(row);
+      return [
+        row.category,
+        row.name,
+        row.packType ?? '',
+        row.unitsInPack !== null ? String(row.unitsInPack) : '',
+        row.packWeightKg !== null ? String(row.packWeightKg) : '',
+        row.shelfLifeDays !== null ? String(row.shelfLifeDays) : '',
+        row.unitPriceRubVat !== null && row.unitPriceRubVat !== undefined ? String(row.unitPriceRubVat) : '',
+        ...DASHBOARD_COLUMNS.map((column) => values[column.key] ?? ''),
+      ];
+    });
+    const blob = new Blob([`\uFEFF${buildCsv([headers, ...rows])}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${safeFileName(`manager_dashboard_${table.shop.name}_${table.from}_${table.to}`)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const renderDashboardCategory = (category: ProductCategory, rows: Product[]) => (
+    <section key={category} className="manager-category-block">
+      <div className="manager-category-title">{category}</div>
+      <div className="manager-table-scroll">
+        <table className="manager-stock-table manager-dashboard-table">
+          <thead>
+            <tr>
+              <th className="manager-name-col dashboard-name-header">Товар</th>
+              {DASHBOARD_COLUMNS.map((column) => (
+                <th key={column.key} className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}>
+                  <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
+                  {dashboardHeaderSubtitle(column) && <small>{dashboardHeaderSubtitle(column)}</small>}
+                </th>
               ))}
-            </tbody>
-          </table>
+              <th className="manager-action-col dashboard-name-header">Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={DASHBOARD_COLUMNS.length + 2} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+            ) : rows.map((row) => {
+              const values = dashboardRowValues(row);
+              return (
+                <tr key={row.productId}>
+                  <td className="manager-name-col">
+                    <strong>{row.name}</strong>
+                    <small>{productReferenceLabel(row)}</small>
+                  </td>
+                  {DASHBOARD_COLUMNS.map((column) => {
+                    const value = values[column.key] ?? '';
+                    if (column.kind === 'order' && isManualOrderKey(column.key)) {
+                      const manualOrderKey = column.key;
+                      return (
+                        <td key={column.key} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                          <input
+                            className="dashboard-order-input"
+                            value={value}
+                            maxLength={MAX_ORDER_VALUE_LEN}
+                            placeholder="-"
+                            onChange={(event) => setOrderCellValue(row.productId, manualOrderKey, event.target.value)}
+                          />
+                        </td>
+                      );
+                    }
+                    if (column.kind === 'stock' && isManualStockKey(column.key)) {
+                      const date = currentStockDateForColumn(column.key);
+                      return (
+                        <td key={column.key} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                          <button className="stock-cell-button" onClick={() => date && openEditCell(row, date)}>
+                            {value || '-'}
+                          </button>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={column.key} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                        <span className={column.kind === 'stock' ? 'dashboard-stock-value' : column.kind === 'order' ? 'dashboard-order-value' : ''}>
+                          {value || '-'}
+                        </span>
+                      </td>
+                    );
+                  })}
+                  <td className="manager-action-col"><button className="danger compact" onClick={() => void removeProduct(row)}>Удалить</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
+  const renderCalendarCategory = (category: ProductCategory, rows: Product[]) => (
+    <section key={category} className="manager-category-block">
+      <div className="manager-category-title">{category}</div>
+      <div className="manager-table-scroll">
+        <table className="manager-stock-table">
+          <thead>
+            <tr>
+              <th className="manager-name-col">Товар</th>
+              {table?.dates.map((date) => (
+                <th key={date} className="calendar-date-col">
+                  <span>{parseDateKey(date).toLocaleDateString('ru-RU', { weekday: 'short' })}</span>
+                  <small>{formatDateShort(date)}</small>
+                </th>
+              ))}
+              <th className="manager-action-col">Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={(table?.dates.length ?? 0) + 2} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+            ) : rows.map((row) => (
+              <tr key={row.productId}>
+                <td className="manager-name-col">
+                  <strong>{row.name}</strong>
+                  <small>{productReferenceLabel(row)}</small>
+                </td>
+                {table?.dates.map((date) => (
+                  <td key={date} className="calendar-date-col">
+                    <input
+                      className="cell-input"
+                      value={row.values[date] ?? ''}
+                      onChange={(event) => updateCalendarCell(row.productId, date, event.target.value)}
+                      onBlur={(event) => void saveStockCell(row.productId, date, event.target.value)}
+                    />
+                  </td>
+                ))}
+                <td className="manager-action-col"><button className="danger compact" onClick={() => void removeProduct(row)}>Удалить</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
+  return (
+    <section className="page-section stock-page-section">
+      <PageHeader title="Остатки" subtitle="Менеджерская таблица остатков, заказов и продаж по магазину." action={<RefreshButton onClick={() => load()} />} />
+      <Feedback error={error} />
+
+      <div className="manager-controls">
+        <input className="manager-search" placeholder="Поиск товара" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <div className="manager-button-row">
+          <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
+            {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
+          </select>
+          <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, -WEEK_DAYS))}>-1 нед.</button>
+          <button className="secondary" onClick={() => setWindowStart(DASHBOARD_WINDOW_START)}>Текущая нед.</button>
+          <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, WEEK_DAYS))}>+1 нед.</button>
+          <button onClick={() => setIsAddProductOpen(true)}>Добавить товар</button>
+          <button className="secondary" onClick={exportDashboard}>Экспорт в Excel</button>
         </div>
+      </div>
+
+      <div className="manager-meta-row">
+        <strong>Позиций: {visibleRows.length}</strong>
+        <strong>{table ? `${windowStart} - ${addDays(windowStart, WEEK_DAYS - 1)}` : ''}</strong>
+      </div>
+
+      <div className="manager-view-tabs">
+        <button className={stockView === 'dashboard' ? 'active' : ''} onClick={() => setStockView('dashboard')}>Дашборд</button>
+        <button className={stockView === 'calendar' ? 'active' : ''} onClick={() => setStockView('calendar')}>Календарь</button>
+      </div>
+
+      <div className="manager-table-wrap">
+        {loading ? <p className="manager-loading">Загружаем остатки...</p> : PRODUCT_CATEGORIES.map((category) =>
+          stockView === 'dashboard'
+            ? renderDashboardCategory(category, rowsByCategory[category])
+            : renderCalendarCategory(category, rowsByCategory[category]),
+        )}
+      </div>
+
+      {isAddProductOpen && (
+        <Modal title="Добавить товар" onClose={() => setIsAddProductOpen(false)}>
+          <form className="modal-form product-modal-form" onSubmit={createProduct}>
+            <input placeholder="Название товара" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value as ProductCategory })}>
+              {PRODUCT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+            <input placeholder="Тип упаковки" value={form.packType} onChange={(event) => setForm({ ...form, packType: event.target.value })} />
+            <NumberInput label="Штук в упаковке" value={form.unitsInPack} onChange={(value) => setForm({ ...form, unitsInPack: intOrZero(value) })} />
+            <NumberInput label="Вес упаковки, кг" value={form.packWeightKg} onChange={(value) => setForm({ ...form, packWeightKg: numberOrZero(value) })} />
+            <NumberInput label="Срок годности, дней" value={form.shelfLifeDays} onChange={(value) => setForm({ ...form, shelfLifeDays: intOrZero(value) })} />
+            <NumberInput label="Цена с НДС, руб" value={form.unitPriceRubVat} onChange={(value) => setForm({ ...form, unitPriceRubVat: numberOrZero(value) })} />
+            <NumberInput label="Минимальный остаток" value={form.minStockUnits} onChange={(value) => setForm({ ...form, minStockUnits: intOrZero(value) })} />
+            <NumberInput label="Максимальный остаток" value={form.maxStockUnits} onChange={(value) => setForm({ ...form, maxStockUnits: intOrZero(value) })} />
+            <div className="modal-actions">
+              <button type="button" className="secondary" onClick={() => setIsAddProductOpen(false)}>Отмена</button>
+              <button type="submit">Сохранить</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {editingCell && (
+        <Modal title="Изменить остаток" onClose={() => setEditingCell(null)}>
+          <form className="modal-form" onSubmit={(event) => {
+            event.preventDefault();
+            void saveStockCell(editingCell.productId, editingCell.date, editingValue).then(() => setEditingCell(null));
+          }}>
+            <p className="modal-meta">{editingCell.productName} · {formatDateLabel(editingCell.date)}</p>
+            <input autoFocus placeholder="0-15" value={editingValue} onChange={(event) => setEditingValue(sanitizeStock(event.target.value))} />
+            <div className="modal-actions">
+              <button type="button" className="secondary" onClick={() => setEditingCell(null)}>Отмена</button>
+              <button type="submit">Сохранить</button>
+            </div>
+          </form>
+        </Modal>
       )}
     </section>
   );

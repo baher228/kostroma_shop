@@ -1269,6 +1269,13 @@ const ProductsPanel = ({ session }: { session: Session }) => {
       <div className="manager-category-title">{category}</div>
       <div className="manager-table-scroll">
         <table className="manager-stock-table manager-dashboard-table">
+          <colgroup>
+            <col className="manager-name-col-width" />
+            {DASHBOARD_COLUMNS.map((column) => (
+              <col key={column.key} className="dashboard-data-col-width" />
+            ))}
+            <col className="manager-action-col-width" />
+          </colgroup>
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>

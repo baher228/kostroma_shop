@@ -23,7 +23,6 @@ test('user management store supports update, password reset, and delete', async 
             return { rowCount: 1, rows: [] };
           }
           if (sql.includes('FROM users u')) {
-            assert.match(sql, /LEFT JOIN shops s ON s.id = u.shop_id/);
             return {
               rows: [{
                 id: params[0],

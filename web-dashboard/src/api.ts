@@ -11,8 +11,8 @@ import {
   StockTable,
 } from './types';
 
-const RU_API_BASE_URL = (import.meta.env.VITE_RU_API_URL || 'http://localhost:4000').replace(/\/+$/, '');
-const DXB_API_BASE_URL = (import.meta.env.VITE_DXB_API_URL || 'http://localhost:4001').replace(/\/+$/, '');
+const RU_API_BASE_URL = (import.meta.env.VITE_RU_API_URL || '/ru').replace(/\/+$/, '');
+const DXB_API_BASE_URL = (import.meta.env.VITE_DXB_API_URL || '/dxb').replace(/\/+$/, '');
 
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';

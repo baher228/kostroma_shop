@@ -534,6 +534,22 @@ td.sticky {
   font-weight: 600;
 }
 
+.manager-dashboard-table {
+  table-layout: fixed;
+}
+
+.manager-name-col-width {
+  width: 156px;
+}
+
+.dashboard-data-col-width {
+  width: 76px;
+}
+
+.manager-action-col-width {
+  width: 76px;
+}
+
 .manager-stock-table th,
 .manager-stock-table td {
   height: 46px;

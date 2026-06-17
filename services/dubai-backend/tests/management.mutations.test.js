@@ -79,7 +79,7 @@ test('seller order status update returns resolved order details', async () => {
                 shop_id: 'shop_main',
                 shop_name: null,
                 product_id: 'prod_1',
-                product_name: '',
+                product_name: 'Milk',
                 stock_on_hand: 2,
                 requested_packs: 1,
                 requested_units: 6,
@@ -123,4 +123,69 @@ test('seller order status update returns resolved order details', async () => {
   assert.equal(order.status, 'processed');
   assert.equal(order.productName, 'Milk');
   assert.equal(callCount, 2);
+});
+
+test('seller order creation writes through to order sheet values', async () => {
+  const opsDbPath = require.resolve('../dist/opsDb');
+  const calls = [];
+
+  require.cache[opsDbPath] = {
+    id: opsDbPath,
+    filename: opsDbPath,
+    loaded: true,
+    exports: {
+      opsDb: {
+        query: async (sql, params = []) => {
+          calls.push({ sql, params });
+          if (sql.includes('FROM stock_products')) {
+            return { rows: [{ id: params[0] }] };
+          }
+          if (sql.includes('WITH inserted AS')) {
+            assert.match(sql, /INSERT INTO seller_orders/);
+            assert.match(sql, /INSERT INTO order_sheet_values/);
+            assert.match(sql, /packs = order_sheet_values\.packs \+ EXCLUDED\.packs/);
+            assert.match(params[8], /^\d{4}-\d{2}-\d{2}$/);
+            return {
+              rows: [{
+                id: params[0],
+                shop_id: params[1],
+                shop_name: null,
+                product_id: params[2],
+                product_name: 'Milk',
+                stock_on_hand: params[3],
+                requested_packs: params[4],
+                requested_units: params[5],
+                auto_suggested: params[6],
+                status: 'new',
+                created_at: '2026-05-01T10:00:00.000Z',
+              }],
+            };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+      },
+    },
+  };
+
+  delete require.cache[require.resolve('../dist/ordersStore')];
+  const { createSellerOrder, nearestOrderSheetDate } = require('../dist/ordersStore');
+
+  assert.equal(nearestOrderSheetDate(new Date(2026, 3, 27)), '2026-04-28');
+  assert.equal(nearestOrderSheetDate(new Date(2026, 3, 30)), '2026-04-30');
+
+  const order = await createSellerOrder(
+    { role: 'worker', shopIds: ['shop_main'], scopes: ['orders:write'], jti: 'jti_1' },
+    {
+      shopId: 'shop_main',
+      productId: 'prod_1',
+      stockOnHand: 2,
+      requestedPacks: 3,
+      requestedUnits: 18,
+      autoSuggested: true,
+    },
+  );
+
+  assert.equal(order.productName, 'Milk');
+  assert.equal(calls.filter((call) => call.sql.includes('INSERT INTO seller_orders')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.includes('INSERT INTO order_sheet_values')).length, 1);
 });

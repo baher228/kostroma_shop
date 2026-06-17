@@ -332,7 +332,7 @@ label {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 th,
@@ -503,7 +503,7 @@ td.sticky {
   border-collapse: collapse;
   color: #1f2d25;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -521,7 +521,7 @@ td.sticky {
   height: 54px;
   background: #ecf1ec;
   color: #2e312f;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   text-transform: none;
 }
@@ -554,15 +554,15 @@ td.sticky {
 
 .manager-name-col strong {
   color: #222;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .manager-name-col small {
   margin-top: 2px;
   color: #4e5d53;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .manager-action-col {
@@ -589,21 +589,21 @@ td.sticky {
 
 .manager-dashboard-table th span {
   color: #1f2a21;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 850;
   line-height: 1.2;
 }
 
 .manager-dashboard-table th .dashboard-title-stock {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 850;
 }
 
 .manager-dashboard-table th small {
   margin-top: 4px;
   color: #1f2a21;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 800;
   line-height: 1.2;
   white-space: pre-line;
 }
@@ -666,15 +666,15 @@ td.sticky {
 .dashboard-stock-value,
 .stock-cell-button {
   color: #223528;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 850;
 }
 
 .dashboard-order-value,
 .dashboard-order-input {
   color: #223528;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 850;
 }
 
 .dashboard-order-input {
@@ -773,7 +773,7 @@ td.sticky {
   border-collapse: collapse;
   background: #fff;
   color: #1f2d25;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .order-sheet-table th,
@@ -789,7 +789,7 @@ td.sticky {
 .order-sheet-table th {
   background: #ecf1ec;
   color: #111b15;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 850;
 }
 
@@ -823,7 +823,7 @@ td.sticky {
 
 .order-sheet-table .product-name {
   color: #222;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .order-sheet-table .number-cell {

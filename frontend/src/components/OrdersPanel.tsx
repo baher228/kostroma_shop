@@ -249,12 +249,13 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                         placeholderTextColor="#7a8b7f"
                       />
                     </View>
+                    <View style={styles.recommendationBlock}>
+                      <Text style={styles.orderLabel}>Авто-рекомендация</Text>
+                      <Text style={styles.recommendationValueText}>{suggested > 0 ? `${suggested} кор.` : '-'}</Text>
+                    </View>
                   </View>
                   <Text style={styles.productMetaStrong}>Шт/кор: {row.unitsInPack ?? '-'}</Text>
                   <Text style={styles.productMetaStrong}>Границы: {row.minStockUnits ?? '-'} / {row.maxStockUnits ?? '-'}</Text>
-                  <Text style={styles.productMetaStrong}>
-                    Авто-рекомендация: {suggested > 0 ? `${suggested} кор.` : 'не требуется'}
-                  </Text>
 
                   <View style={styles.rowInputs}>
                     <Pressable
@@ -328,7 +329,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       )}
 
       {canManage && (
-        <View style={styles.block}>
+        <View style={[styles.block, styles.historyBlock]}>
           <Text style={styles.blockTitle}>Заказы продавцов</Text>
           <ScrollView style={styles.historyList}>
             {!orders.length && <Text style={styles.empty}>Пока нет заказов.</Text>}
@@ -391,7 +392,12 @@ const styles = StyleSheet.create({
     maxHeight: undefined,
   },
   historyList: {
-    maxHeight: 220,
+    flex: 1,
+    maxHeight: undefined,
+  },
+  historyBlock: {
+    flex: 1,
+    minHeight: 0,
   },
   orderCard: {
     borderWidth: 1,
@@ -413,6 +419,7 @@ const styles = StyleSheet.create({
   },
   orderTopRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     alignItems: 'stretch',
   },
@@ -422,6 +429,13 @@ const styles = StyleSheet.create({
   },
   orderBlock: {
     flex: 1,
+    minWidth: 180,
+    justifyContent: 'center',
+  },
+  recommendationBlock: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 150,
     justifyContent: 'center',
   },
   stockLabel: {
@@ -456,10 +470,16 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     minHeight: 56,
   },
+  recommendationValueText: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: '900',
+    color: '#1d3326',
+  },
   productMetaStrong: {
-    fontSize: 15,
+    fontSize: 20,
     color: '#4f6155',
-    fontWeight: '800',
+    fontWeight: '900',
   },
   rowInputs: {
     flexDirection: 'row',

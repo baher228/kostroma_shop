@@ -29,7 +29,6 @@ type MachineGroup = {
 };
 const MACHINE_NUMBERS: MachineNumber[] = [1, 2, 3];
 const ALLOWED_ORDER_WEEKDAYS = new Set([2, 4, 6]);
-type StockView = 'dashboard' | 'calendar';
 type DashboardManualOrderKey = 'orderPackThu' | 'orderPackSat' | 'orderPackTue';
 type DashboardColumnKey =
   | 'currentTue'
@@ -941,7 +940,6 @@ const ProductsPanel = ({ session }: { session: Session }) => {
   const [selectedShopId, setSelectedShopId] = useState('');
   const [query, setQuery] = useState('');
   const [windowStart, setWindowStart] = useState(DASHBOARD_WINDOW_START);
-  const [stockView, setStockView] = useState<StockView>('dashboard');
   const [orderValues, setOrderValues] = useState<Record<string, string>>({});
   const [form, setForm] = useState(productToForm());
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -950,7 +948,7 @@ const ProductsPanel = ({ session }: { session: Session }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = async (shopId = selectedShopId, nextView = stockView, nextWindowStart = windowStart) => {
+  const load = async (shopId = selectedShopId, nextWindowStart = windowStart) => {
     setLoading(true);
     setError('');
     try {
@@ -964,23 +962,19 @@ const ProductsPanel = ({ session }: { session: Session }) => {
       }
 
       const dashboardFrom = addDays(nextWindowStart, -WEEK_DAYS);
-      const from = nextView === 'dashboard' ? dashboardFrom : nextWindowStart;
-      const to = nextView === 'dashboard' ? getTwoWeeksEnd(dashboardFrom) : addDays(nextWindowStart, WEEK_DAYS - 1);
+      const from = dashboardFrom;
+      const to = getTwoWeeksEnd(dashboardFrom);
       const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, from, to });
       setTable(nextTable);
 
-      if (nextView === 'dashboard') {
-        try {
-          const loaded: Record<string, string> = {};
-          const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, to);
-          for (const entry of nextOrderValues) {
-            loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
-          }
-          setOrderValues(loaded);
-        } catch {
-          setOrderValues({});
+      try {
+        const loaded: Record<string, string> = {};
+        const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, to);
+        for (const entry of nextOrderValues) {
+          loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
         }
-      } else {
+        setOrderValues(loaded);
+      } catch {
         setOrderValues({});
       }
     } catch (err) {
@@ -992,7 +986,7 @@ const ProductsPanel = ({ session }: { session: Session }) => {
 
   useEffect(() => {
     void load();
-  }, [session.token, selectedShopId, windowStart, stockView]);
+  }, [session.token, selectedShopId, windowStart]);
 
   const visibleRows = useMemo(() => {
     const normalized = normalizeText(query);
@@ -1277,12 +1271,11 @@ const ProductsPanel = ({ session }: { session: Session }) => {
                   {dashboardHeaderSubtitle(column) && <small>{dashboardHeaderSubtitle(column)}</small>}
                 </th>
               ))}
-              <th className="manager-action-col dashboard-name-header">Действие</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={DASHBOARD_COLUMNS.length + 2} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={DASHBOARD_COLUMNS.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row) => {
               const values = dashboardRowValues(row);
               return (
@@ -1325,7 +1318,6 @@ const ProductsPanel = ({ session }: { session: Session }) => {
                       </td>
                     );
                   })}
-                  <td className="manager-action-col"><button className="danger compact" onClick={() => void removeProduct(row)}>Удалить</button></td>
                 </tr>
               );
             })}
@@ -1404,16 +1396,9 @@ const ProductsPanel = ({ session }: { session: Session }) => {
         <strong>{table ? `${windowStart} - ${addDays(windowStart, WEEK_DAYS - 1)}` : ''}</strong>
       </div>
 
-      <div className="manager-view-tabs">
-        <button className={stockView === 'dashboard' ? 'active' : ''} onClick={() => setStockView('dashboard')}>Дашборд</button>
-        <button className={stockView === 'calendar' ? 'active' : ''} onClick={() => setStockView('calendar')}>Календарь</button>
-      </div>
-
       <div className="manager-table-wrap">
         {loading ? <p className="manager-loading">Загружаем остатки...</p> : PRODUCT_CATEGORIES.map((category) =>
-          stockView === 'dashboard'
-            ? renderDashboardCategory(category, rowsByCategory[category])
-            : renderCalendarCategory(category, rowsByCategory[category]),
+          renderDashboardCategory(category, rowsByCategory[category]),
         )}
       </div>
 
@@ -1958,7 +1943,6 @@ const BarChart = ({ title, items, suffix }: { title: string; items: Array<{ labe
 const PageHeader = ({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) => (
   <header className="page-header">
     <div>
-      <p className="eyebrow">Панель администратора</p>
       <h2>{title}</h2>
       <p>{subtitle}</p>
     </div>

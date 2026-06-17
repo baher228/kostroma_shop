@@ -26,7 +26,6 @@ import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
-type ManagerStockView = 'dashboard' | 'calendar';
 
 type DashboardManualOrderKey = 'orderPackThu' | 'orderPackSat' | 'orderPackTue';
 type DashboardColumnKey =
@@ -402,7 +401,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [managerStockView, setManagerStockView] = useState<ManagerStockView>('dashboard');
   const [dashboardOrderValues, setDashboardOrderValues] = useState<Record<string, string>>({});
   const [pendingKeys, setPendingKeys] = useState<Record<string, boolean>>({});
   const [isShopPickerOpen, setIsShopPickerOpen] = useState(false);
@@ -457,16 +455,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       setError('');
       const dashboardFrom = shiftDateKey(managerWindowStart, -WEEK_DAYS);
       const dashboardTo = getTwoWeeksEnd(dashboardFrom);
-      const from = canManage
-        ? managerStockView === 'dashboard'
-          ? dashboardFrom
-          : managerWindowStart
-        : undefined;
-      const to = canManage
-        ? managerStockView === 'dashboard'
-          ? dashboardTo
-          : shiftDateKey(managerWindowStart, WEEK_DAYS - 1)
-        : undefined;
+      const from = canManage ? dashboardFrom : undefined;
+      const to = canManage ? dashboardTo : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
         from,
@@ -508,7 +498,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return;
     }
     void loadTable();
-  }, [session.token, canManage, selectedShopId, managerWindowStart, managerStockView]);
+  }, [session.token, canManage, selectedShopId, managerWindowStart]);
 
   const visibleRows = useMemo(() => {
     if (!table) {
@@ -1087,9 +1077,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   <Text style={styles.dateDayText}>{formatDate(date)}</Text>
                 </View>
               ))}
-              <View style={[styles.headerCell, styles.actionColumn]}>
-                <Text style={styles.headerText}>Действие</Text>
-              </View>
             </View>
 
             {rows.length === 0 ? (
@@ -1121,15 +1108,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     </Pressable>
                   );
                 })}
-                <View style={[styles.cell, styles.actionColumn]}>
-                  {canManage ? (
-                    <Pressable style={styles.deleteButton} onPress={() => removeProduct(row.productId)}>
-                      <Text style={styles.deleteButtonText}>Удалить</Text>
-                    </Pressable>
-                  ) : (
-                    <Text style={styles.workerActionText}>-</Text>
-                  )}
-                </View>
               </View>
               ))
             )}
@@ -1250,9 +1228,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardHeaderSubtitle(column)}</Text>
                 </View>
               ))}
-              <View style={[styles.headerCell, styles.actionColumn, styles.dashboardNameHeader]}>
-                <Text style={styles.headerText}>Действие</Text>
-              </View>
             </View>
 
             {rows.length === 0 ? (
@@ -1330,11 +1305,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       </View>
                     );
                   })}
-                  <View style={[styles.cell, styles.actionColumn]}>
-                    <Pressable style={styles.deleteButton} onPress={() => removeProduct(row.productId)}>
-                      <Text style={styles.deleteButtonText}>Удалить</Text>
-                    </Pressable>
-                  </View>
                 </View>
               );
               })
@@ -1349,21 +1319,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     <>
       {!canManage && <WorkerCheckInCard token={session.token} />}
       <View style={styles.controls}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          style={styles.searchInput}
-          placeholder="Поиск товара"
-          placeholderTextColor="#6d7d72"
-        />
         <View style={styles.controlButtons}>
           {canManage && (
             <>
-              <Pressable style={styles.secondaryButton} onPress={() => setIsShopPickerOpen(true)}>
-                <Text style={styles.secondaryButtonText}>
-                  Магазин: {shops.find((shop) => shop.id === selectedShopId)?.name ?? table?.shop.name ?? '...'}
-                </Text>
-              </Pressable>
               <View style={styles.rangeButtons}>
                 <Pressable
                   style={styles.calendarNavButton}
@@ -1389,44 +1347,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               </Pressable>
             </>
           )}
-          <Pressable style={styles.secondaryButton} onPress={loadTable}>
-            <Text style={styles.secondaryButtonText}>Обновить</Text>
-          </Pressable>
         </View>
       </View>
-
-      <View style={styles.sortRow}>
-        <Text style={styles.metaText}>Позиций: {visibleRows.length}</Text>
-        <Text style={styles.metaText}>{table ? `${managerWindowStart} - ${shiftDateKey(managerWindowStart, WEEK_DAYS - 1)}` : ''}</Text>
-      </View>
-
-      {canManage && (
-        <View style={styles.viewModeButtons}>
-          <Pressable
-            style={[styles.viewModeButton, managerStockView === 'dashboard' && styles.viewModeButtonActive]}
-            onPress={() => setManagerStockView('dashboard')}
-          >
-            <Text style={[styles.viewModeButtonText, managerStockView === 'dashboard' && styles.viewModeButtonTextActive]}>
-              Дашборд
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.viewModeButton, managerStockView === 'calendar' && styles.viewModeButtonActive]}
-            onPress={() => setManagerStockView('calendar')}
-          >
-            <Text style={[styles.viewModeButtonText, managerStockView === 'calendar' && styles.viewModeButtonTextActive]}>
-              Календарь
-            </Text>
-          </Pressable>
-        </View>
-      )}
 
       {!!error && <Text style={styles.error}>{error}</Text>}
 
       <View style={styles.tableWrap}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
           {PRODUCT_CATEGORIES.map((category) =>
-            canManage && managerStockView === 'dashboard'
+            canManage
               ? renderDashboardCategoryTable(category, rowsByCategory[category])
               : renderCategoryTable(category, rowsByCategory[category]),
           )}
@@ -1959,13 +1888,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   headerText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#2e312f',
     fontWeight: '800',
     textAlign: 'center',
   },
   dateWeekdayText: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#2e312f',
     fontWeight: '800',
     textAlign: 'center',
@@ -1973,7 +1902,7 @@ const styles = StyleSheet.create({
   },
   dateDayText: {
     marginTop: 1,
-    fontSize: 9,
+    fontSize: 11,
     color: '#3a4b3e',
     fontWeight: '700',
   },
@@ -2044,13 +1973,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   nameText: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#222222',
     fontWeight: '600',
   },
   referenceText: {
     marginTop: 2,
-    fontSize: 11,
+    fontSize: 13,
     color: '#4e5d53',
     fontWeight: '600',
   },
@@ -2071,30 +2000,30 @@ const styles = StyleSheet.create({
     minHeight: 86,
   },
   dashboardHeaderTitle: {
-    fontSize: 9,
+    fontSize: 12,
     color: '#1f2a21',
     fontWeight: '800',
     textAlign: 'center',
   },
   dashboardHeaderTitleStock: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '900',
   },
   dashboardHeaderTitleExpanded: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '900',
     textAlignVertical: 'center',
   },
   dashboardHeaderSubtitle: {
-    fontSize: 9,
+    fontSize: 12,
     color: '#1f2a21',
     fontWeight: '700',
     textAlign: 'center',
     lineHeight: 11,
   },
   dashboardHeaderSubtitleStock: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800',
     lineHeight: 16,
   },
@@ -2138,12 +2067,12 @@ const styles = StyleSheet.create({
     width: '100%',
     textAlign: 'center',
     color: '#223528',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
     paddingVertical: 0,
   },
   dashboardOrderInputExpanded: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
   },
   pendingCell: {
@@ -2151,15 +2080,15 @@ const styles = StyleSheet.create({
   },
   valueText: {
     color: '#223528',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
   },
   valueTextStock: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
   },
   valueTextOrder: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
   },
   deleteButton: {
@@ -2230,8 +2159,8 @@ const styles = StyleSheet.create({
   },
   modalMeta: {
     color: '#4d6052',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '900',
   },
   modalBody: {
     maxHeight: 460,
@@ -2242,7 +2171,7 @@ const styles = StyleSheet.create({
   },
   formLabel: {
     color: '#344b3d',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800',
   },
   modalInput: {
@@ -2252,7 +2181,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    fontSize: 15,
+    fontSize: 20,
     color: '#1f2f26',
     fontWeight: '500',
   },

@@ -93,7 +93,7 @@ jobs:
         if: env.REGION == 'all' || env.REGION == 'ru'
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && timeout 600 docker compose -f docker-compose.ru.yml up -d --build"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && COMPOSE_DOCKER_CLI_BUILD=0 DOCKER_BUILDKIT=0 timeout 600 docker compose -f docker-compose.ru.yml up -d --build"
 
       - name: Smoke test RU backend
         if: (env.REGION == 'all' || env.REGION == 'ru') && vars.RU_HEALTH_URL != ''
@@ -103,7 +103,7 @@ jobs:
         if: env.REGION == 'all' || env.REGION == 'dubai'
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && timeout 600 docker compose -f docker-compose.dubai.yml up -d --build"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && COMPOSE_DOCKER_CLI_BUILD=0 DOCKER_BUILDKIT=0 timeout 600 docker compose -f docker-compose.dubai.yml up -d --build"
 
       - name: Smoke test Dubai backend
         if: (env.REGION == 'all' || env.REGION == 'dubai') && vars.DUBAI_HEALTH_URL != ''

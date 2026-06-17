@@ -1,4 +1,5 @@
 ﻿import { StatusBar } from 'expo-status-bar';
+import * as Updates from 'expo-updates';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -417,6 +418,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [newProductMinStockUnits, setNewProductMinStockUnits] = useState('');
   const [newProductMaxStockUnits, setNewProductMaxStockUnits] = useState('');
   const [addingProduct, setAddingProduct] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -436,6 +438,32 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const setPending = (key: string, value: boolean) => {
     setPendingKeys((current) => ({ ...current, [key]: value }));
+  };
+
+  const checkForAppUpdate = async () => {
+    if (Platform.OS === 'web' || !Updates.isEnabled) {
+      Alert.alert('Обновления приложения', 'OTA-обновления доступны только в установленном приложении.');
+      return;
+    }
+
+    try {
+      setCheckingUpdate(true);
+      const update = await Updates.checkForUpdateAsync();
+      if (!update.isAvailable) {
+        Alert.alert('Обновления приложения', 'Установлена последняя версия.');
+        return;
+      }
+
+      await Updates.fetchUpdateAsync();
+      Alert.alert('Обновление готово', 'Перезапустить приложение, чтобы применить обновление?', [
+        { text: 'Позже', style: 'cancel' },
+        { text: 'Перезапустить', onPress: () => void Updates.reloadAsync() },
+      ]);
+    } catch (updateError) {
+      Alert.alert('Не удалось проверить обновление', errorMessage(updateError));
+    } finally {
+      setCheckingUpdate(false);
+    }
   };
 
   const loadShops = async () => {
@@ -1442,9 +1470,18 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             {session.user.fullName} · {canManage ? 'Менеджер' : 'Сотрудник'}
           </Text>
         </View>
-        <Pressable style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutButtonText}>Выйти</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={[styles.updateButton, checkingUpdate && styles.buttonDisabled]}
+            onPress={() => void checkForAppUpdate()}
+            disabled={checkingUpdate}
+          >
+            <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить'}</Text>
+          </Pressable>
+          <Pressable style={styles.logoutButton} onPress={onLogout}>
+            <Text style={styles.logoutButtonText}>Выйти</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.contentWrap}>{renderContent()}</View>
@@ -1712,6 +1749,22 @@ const styles = StyleSheet.create({
     color: '#4f6155',
     fontWeight: '600',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  updateButton: {
+    borderRadius: 11,
+    backgroundColor: '#2f6f4f',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  updateButtonText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 13,
+  },
   logoutButton: {
     borderRadius: 11,
     backgroundColor: '#dbe4dc',
@@ -1722,6 +1775,9 @@ const styles = StyleSheet.create({
     color: '#223529',
     fontWeight: '800',
     fontSize: 13,
+  },
+  buttonDisabled: {
+    opacity: 0.65,
   },
   contentWrap: {
     flex: 1,

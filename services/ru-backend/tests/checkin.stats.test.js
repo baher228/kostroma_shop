@@ -3,7 +3,7 @@ const test = require('node:test');
 
 test('check-in update writes current status and event history', async () => {
   const calls = [];
-  const personalDbPath = require.resolve('../dist/personalDb');
+  const personalDbPath = require.resolve('../dist/db/personalDb');
 
   require.cache[personalDbPath] = {
     id: personalDbPath,
@@ -43,8 +43,8 @@ test('check-in update writes current status and event history', async () => {
     },
   };
 
-  delete require.cache[require.resolve('../dist/checkInStore')];
-  const { upsertWorkerCheckInStatus } = require('../dist/checkInStore');
+  delete require.cache[require.resolve('../dist/repositories/checkInRepository')];
+  const { upsertWorkerCheckInStatus } = require('../dist/repositories/checkInRepository');
 
   const status = await upsertWorkerCheckInStatus({
     workerId: 'worker_1',
@@ -59,7 +59,7 @@ test('check-in update writes current status and event history', async () => {
 });
 
 test('check-in stats calculate hours, late and missing days', async () => {
-  const personalDbPath = require.resolve('../dist/personalDb');
+  const personalDbPath = require.resolve('../dist/db/personalDb');
 
   require.cache[personalDbPath] = {
     id: personalDbPath,
@@ -119,8 +119,8 @@ test('check-in stats calculate hours, late and missing days', async () => {
     },
   };
 
-  delete require.cache[require.resolve('../dist/checkInStore')];
-  const { getCheckInStats } = require('../dist/checkInStore');
+  delete require.cache[require.resolve('../dist/repositories/checkInRepository')];
+  const { getCheckInStats } = require('../dist/repositories/checkInRepository');
 
   const stats = await getCheckInStats('2026-05-17', '2026-05-17');
 

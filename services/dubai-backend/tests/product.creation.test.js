@@ -4,7 +4,7 @@ const test = require('node:test');
 test('createProduct writes the full product metadata payload', async () => {
   let capturedSql = '';
   let capturedParams = [];
-  const opsDbPath = require.resolve('../dist/opsDb');
+  const opsDbPath = require.resolve('../dist/db/opsDb');
 
   require.cache[opsDbPath] = {
     id: opsDbPath,
@@ -34,8 +34,8 @@ test('createProduct writes the full product metadata payload', async () => {
     },
   };
 
-  delete require.cache[require.resolve('../dist/store')];
-  const { createProduct } = require('../dist/store');
+  delete require.cache[require.resolve('../dist/repositories/stockRepository')];
+  const { createProduct } = require('../dist/repositories/stockRepository');
 
   const product = await createProduct({
     name: 'Творог 5%',

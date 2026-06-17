@@ -46,7 +46,7 @@ const messageRows = [
 ];
 
 test('support list can be scoped to the requesting worker', async () => {
-  const personalDbPath = require.resolve('../dist/personalDb');
+  const personalDbPath = require.resolve('../dist/db/personalDb');
   require.cache[personalDbPath] = {
     id: personalDbPath,
     filename: personalDbPath,
@@ -71,8 +71,8 @@ test('support list can be scoped to the requesting worker', async () => {
     },
   };
 
-  delete require.cache[require.resolve('../dist/supportStore')];
-  const { listSupportThreads } = require('../dist/supportStore');
+  delete require.cache[require.resolve('../dist/repositories/supportRepository')];
+  const { listSupportThreads } = require('../dist/repositories/supportRepository');
 
   const workerThreads = await listSupportThreads('worker_a');
   assert.deepEqual(workerThreads.map((thread) => thread.id), ['thread_worker_a']);

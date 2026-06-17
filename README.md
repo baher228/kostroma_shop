@@ -105,6 +105,22 @@ Password: manager123
 - Russia PostgreSQL: `localhost:5433`
 - Dubai PostgreSQL: `localhost:5434`
 
+## Backend Source Layout
+
+Both backend services use the same lightweight structure:
+
+- `app/` - Express app composition and common middleware
+- `auth/` - token signing, token verification, and auth middleware
+- `config/` - environment parsing
+- `db/` - database client and migrations
+- `domain/` - shared backend types
+- `http/` - request validation and HTTP helper utilities
+- `repositories/` - database-facing SQL modules
+- `routes/` - Express route adapters
+- `services/` - application/business rules used by routes
+
+The Russia backend also has `observability/` for audit-related helpers.
+
 ## CI/CD
 
 GitHub Actions workflows are included for deployment and application updates:
@@ -290,11 +306,21 @@ Start only the databases:
 npm run db:up
 ```
 
-Run backend checks:
+Run checks:
 
 ```bash
+npm test
 npm run backend:typecheck
 npm run backend:test
+```
+
+`npm test` is the full local check: frontend typecheck, dashboard build, and backend tests. Use `npm run backend:test` when you only need the backend test suites.
+
+Run database migrations directly:
+
+```bash
+npm run backend:ru:db:migrate
+npm run backend:dubai:db:migrate
 ```
 
 ## Notes
@@ -303,6 +329,7 @@ npm run backend:test
 - The Russia backend issues short-lived Dubai API tokens through `/api/auth/ops-token`.
 - `services/ru-backend` contains only the Russia backend source and personal-data migrations.
 - `services/dubai-backend` contains only the Dubai backend source and stock/financial migrations.
+- Backend routes call services, services call repositories, and repositories own SQL/database mapping.
 - For stronger production auth, use `OPS_TOKEN_PRIVATE_KEY` on Russia and `OPS_TOKEN_PUBLIC_KEY` on Dubai instead of shared `OPS_JWT_SECRET`.
 
 

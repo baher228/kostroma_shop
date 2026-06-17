@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "test": "npm run build && node --test tests/run-tests.js",
     "typecheck": "tsc --noEmit",
-    "db:migrate": "ts-node src/migrate.ts"
+    "db:migrate": "ts-node src/db/migrate.ts"
   },
   "keywords": [
     "stock",

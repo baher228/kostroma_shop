@@ -1,8 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { signOpsToken, signSessionToken, verifySessionToken } = require('../dist/auth');
-const { createRussiaApp } = require('../dist/russiaApp');
+const { signOpsToken, signSessionToken, verifySessionToken } = require('../dist/auth/auth');
+const { createRussiaApp } = require('../dist/app/russiaApp');
 const {
   loginSchema,
   createTaskSchema,
@@ -12,7 +12,7 @@ const {
   updateUserSchema,
   createSupportThreadSchema,
   createSupportMessageSchema,
-} = require('../dist/validation');
+} = require('../dist/http/validation');
 
 const sessionUser = {
   id: 'u1',

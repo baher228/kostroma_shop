@@ -1,8 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { signOpsToken, signSessionToken, verifyOpsToken } = require('../dist/auth');
-const { createDubaiApp } = require('../dist/dubaiApp');
+const { signOpsToken, signSessionToken, verifyOpsToken } = require('../dist/auth/auth');
+const { createDubaiApp } = require('../dist/app/dubaiApp');
 const {
   createRowSchema,
   createSellerOrderSchema,
@@ -11,7 +11,7 @@ const {
   updateSellerOrderStatusSchema,
   updateShopSchema,
   upsertStockValueSchema,
-} = require('../dist/validation');
+} = require('../dist/http/validation');
 
 const personalSessionUser = {
   id: 'u1',
@@ -57,7 +57,7 @@ test('Dubai order schema rejects personal and free-text fields', () => {
 });
 
 test('Dubai mirrored auth schemas accept admin password length', () => {
-  const { loginSchema, createUserSchema } = require('../dist/validation');
+  const { loginSchema, createUserSchema } = require('../dist/http/validation');
   assert.equal(loginSchema.parse({ username: 'admin', password: 'admin' }).password, 'admin');
   assert.equal(createUserSchema.parse({
     username: 'worker.short',
@@ -123,13 +123,13 @@ test('Dubai stock schemas validate operational fields', () => {
   assert.throws(() => updateProductSchema.parse({ minStockUnits: 4, maxStockUnits: 2 }));
   assert.equal(updateShopSchema.parse({ name: ' Shop 2 ', machineNumber: 2 }).name, 'Shop 2');
   assert.equal(updateSellerOrderStatusSchema.parse({ status: 'processed' }).status, 'processed');
-  assert.equal(require('../dist/validation').upsertOrderSheetValueSchema.parse({
+  assert.equal(require('../dist/http/validation').upsertOrderSheetValueSchema.parse({
     shopId: 'shop_main',
     productId: 'prod_1',
     date: '2026-05-06',
     value: '14',
   }).value, '14');
-  assert.throws(() => require('../dist/validation').upsertOrderSheetValueSchema.parse({
+  assert.throws(() => require('../dist/http/validation').upsertOrderSheetValueSchema.parse({
     shopId: 'shop_main',
     productId: 'prod_1',
     date: '2026-05-06',

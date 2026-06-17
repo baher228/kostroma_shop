@@ -1,9 +1,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-test('shop and product management stores write editable fields', async () => {
+test('shop and product management repositories write editable fields', async () => {
   const calls = [];
-  const opsDbPath = require.resolve('../dist/opsDb');
+  const opsDbPath = require.resolve('../dist/db/opsDb');
 
   require.cache[opsDbPath] = {
     id: opsDbPath,
@@ -38,8 +38,8 @@ test('shop and product management stores write editable fields', async () => {
     },
   };
 
-  delete require.cache[require.resolve('../dist/store')];
-  const { updateProduct, updateShop } = require('../dist/store');
+  delete require.cache[require.resolve('../dist/repositories/stockRepository')];
+  const { updateProduct, updateShop } = require('../dist/repositories/stockRepository');
 
   const shop = await updateShop('shop_main', { name: 'Main shop', machineNumber: 2 });
   assert.equal(shop.machineNumber, 2);
@@ -60,7 +60,7 @@ test('shop and product management stores write editable fields', async () => {
 });
 
 test('seller order status update returns resolved order details', async () => {
-  const opsDbPath = require.resolve('../dist/opsDb');
+  const opsDbPath = require.resolve('../dist/db/opsDb');
   let callCount = 0;
 
   require.cache[opsDbPath] = {
@@ -112,8 +112,8 @@ test('seller order status update returns resolved order details', async () => {
     },
   };
 
-  delete require.cache[require.resolve('../dist/ordersStore')];
-  const { updateSellerOrderStatus } = require('../dist/ordersStore');
+  delete require.cache[require.resolve('../dist/repositories/ordersRepository')];
+  const { updateSellerOrderStatus } = require('../dist/repositories/ordersRepository');
 
   const order = await updateSellerOrderStatus(
     { role: 'manager', shopIds: [], scopes: ['orders:write'], jti: 'jti_1' },
@@ -126,7 +126,7 @@ test('seller order status update returns resolved order details', async () => {
 });
 
 test('seller order creation writes through to order sheet values', async () => {
-  const opsDbPath = require.resolve('../dist/opsDb');
+  const opsDbPath = require.resolve('../dist/db/opsDb');
   const calls = [];
 
   require.cache[opsDbPath] = {
@@ -167,8 +167,8 @@ test('seller order creation writes through to order sheet values', async () => {
     },
   };
 
-  delete require.cache[require.resolve('../dist/ordersStore')];
-  const { createSellerOrder, nearestOrderSheetDate } = require('../dist/ordersStore');
+  delete require.cache[require.resolve('../dist/repositories/ordersRepository')];
+  const { createSellerOrder, nearestOrderSheetDate } = require('../dist/repositories/ordersRepository');
 
   assert.equal(nearestOrderSheetDate(new Date(2026, 3, 27)), '2026-04-28');
   assert.equal(nearestOrderSheetDate(new Date(2026, 3, 30)), '2026-04-30');

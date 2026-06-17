@@ -1,9 +1,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-test('user management store supports update, password reset, and delete', async () => {
+test('user management repository supports update, password reset, and delete', async () => {
   const calls = [];
-  const personalDbPath = require.resolve('../dist/personalDb');
+  const personalDbPath = require.resolve('../dist/db/personalDb');
 
   require.cache[personalDbPath] = {
     id: personalDbPath,
@@ -42,8 +42,8 @@ test('user management store supports update, password reset, and delete', async 
     },
   };
 
-  delete require.cache[require.resolve('../dist/userStore')];
-  const { deleteUser, updateUser, updateUserPassword } = require('../dist/userStore');
+  delete require.cache[require.resolve('../dist/repositories/userRepository')];
+  const { deleteUser, updateUser, updateUserPassword } = require('../dist/repositories/userRepository');
 
   const updated = await updateUser('u_admin_01', {
     username: 'admin',

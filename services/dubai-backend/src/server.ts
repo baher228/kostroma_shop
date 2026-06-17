@@ -1,6 +1,6 @@
-import { config } from './config';
-import { createDubaiApp } from './dubaiApp';
-import { runMigrations } from './migrate';
+import { config } from './config/config';
+import { createDubaiApp } from './app/dubaiApp';
+import { runMigrations } from './db/migrate';
 
 const startServer = async () => {
   await runMigrations();

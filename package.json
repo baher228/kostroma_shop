@@ -38,7 +38,7 @@
     "backend:ru:db:migrate": "npm --prefix services/ru-backend run db:migrate",
     "backend:dubai:db:migrate": "npm --prefix services/dubai-backend run db:migrate",
     "typecheck": "npm run frontend:typecheck && npm run backend:typecheck",
-    "test": "npm run backend:test",
+    "test": "npm run frontend:typecheck && npm run dashboard:build && npm run backend:test",
     "docker:validate": "PERSONAL_POSTGRES_PASSWORD=ci-personal-password OPS_POSTGRES_PASSWORD=ci-ops-password JWT_SECRET=ci-jwt-secret OPS_JWT_SECRET=ci-ops-jwt-secret CORS_ORIGIN=http://localhost:19006 docker compose -f docker-compose.ru.yml config && PERSONAL_POSTGRES_PASSWORD=ci-personal-password OPS_POSTGRES_PASSWORD=ci-ops-password JWT_SECRET=ci-jwt-secret OPS_JWT_SECRET=ci-ops-jwt-secret CORS_ORIGIN=http://localhost:19006 docker compose -f docker-compose.dubai.yml config",
     "ci": "npm run typecheck && npm run test && npm run docker:validate",
     "eas:build:apk": "eas build -p android --profile preview",

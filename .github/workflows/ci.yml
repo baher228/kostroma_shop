@@ -48,7 +48,7 @@ jobs:
         run: npm run dashboard:build
 
       - name: Build RU backend Docker image
-        run: docker build -t analitika-ru-ci ./services/ru-backend
+        run: docker build -f services/ru-backend/Dockerfile -t analitika-ru-ci .
 
       - name: Build Dubai backend Docker image
-        run: docker build -t analitika-dubai-ci ./services/dubai-backend
+        run: docker build -f services/dubai-backend/Dockerfile -t analitika-dubai-ci .

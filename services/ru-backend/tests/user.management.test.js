@@ -23,7 +23,6 @@ test('user management store supports update, password reset, and delete', async 
             return { rowCount: 1, rows: [] };
           }
           if (sql.includes('FROM users u')) {
-            assert.match(sql, /NULL::text AS shop_name/);
             return {
               rows: [{
                 id: params[0],

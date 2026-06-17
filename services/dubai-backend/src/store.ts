@@ -503,7 +503,7 @@ export const getStockTable = async (
     dashboardOverridesByProduct.set(item.product_id, current);
   }
 
-  const rows: StockTableRow[] = productsResult.rows.map((product) => {
+  const rows: StockTableRow[] = productsResult.rows.map((product: ProductDbRow) => {
     const values: Record<string, string> = {};
     for (const date of dates) {
       values[date] = byProductAndDate.get(`${product.id}:${date}`) ?? '';
@@ -629,7 +629,7 @@ export const listOrderValues = async (from: string, to: string): Promise<OrderVa
     `,
     [from, to],
   );
-  return result.rows.map((row) => ({
+  return result.rows.map((row: OrderValueDbRow) => ({
     productId: row.product_id,
     orderDate: row.order_date,
     packs: row.packs,

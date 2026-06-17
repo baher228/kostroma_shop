@@ -123,6 +123,18 @@ test('Dubai stock schemas validate operational fields', () => {
   assert.throws(() => updateProductSchema.parse({ minStockUnits: 4, maxStockUnits: 2 }));
   assert.equal(updateShopSchema.parse({ name: ' Shop 2 ', machineNumber: 2 }).name, 'Shop 2');
   assert.equal(updateSellerOrderStatusSchema.parse({ status: 'processed' }).status, 'processed');
+  assert.equal(require('../dist/validation').upsertOrderSheetValueSchema.parse({
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    date: '2026-05-06',
+    value: '14',
+  }).value, '14');
+  assert.throws(() => require('../dist/validation').upsertOrderSheetValueSchema.parse({
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    date: '2026-05-06',
+    value: 'hello',
+  }));
 });
 
 test('Dubai app rejects personal session tokens before route handlers run', async (t) => {

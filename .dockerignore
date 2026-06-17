@@ -1,0 +1,13 @@
+.git
+.github
+.expo
+android
+frontend
+backend
+web-dashboard
+node_modules
+**/node_modules
+**/dist
+tmp_*
+*.log
+

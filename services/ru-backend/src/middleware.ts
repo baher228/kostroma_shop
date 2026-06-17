@@ -36,7 +36,7 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
   try {
     const freshUser = await findUserById(user.id);
     if (!freshUser) {
-      res.status(401).json({ message: 'ÐÐµÐ´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ñ‚Ð¾ÐºÐµÐ½.' });
+      res.status(401).json({ message: 'Недействительный токен.' });
       return;
     }
     (req as AuthorizedRequest).user = freshUser;

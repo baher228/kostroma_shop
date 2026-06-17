@@ -71,7 +71,7 @@ export const listSupportThreads = async (createdById?: string): Promise<SupportT
       WHERE thread_id = ANY($1::text[])
       ORDER BY created_at ASC;
     `,
-    [threads.rows.map((thread) => thread.id)],
+    [threads.rows.map((thread: ThreadRow) => thread.id)],
   );
   return mapThreadsWithMessages(threads.rows, messages.rows);
 };
@@ -85,8 +85,8 @@ export const getSupportThread = async (threadId: string): Promise<SupportThread 
     'SELECT * FROM support_messages WHERE thread_id = $1 ORDER BY created_at ASC;',
     [threadId],
   );
-  return threads.rows.map((thread) =>
-    mapThread(thread, messages.rows.filter((message) => message.thread_id === thread.id).map(mapMessage)),
+  return threads.rows.map((thread: ThreadRow) =>
+    mapThread(thread, messages.rows.filter((message: MessageRow) => message.thread_id === thread.id).map(mapMessage)),
   )[0];
 };
 

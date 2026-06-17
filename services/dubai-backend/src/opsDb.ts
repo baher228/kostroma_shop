@@ -9,4 +9,5 @@ export const opsDb = createDatabase({
   password: config.opsDbPassword,
   database: config.opsDbName,
   ssl: config.opsDbSsl,
+  sslRejectUnauthorized: config.opsDbSslRejectUnauthorized,
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
 import './styles.css';
+import { sortProductsLikeImage } from './productOrdering';
 import {
   CheckInStats,
   ManagedUser,
@@ -1262,6 +1263,13 @@ const ProductsPanel = ({ session }: { session: Session }) => {
       <div className="manager-category-title">{category}</div>
       <div className="manager-table-scroll">
         <table className="manager-stock-table manager-dashboard-table">
+          <colgroup>
+            <col className="manager-name-col-width" />
+            {DASHBOARD_COLUMNS.map((column) => (
+              <col key={column.key} className="dashboard-data-col-width" />
+            ))}
+            <col className="manager-action-col-width" />
+          </colgroup>
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>
@@ -1509,6 +1517,11 @@ const OrdersPanel = ({ session }: { session: Session }) => {
         ? row.category as ProductCategory
         : PRODUCT_CATEGORIES[0];
       grouped[category].push(row);
+    }
+    for (const category of PRODUCT_CATEGORIES) {
+      grouped[category] = sortProductsLikeImage(
+        grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category as ProductCategory })),
+      ).map(({ name: _name, ...row }) => row as OrderSheetRow);
     }
     return grouped;
   };

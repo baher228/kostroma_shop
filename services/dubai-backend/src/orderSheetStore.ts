@@ -62,14 +62,18 @@ export const getOrderSheet = async (date: string): Promise<OrderSheet> => {
     ),
   ]);
 
-  const shops: Shop[] = shopsResult.rows.map((r) => ({ id: r.id, name: r.name, machineNumber: r.machine_number }));
+  const shops: Shop[] = shopsResult.rows.map((r: { id: string; name: string; machine_number: number }) => ({
+    id: r.id,
+    name: r.name,
+    machineNumber: r.machine_number,
+  }));
 
   const orderMap = new Map<string, number>();
   for (const row of ordersResult.rows) {
     orderMap.set(`${row.product_id}:${row.shop_id}`, row.packs);
   }
 
-  const rows: OrderSheetRow[] = productsResult.rows.map((product) => {
+  const rows: OrderSheetRow[] = productsResult.rows.map((product: ProductRow) => {
     const shopValues: Record<string, number> = {};
     let total = 0;
     for (const shop of shops) {
@@ -109,7 +113,7 @@ export const listOrderSheetValues = async (shopId: string, from: string, to: str
     [shopId, from, to],
   );
 
-  return result.rows.map((row) => ({
+  return result.rows.map((row: { shop_id: string; product_id: string; order_date: string; packs: number }) => ({
     shopId: row.shop_id,
     productId: row.product_id,
     orderDate: row.order_date,

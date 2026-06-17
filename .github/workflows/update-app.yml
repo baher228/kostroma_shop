@@ -41,14 +41,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Preflight Expo config
+      - name: Check Expo token
+        id: expo-token
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "::error::EXPO_TOKEN is not configured for the expo-production environment"
-            exit 1
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::EXPO_TOKEN is not configured for the expo-production environment"
+              exit 1
+            fi
+            echo "::warning::EXPO_TOKEN is not configured; skipping automatic EAS update for this push"
+            echo "token_present=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "token_present=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
+        if: steps.expo-token.outputs.token_present == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -56,15 +64,18 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Setup Expo and EAS
+        if: steps.expo-token.outputs.token_present == 'true'
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
+        if: steps.expo-token.outputs.token_present == 'true'
         run: npm ci
 
       - name: Publish OTA update
+        if: steps.expo-token.outputs.token_present == 'true'
         run: |
           MESSAGE="$UPDATE_MESSAGE"
           if [ -z "$MESSAGE" ]; then

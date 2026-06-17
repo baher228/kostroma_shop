@@ -119,38 +119,25 @@ GitHub Actions workflows are included for deployment and application updates:
 
 Create these GitHub Environments:
 
-- `production-ru`
-- `production-dubai`
+- `production-backend`
 - `production-dashboard`
 - `expo-production`
 
 The deploy workflows intentionally fail fast with explicit error messages if required secrets/variables are missing.
 
-#### `production-ru` secrets
+#### `production-backend` secrets
 
 - `SSH_HOST`
 - `SSH_PORT` (optional, defaults to `22`)
 - `SSH_USER`
 - `SSH_PRIVATE_KEY`
 - `APP_PATH`
-- `ENV_FILE` — full `.env` content for the RU server
+- `ENV_FILE` — full production `.env` content for the backend server
 
-Recommended environment variable:
+Recommended environment variables:
 
-- `HEALTH_URL` — e.g. `https://affera.co.uk/ru/api/health`
-
-#### `production-dubai` secrets
-
-- `SSH_HOST`
-- `SSH_PORT` (optional, defaults to `22`)
-- `SSH_USER`
-- `SSH_PRIVATE_KEY`
-- `APP_PATH`
-- `ENV_FILE` — full `.env` content for the Dubai server
-
-Recommended environment variable:
-
-- `HEALTH_URL` — e.g. `https://affera.co.uk/dxb/api/health`
+- `RU_HEALTH_URL` — e.g. `https://affera.co.uk/ru/api/health`
+- `DUBAI_HEALTH_URL` — e.g. `https://affera.co.uk/dxb/api/health`
 
 #### `production-dashboard` secrets
 

@@ -24,11 +24,15 @@ on:
       - 'package.json'
       - 'package-lock.json'
 
+concurrency:
+  group: analitika-backend-production
+  cancel-in-progress: false
+
 jobs:
-  deploy-ru:
-    if: github.event_name == 'push' || inputs.region == 'all' || inputs.region == 'ru'
+  deploy:
     runs-on: ubuntu-latest
-    environment: production-ru
+    timeout-minutes: 20
+    environment: production-backend
     env:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -36,7 +40,9 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       APP_PATH: ${{ secrets.APP_PATH }}
       ENV_FILE: ${{ secrets.ENV_FILE }}
-      HEALTH_URL: ${{ vars.HEALTH_URL }}
+      RU_HEALTH_URL: ${{ vars.RU_HEALTH_URL }}
+      DUBAI_HEALTH_URL: ${{ vars.DUBAI_HEALTH_URL }}
+      REGION: ${{ inputs.region || 'all' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,7 +52,7 @@ jobs:
           missing=0
           for name in SSH_PRIVATE_KEY SSH_HOST SSH_USER APP_PATH ENV_FILE; do
             if [ -z "${!name}" ]; then
-              echo "::error::$name is not configured for the production-ru environment"
+              echo "::error::$name is not configured for the production-backend environment"
               missing=1
             fi
           done
@@ -58,11 +64,16 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          for attempt in 1 2 3; do
+            ssh-keyscan -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts && break
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 5
+          done
 
       - name: Sync project files
         run: |
           PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_PATH'"
           rsync -az --delete \
             --exclude '.git/' \
             --exclude 'node_modules/' \
@@ -72,71 +83,33 @@ jobs:
             --exclude 'services/dubai-backend/dist/' \
             -e "ssh -p $PORT" \
             ./ "$SSH_USER@$SSH_HOST:$APP_PATH/"
+
+      - name: Write production env file
+        run: |
+          PORT="${SSH_PORT:-22}"
+          printf '%s' "$ENV_FILE" | ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && cat > .env"
 
       - name: Deploy RU backend
+        if: env.REGION == 'all' || env.REGION == 'ru'
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_PATH'"
-          printf '%s' "$ENV_FILE" | ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && cat > .env && docker compose -f docker-compose.ru.yml up -d --build && docker image prune -f"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && timeout 600 docker compose -f docker-compose.ru.yml up -d --build"
 
       - name: Smoke test RU backend
-        if: ${{ vars.HEALTH_URL != '' }}
-        run: curl --fail --silent --show-error --max-time 20 "$HEALTH_URL"
-
-  deploy-dubai:
-    if: github.event_name == 'push' || inputs.region == 'all' || inputs.region == 'dubai'
-    runs-on: ubuntu-latest
-    environment: production-dubai
-    env:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_PORT: ${{ secrets.SSH_PORT }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      APP_PATH: ${{ secrets.APP_PATH }}
-      ENV_FILE: ${{ secrets.ENV_FILE }}
-      HEALTH_URL: ${{ vars.HEALTH_URL }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Preflight deployment config
-        run: |
-          missing=0
-          for name in SSH_PRIVATE_KEY SSH_HOST SSH_USER APP_PATH ENV_FILE; do
-            if [ -z "${!name}" ]; then
-              echo "::error::$name is not configured for the production-dubai environment"
-              missing=1
-            fi
-          done
-          exit "$missing"
-
-      - name: Setup SSH
-        run: |
-          PORT="${SSH_PORT:-22}"
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
-
-      - name: Sync project files
-        run: |
-          PORT="${SSH_PORT:-22}"
-          rsync -az --delete \
-            --exclude '.git/' \
-            --exclude 'node_modules/' \
-            --exclude '.expo/' \
-            --exclude 'android/app/build/' \
-            --exclude 'services/ru-backend/dist/' \
-            --exclude 'services/dubai-backend/dist/' \
-            -e "ssh -p $PORT" \
-            ./ "$SSH_USER@$SSH_HOST:$APP_PATH/"
+        if: (env.REGION == 'all' || env.REGION == 'ru') && vars.RU_HEALTH_URL != ''
+        run: curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"
 
       - name: Deploy Dubai backend
+        if: env.REGION == 'all' || env.REGION == 'dubai'
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_PATH'"
-          printf '%s' "$ENV_FILE" | ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && cat > .env && docker compose -f docker-compose.dubai.yml up -d --build && docker image prune -f"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && timeout 600 docker compose -f docker-compose.dubai.yml up -d --build"
 
       - name: Smoke test Dubai backend
-        if: ${{ vars.HEALTH_URL != '' }}
-        run: curl --fail --silent --show-error --max-time 20 "$HEALTH_URL"
+        if: (env.REGION == 'all' || env.REGION == 'dubai') && vars.DUBAI_HEALTH_URL != ''
+        run: curl --fail --silent --show-error --max-time 20 "$DUBAI_HEALTH_URL"
+
+      - name: Prune old Docker images
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "docker image prune -f"

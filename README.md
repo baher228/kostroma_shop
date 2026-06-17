@@ -131,6 +131,7 @@ The deploy workflows intentionally fail fast with explicit error messages if req
 - `SSH_PORT` (optional, defaults to `22`)
 - `SSH_USER`
 - `SSH_PRIVATE_KEY`
+- `SSH_KNOWN_HOSTS` — output from `ssh-keyscan -p <port> <host>`
 - `APP_PATH`
 - `ENV_FILE` — full production `.env` content for the backend server
 

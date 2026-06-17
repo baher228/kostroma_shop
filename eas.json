@@ -6,22 +6,30 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       },
       "env": {
         "NODE_ENV": "production",
-        "EXPO_PUBLIC_RU_API_URL": "http://31.97.115.242:4000",
-        "EXPO_PUBLIC_DXB_API_URL": "http://31.97.115.242:4001"
+        "EXPO_PUBLIC_RU_API_URL": "https://affera.co.uk/ru",
+        "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb"
       }
     },
     "production": {
+      "channel": "production",
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_RU_API_URL": "https://affera.co.uk/ru",
+        "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb"
       }
     }
   }

@@ -107,33 +107,79 @@ Password: manager123
 
 ## CI/CD
 
-GitHub Actions workflows are included for three jobs:
+GitHub Actions workflows are included for deployment and application updates:
 
-- `CI` — runs on push / pull request to `main` or `master`, installs all dependencies, typechecks frontend + backends, runs backend tests, validates Docker Compose, and builds both backend Docker images.
-- `Deploy backend` — deploys the RU and/or Dubai backend over SSH with `rsync`, then runs the matching Docker Compose file on the target server.
+- `CI` — runs on push / pull request to `main` or `master`, installs dependencies, typechecks frontend + backends, runs backend tests, validates Docker Compose, and builds both backend Docker images.
+- `Deploy backend` — deploys RU and/or Dubai backend over SSH with `rsync`, then runs the matching Docker Compose file and smoke-tests the health endpoint.
+- `Deploy dashboard` — builds `web-dashboard`, rsyncs `dist/` to the web root, reloads nginx, and optionally smoke-tests the public dashboard URL.
+- `Update Expo app` — publishes EAS OTA updates to the `preview` or `production` channel.
 - `Build Android app` — manual EAS workflow for `preview` APK or `production` AAB builds.
 
-### GitHub Secrets / Environments
+### GitHub Environments
 
-Create two GitHub Environments:
+Create these GitHub Environments:
 
 - `production-ru`
 - `production-dubai`
+- `production-dashboard`
+- `expo-production`
 
-Add these secrets to each environment:
+The deploy workflows intentionally fail fast with explicit error messages if required secrets/variables are missing.
+
+#### `production-ru` secrets
 
 - `SSH_HOST`
 - `SSH_PORT` (optional, defaults to `22`)
 - `SSH_USER`
 - `SSH_PRIVATE_KEY`
 - `APP_PATH`
-- `ENV_FILE`
+- `ENV_FILE` — full `.env` content for the RU server
 
-`ENV_FILE` should contain the full `.env` content for that server.
+Recommended environment variable:
 
-Also add this repository secret for Android builds:
+- `HEALTH_URL` — e.g. `https://affera.co.uk/ru/api/health`
+
+#### `production-dubai` secrets
+
+- `SSH_HOST`
+- `SSH_PORT` (optional, defaults to `22`)
+- `SSH_USER`
+- `SSH_PRIVATE_KEY`
+- `APP_PATH`
+- `ENV_FILE` — full `.env` content for the Dubai server
+
+Recommended environment variable:
+
+- `HEALTH_URL` — e.g. `https://affera.co.uk/dxb/api/health`
+
+#### `production-dashboard` secrets
+
+- `SSH_HOST`
+- `SSH_PORT` (optional, defaults to `22`)
+- `SSH_USER`
+- `SSH_PRIVATE_KEY`
+- `DASHBOARD_PATH` — e.g. `/var/www/affera`
+
+Required environment variables:
+
+- `VITE_RU_API_URL` — e.g. `https://affera.co.uk/ru`
+- `VITE_DXB_API_URL` — e.g. `https://affera.co.uk/dxb`
+
+Recommended environment variable:
+
+- `DASHBOARD_URL` — e.g. `https://affera.co.uk`
+
+#### `expo-production` secrets
 
 - `EXPO_TOKEN`
+
+### Expo updates
+
+EAS Update is enabled through `expo-updates`, `runtimeVersion.policy = appVersion`, and EAS channels in `eas.json`.
+
+- `preview` builds receive OTA updates from the `preview` channel.
+- `production` builds receive OTA updates from the `production` channel.
+- Native/runtime changes still require a new EAS build; JS/asset-only changes can ship through `Update Expo app`.
 
 ### Example `ENV_FILE` Secret
 
@@ -142,7 +188,7 @@ Russia environment:
 ```env
 JWT_SECRET=change_me_long_random_secret
 OPS_JWT_SECRET=change_me_same_value_as_dubai_for_dev_or_use_rs256_keys
-CORS_ORIGIN=https://your-frontend-domain.example
+CORS_ORIGIN=https://affera.co.uk
 PERSONAL_POSTGRES_PASSWORD=change_me
 PERSONAL_POSTGRES_DB=analitika_personal
 PERSONAL_POSTGRES_USER=analitika
@@ -153,7 +199,7 @@ Dubai environment:
 
 ```env
 OPS_JWT_SECRET=change_me_same_value_as_russia_for_dev_or_use_rs256_keys
-CORS_ORIGIN=https://your-frontend-domain.example
+CORS_ORIGIN=https://affera.co.uk
 OPS_POSTGRES_PASSWORD=change_me
 OPS_POSTGRES_DB=analitika_ops
 OPS_POSTGRES_USER=analitika

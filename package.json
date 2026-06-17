@@ -42,12 +42,15 @@
     "docker:validate": "PERSONAL_POSTGRES_PASSWORD=ci-personal-password OPS_POSTGRES_PASSWORD=ci-ops-password JWT_SECRET=ci-jwt-secret OPS_JWT_SECRET=ci-ops-jwt-secret CORS_ORIGIN=http://localhost:19006 docker compose -f docker-compose.ru.yml config && PERSONAL_POSTGRES_PASSWORD=ci-personal-password OPS_POSTGRES_PASSWORD=ci-ops-password JWT_SECRET=ci-jwt-secret OPS_JWT_SECRET=ci-ops-jwt-secret CORS_ORIGIN=http://localhost:19006 docker compose -f docker-compose.dubai.yml config",
     "ci": "npm run typecheck && npm run test && npm run docker:validate",
     "eas:build:apk": "eas build -p android --profile preview",
-    "eas:build:android": "eas build -p android"
+    "eas:build:android": "eas build -p android",
+    "eas:update:preview": "eas update --channel preview",
+    "eas:update:production": "eas update --channel production"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.33",
     "expo-status-bar": "~3.0.9",
+    "expo-updates": "~29.0.18",
     "react": "19.1.0",
     "react-native": "0.81.5"
   },

@@ -585,6 +585,7 @@ td.sticky {
 .manager-stock-table th.manager-name-col {
   z-index: 4;
   text-align: center;
+  font-weight: 600;
 }
 
 .manager-name-col strong,

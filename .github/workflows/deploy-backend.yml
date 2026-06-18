@@ -94,7 +94,15 @@ jobs:
 
       - name: Smoke test RU backend
         if: (env.REGION == 'all' || env.REGION == 'ru') && vars.RU_HEALTH_URL != ''
-        run: curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"
+        run: |
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"; then
+              exit 0
+            fi
+            echo "RU health check failed; retrying in 5s ($attempt/12)"
+            sleep 5
+          done
+          curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"
 
       - name: Deploy Dubai backend
         if: env.REGION == 'all' || env.REGION == 'dubai'
@@ -104,7 +112,15 @@ jobs:
 
       - name: Smoke test Dubai backend
         if: (env.REGION == 'all' || env.REGION == 'dubai') && vars.DUBAI_HEALTH_URL != ''
-        run: curl --fail --silent --show-error --max-time 20 "$DUBAI_HEALTH_URL"
+        run: |
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error --max-time 20 "$DUBAI_HEALTH_URL"; then
+              exit 0
+            fi
+            echo "Dubai health check failed; retrying in 5s ($attempt/12)"
+            sleep 5
+          done
+          curl --fail --silent --show-error --max-time 20 "$DUBAI_HEALTH_URL"
 
       - name: Prune old Docker images
         run: |

@@ -10,7 +10,19 @@ on:
         type: choice
         options:
           - preview
-          - production
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/build-android.yml'
+      - 'App.tsx'
+      - 'index.ts'
+      - 'app.json'
+      - 'eas.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'frontend/**'
+      - 'assets/**'
+      - 'withCleartextTraffic.js'
 
 jobs:
   build:
@@ -18,6 +30,9 @@ jobs:
     environment: expo-production
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      BUILD_PROFILE: ${{ inputs.profile || 'preview' }}
+    outputs:
+      apk-name: ${{ steps.package-apk.outputs.apk_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,5 +60,112 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Trigger Android build
-        run: eas build --platform android --profile "${{ inputs.profile }}" --non-interactive
+      - name: Build Android APK with EAS
+        run: |
+          if [ "$BUILD_PROFILE" != "preview" ]; then
+            echo "::error::Only the preview profile produces a downloadable APK. Use preview for dashboard downloads."
+            exit 1
+          fi
+          eas build --platform android --profile "$BUILD_PROFILE" --non-interactive --wait --json > eas-build.json
+          cat eas-build.json
+
+      - name: Package APK for dashboard
+        id: package-apk
+        run: |
+          mkdir -p apk
+          APP_VERSION="$(node -p "require('./app.json').expo.version")"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          APK_NAME="analitika-v${APP_VERSION}-${SHORT_SHA}.apk"
+          APK_URL="$(node <<'NODE'
+          const fs = require('fs');
+          const raw = fs.readFileSync('eas-build.json', 'utf8');
+          const start = raw.search(/[\[{]/);
+          const data = JSON.parse(start >= 0 ? raw.slice(start) : raw);
+          const build = Array.isArray(data) ? data[0] : data;
+          const url = build?.artifacts?.buildUrl || build?.artifactUrl || build?.buildUrl;
+          if (!url) {
+            console.error('Could not find APK artifact URL in EAS output.');
+            process.exit(1);
+          }
+          process.stdout.write(url);
+          NODE
+          )"
+          curl --fail --location --show-error "$APK_URL" --output "apk/$APK_NAME"
+          APP_VERSION="$APP_VERSION" APK_NAME="$APK_NAME" SHORT_SHA="$SHORT_SHA" node <<'NODE'
+          const fs = require('fs');
+          const manifest = {
+            version: process.env.APP_VERSION,
+            fileName: process.env.APK_NAME,
+            url: `/downloads/${process.env.APK_NAME}`,
+            buildSha: process.env.SHORT_SHA,
+            updatedAt: new Date().toISOString(),
+          };
+          fs.writeFileSync('apk/analitika-latest.json', `${JSON.stringify(manifest, null, 2)}\n`);
+          NODE
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK dashboard package
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-apk
+          path: apk/
+          if-no-files-found: error
+
+  publish-dashboard-apk:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production-dashboard
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      DASHBOARD_PATH: ${{ secrets.DASHBOARD_PATH }}
+      DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+    steps:
+      - name: Download APK dashboard package
+        uses: actions/download-artifact@v4
+        with:
+          name: dashboard-apk
+          path: apk
+
+      - name: Preflight dashboard publish config
+        run: |
+          missing=0
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY DASHBOARD_PATH; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured for the production-dashboard environment"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Setup SSH
+        run: |
+          PORT="${SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            for attempt in {1..6}; do
+              if ssh-keyscan -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts; then
+                break
+              fi
+              echo "ssh-keyscan failed; retrying in 5s ($attempt/6)"
+              sleep 5
+            done
+            test -s ~/.ssh/known_hosts
+          fi
+
+      - name: Publish APK to dashboard downloads
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$DASHBOARD_PATH/downloads'"
+          rsync -az --delete -e "ssh -p $PORT" apk/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/downloads/"
+
+      - name: Smoke test APK manifest
+        if: ${{ vars.DASHBOARD_URL != '' }}
+        run: curl --fail --silent --show-error --max-time 20 "$DASHBOARD_URL/downloads/analitika-latest.json" >/dev/null

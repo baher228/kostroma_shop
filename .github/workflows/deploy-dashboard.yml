@@ -77,7 +77,7 @@ jobs:
         run: |
           PORT="${SSH_PORT:-22}"
           ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$DASHBOARD_PATH'"
-          rsync -az --delete -e "ssh -p $PORT" web-dashboard/dist/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/"
+          rsync -az --delete --exclude 'downloads/' -e "ssh -p $PORT" web-dashboard/dist/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/"
 
       - name: Reload nginx
         run: |

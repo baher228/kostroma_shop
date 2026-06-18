@@ -27,7 +27,15 @@ import {
   WorkerCheckInEvent,
 } from './types';
 
-type Section = 'overview' | 'attendance' | 'users' | 'shops' | 'products' | 'orders';
+type Section = 'overview' | 'attendance' | 'users' | 'shops' | 'products' | 'orders' | 'app';
+
+type ApkManifest = {
+  version: string;
+  fileName: string;
+  url: string;
+  buildSha: string;
+  updatedAt: string;
+};
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -77,6 +85,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
     { key: 'shops', label: 'Магазины' },
     { key: 'products', label: 'Остатки' },
     { key: 'orders', label: 'Заказ' },
+    { key: 'app', label: 'Приложение' },
   ];
 
   return (
@@ -106,6 +115,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         {section === 'shops' && <ShopsPanel session={session} />}
         {section === 'products' && <ProductsPanel session={session} />}
         {section === 'orders' && <OrdersPanel session={session} />}
+        {section === 'app' && <AppDownloadPanel />}
       </main>
     </div>
   );
@@ -146,6 +156,7 @@ const OverviewPanel = ({ session, setSection }: { session: Session; setSection: 
           ['Пользователи', 'Создание, роли, привязка к магазинам и сброс пароля.', 'users'],
           ['Остатки', 'Менеджерская таблица остатков, заказов и продаж.', 'products'],
           ['Заказ', 'Сводная таблица заказов по магазинам, машинам и товарам.', 'orders'],
+          ['Приложение', 'Скачать актуальный APK для Android.', 'app'],
         ].map(([title, text, target]) => (
           <button key={target} className="landing-card" onClick={() => setSection(target as Section)}>
             <span>{title}</span>
@@ -153,6 +164,52 @@ const OverviewPanel = ({ session, setSection }: { session: Session; setSection: 
           </button>
         ))}
       </div>
+    </section>
+  );
+};
+
+const AppDownloadPanel = () => {
+  const [manifest, setManifest] = useState<ApkManifest | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/downloads/analitika-latest.json', { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('APK еще не опубликован. Запустите сборку Android APK.');
+      }
+      const nextManifest = await response.json() as ApkManifest;
+      setManifest(nextManifest);
+    } catch (err) {
+      setManifest(null);
+      setError(messageOf(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  return (
+    <section className="page-section">
+      <PageHeader title="Приложение" subtitle="Актуальный Android APK для установки на телефоны." action={<RefreshButton onClick={() => load()} />} />
+      {loading ? <p>Проверяем доступную сборку...</p> : <Feedback error={error} />}
+      {manifest && (
+        <article className="download-card">
+          <div>
+            <p className="eyebrow">Android APK</p>
+            <h3>Analitika v{manifest.version}</h3>
+            <p>{manifest.fileName}</p>
+            <small>Обновлено: {formatDateTime(manifest.updatedAt)} · commit {manifest.buildSha}</small>
+          </div>
+          <a className="download-button" href={manifest.url} download={manifest.fileName}>Скачать APK</a>
+        </article>
+      )}
     </section>
   );
 };

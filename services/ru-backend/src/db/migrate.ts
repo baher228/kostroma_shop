@@ -3,7 +3,7 @@ import path from 'path';
 import { personalDb } from './personalDb';
 import { runSqlMigrations } from '../../../shared/migrations';
 
-const migrationsDir = path.resolve(__dirname, '../migrations');
+const migrationsDir = path.resolve(__dirname, '../../migrations');
 const MIGRATION_LOCK_ID = 30_001;
 
 export const runMigrations = async (closeConnection = false) => {

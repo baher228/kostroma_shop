@@ -163,8 +163,17 @@ jobs:
       - name: Publish APK to dashboard downloads
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$DASHBOARD_PATH/downloads'"
-          rsync -az --delete -e "ssh -p $PORT" apk/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/downloads/"
+          SSH_OPTS="-p $PORT -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
+          for attempt in {1..6}; do
+            if ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" "mkdir -p '$DASHBOARD_PATH/downloads'" \
+              && rsync -az --delete -e "ssh $SSH_OPTS" apk/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/downloads/"; then
+              exit 0
+            fi
+            echo "APK publish failed; retrying in 15s ($attempt/6)"
+            sleep 15
+          done
+          echo "APK publish failed after 6 attempts" >&2
+          exit 1
 
       - name: Smoke test APK manifest
         if: ${{ vars.DASHBOARD_URL != '' }}

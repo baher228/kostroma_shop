@@ -1224,8 +1224,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           {rows.map((row) => {
             const reference = productReferenceLabel(row);
             return (
-              <View key={row.productId} style={styles.row}>
-                <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+              <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
+                <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
                     <Text numberOfLines={1} style={styles.nameText}>
                       {row.name}
@@ -1270,7 +1270,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               rows.map((row) => {
               const values = dashboardRowValues(row);
               return (
-                <View key={row.productId} style={styles.row}>
+                <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
                   {DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
@@ -1893,6 +1893,7 @@ const styles = StyleSheet.create({
   },
   tableWrap: {
     flex: 1,
+    marginTop: 10,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#b7c5b8',
@@ -2033,15 +2034,15 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   nameText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#222222',
     fontWeight: '600',
   },
   referenceText: {
     marginTop: 2,
-    fontSize: 13,
+    fontSize: 12,
     color: '#4e5d53',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   valueCell: {
     backgroundColor: '#f9fbf8',
@@ -2062,30 +2063,30 @@ const styles = StyleSheet.create({
   dashboardHeaderTitle: {
     fontSize: 12,
     color: '#1f2a21',
-    fontWeight: '800',
+    fontWeight: '600',
     textAlign: 'center',
   },
   dashboardHeaderTitleStock: {
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '600',
   },
   dashboardHeaderTitleExpanded: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '600',
     textAlignVertical: 'center',
   },
   dashboardHeaderSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#1f2a21',
-    fontWeight: '700',
+    fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 11,
+    lineHeight: 12,
   },
   dashboardHeaderSubtitleStock: {
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 16,
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 12,
   },
   dashboardHeaderSubtitleHidden: {
     display: 'none',
@@ -2105,7 +2106,14 @@ const styles = StyleSheet.create({
   dashboardHeaderBlue: {
     backgroundColor: '#90c7da',
   },
+  dashboardDataRow: {
+    height: 56,
+  },
+  dashboardNameCell: {
+    height: 56,
+  },
   dashboardValueCell: {
+    height: 56,
     backgroundColor: '#f4f6f4',
   },
   dashboardValueNeutral: {
@@ -2128,12 +2136,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#223528',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     paddingVertical: 0,
   },
   dashboardOrderInputExpanded: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '600',
   },
   pendingCell: {
     opacity: 0.6,
@@ -2141,15 +2149,15 @@ const styles = StyleSheet.create({
   valueText: {
     color: '#223528',
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   valueTextStock: {
-    fontSize: 24,
-    fontWeight: '900',
+    fontSize: 18,
+    fontWeight: '600',
   },
   valueTextOrder: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '600',
   },
   deleteButton: {
     backgroundColor: '#9f4038',

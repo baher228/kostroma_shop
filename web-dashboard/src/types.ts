@@ -102,6 +102,33 @@ export type PromotionDocument = {
   uploadedAt: string;
 };
 
+export type PromotionRowStatus = 'past' | 'current' | 'future';
+
+export type PromotionTableRow = {
+  id: string;
+  rowNumber: number;
+  status: PromotionRowStatus;
+  productName: string;
+  startDate: string | null;
+  endDate: string | null;
+  promoPrice: number | null;
+  regularPrice: number | null;
+  priceDifference: number | null;
+  realDiscountPercent: number | null;
+  advertisingDiscountPercent: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PromotionRowPayload = {
+  status: PromotionRowStatus;
+  productName: string;
+  startDate: string | null;
+  endDate: string | null;
+  promoPrice: number | null;
+  regularPrice: number | null;
+};
+
 export type ProductPayload = {
   name: string;
   category: ProductCategory;

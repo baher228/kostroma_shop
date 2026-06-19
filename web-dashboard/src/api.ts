@@ -6,6 +6,8 @@ import {
   ProductPayload,
   PromotionDocument,
   PromotionDocumentType,
+  PromotionRowPayload,
+  PromotionTableRow,
   SellerOrder,
   Session,
   SessionUser,
@@ -96,6 +98,20 @@ const makeFormRequest = async <T>(baseUrl: string, path: string, form: FormData,
   return (parsed ?? {}) as T;
 };
 
+const makeBlobRequest = async (baseUrl: string, path: string, bearerToken: string): Promise<Blob> => {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: {
+      Accept: 'text/csv',
+      Authorization: `Bearer ${bearerToken}`,
+    },
+  });
+  if (!response.ok) {
+    const parsed = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new ApiError(parsed?.message || 'Request failed.', response.status);
+  }
+  return response.blob();
+};
+
 const fetchOpsToken = async (ruToken: string): Promise<string> => {
   const cached = opsTokenCache.get(ruToken);
   if (cached && cached.expiresAt - Date.now() > 30_000) {
@@ -134,6 +150,20 @@ const dxbFormRequest = async <T>(path: string, token: string, form: FormData) =>
       opsTokenCache.delete(token);
       const opsToken = await fetchOpsToken(token);
       return makeFormRequest<T>(DXB_API_BASE_URL, path, form, opsToken);
+    }
+    throw error;
+  }
+};
+
+const dxbBlobRequest = async (path: string, token: string) => {
+  try {
+    const opsToken = await fetchOpsToken(token);
+    return await makeBlobRequest(DXB_API_BASE_URL, path, opsToken);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      opsTokenCache.delete(token);
+      const opsToken = await fetchOpsToken(token);
+      return makeBlobRequest(DXB_API_BASE_URL, path, opsToken);
     }
     throw error;
   }
@@ -233,6 +263,17 @@ export const api = {
       (await dxbRequest<{ order: SellerOrder }>(`/api/orders/${orderId}/status`, { method: 'PATCH', token, body: { status } })).order,
   },
   promotions: {
+    rows: async (token: string) =>
+      (await dxbRequest<{ rows: PromotionTableRow[] }>('/api/promotions/rows', { token })).rows,
+    rowByNumber: async (token: string, rowNumber: number) =>
+      (await dxbRequest<{ row: PromotionTableRow }>(`/api/promotions/rows/by-number/${rowNumber}`, { token })).row,
+    addRow: async (token: string, payload: PromotionRowPayload) =>
+      (await dxbRequest<{ row: PromotionTableRow }>('/api/promotions/rows', { method: 'POST', token, body: payload })).row,
+    updateRowByNumber: async (token: string, rowNumber: number, payload: PromotionRowPayload) =>
+      (await dxbRequest<{ row: PromotionTableRow }>(`/api/promotions/rows/by-number/${rowNumber}`, { method: 'PATCH', token, body: payload })).row,
+    deleteRowByNumber: async (token: string, rowNumber: number) => {
+      await dxbRequest<{}>(`/api/promotions/rows/by-number/${rowNumber}`, { method: 'DELETE', token });
+    },
     documents: async (token: string) =>
       (await dxbRequest<{ documents: PromotionDocument[] }>('/api/promotions/documents', { token })).documents,
     uploadDocument: async (token: string, documentType: Exclude<PromotionDocumentType, 'final_table_csv'>, file: File) => {
@@ -243,6 +284,8 @@ export const api = {
     },
     createFinalTable: async (token: string) =>
       (await dxbRequest<{ document: PromotionDocument }>('/api/promotions/documents/final-table', { method: 'POST', token })).document,
+    downloadFinalTableCsv: async (token: string) =>
+      dxbBlobRequest('/api/promotions/documents/final-table/download', token),
     downloadDocument: async (token: string, params: { documentType?: PromotionDocumentType; documentId?: string }) =>
       dxbRequest<{ url: string; fileName: string; document: PromotionDocument }>(
         `/api/promotions/documents/download${query({ type: params.documentType, id: params.documentId })}`,

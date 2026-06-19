@@ -9,6 +9,7 @@ import {
   getPromotionDocumentById,
   listPromotionDocuments,
 } from '../repositories/promotionDocumentsRepository';
+import { listPromotionRows } from '../repositories/promotionRowsRepository';
 import { createDownloadUrl, uploadObject } from '../services/r2StorageService';
 
 const upload = multer({
@@ -56,19 +57,27 @@ const storageKey = (documentType: PromotionDocumentType, fileName: string) =>
 
 const csvEscape = (value: string | number | null) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
+const buildFinalTableCsv = async () => {
+  const promotionRows = await listPromotionRows();
+  const header = ['Номер строки', 'Статус акции', 'Название позиции', 'Дата начала', 'Дата окончания', 'Новая цена', 'Старая цена', 'Разница', 'Реальный % акции', 'Рекламный % акции'];
+  const rows = promotionRows.map((row) => [
+    row.rowNumber,
+    row.status,
+    row.productName,
+    row.startDate,
+    row.endDate,
+    row.promoPrice,
+    row.regularPrice,
+    row.priceDifference,
+    row.realDiscountPercent,
+    row.advertisingDiscountPercent,
+  ]);
+  const csv = [header, ...rows].map((row) => row.map(csvEscape).join(';')).join('\n');
+  return Buffer.from(`\uFEFF${csv}`, 'utf8');
+};
+
 const ensureFinalTableCsv = async (req: Request) => {
-  const documents = await listPromotionDocuments();
-  const header = ['Тип документа', 'Имя файла', 'Размер', 'Дата загрузки'];
-  const rows = documents
-    .filter((document) => document.documentType !== 'final_table_csv')
-    .map((document) => [
-      labels[document.documentType],
-      document.fileName,
-      document.sizeBytes,
-      document.uploadedAt,
-    ]);
-  const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
-  const body = Buffer.from(`\uFEFF${csv}`, 'utf8');
+  const body = await buildFinalTableCsv();
   const key = storageKey('final_table_csv', 'itogovaya_tablica.csv');
   await uploadObject({ key, body, contentType: 'text/csv; charset=utf-8' });
   return createPromotionDocument({
@@ -134,6 +143,17 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
       res.status(201).json({ document: await ensureFinalTableCsv(req) });
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось создать итоговую таблицу.' });
+    }
+  });
+
+  app.get('/api/promotions/documents/final-table/download', async (_req: Request, res: Response) => {
+    try {
+      const body = await buildFinalTableCsv();
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="itogovaya_tablica.csv"');
+      res.send(body);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ РёС‚РѕРіРѕРІСѓСЋ С‚Р°Р±Р»РёС†Сѓ.' });
     }
   });
 

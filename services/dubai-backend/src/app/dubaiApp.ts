@@ -3,6 +3,7 @@ import { applyAppMiddleware } from './appMiddleware';
 import { requireOpsAuth } from '../auth/middleware';
 import { registerOrderRoutes } from '../routes/ordersRoutes';
 import { registerPromotionDocumentRoutes } from '../routes/promotionDocumentsRoutes';
+import { registerPromotionRowsRoutes } from '../routes/promotionRowsRoutes';
 import { registerShopRoutes } from '../routes/shopsRoutes';
 import { registerStockRoutes } from '../routes/stockRoutes';
 
@@ -20,6 +21,7 @@ export const createDubaiApp = () => {
   registerShopRoutes(app);
   registerStockRoutes(app);
   registerOrderRoutes(app);
+  registerPromotionRowsRoutes(app);
   registerPromotionDocumentRoutes(app);
 
   app.use((_req, res) => {

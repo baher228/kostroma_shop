@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'path';
 import {
   insecureFallback,
   parseBoolean,
@@ -9,6 +10,7 @@ import {
 } from '../../../shared/config';
 
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: false });
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -66,4 +68,10 @@ export const config = {
     process.env.OPS_POSTGRES_SSL_REJECT_UNAUTHORIZED ?? process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED,
     isProduction,
   ),
+  r2AccountId: trimToUndefined(process.env.R2_ACCOUNT_ID),
+  r2AccessKeyId: trimToUndefined(process.env.R2_ACCESS_KEY_ID),
+  r2SecretAccessKey: trimToUndefined(process.env.R2_SECRET_ACCESS_KEY),
+  r2Bucket: trimToUndefined(process.env.R2_BUCKET || process.env.R2_BUCKET_NAME),
+  r2PublicBaseUrl: trimToUndefined(process.env.R2_PUBLIC_BASE_URL || process.env.R2_PUBLIC_URL),
+  r2SignedUrlTtlSeconds: parsePort(process.env.R2_SIGNED_URL_TTL_SECONDS ?? '900'),
 };

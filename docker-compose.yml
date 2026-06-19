@@ -67,6 +67,8 @@ services:
       dockerfile: services/dubai-backend/Dockerfile
     container_name: analitika-backend-dubai
     restart: unless-stopped
+    env_file:
+      - ./services/dubai-backend/.env
     depends_on:
       postgres-dubai:
         condition: service_healthy
@@ -81,6 +83,7 @@ services:
       OPS_POSTGRES_PASSWORD: analitika_dev_password
       OPS_POSTGRES_DB: analitika_ops
       OPS_POSTGRES_SSL: "false"
+      R2_SIGNED_URL_TTL_SECONDS: ${R2_SIGNED_URL_TTL_SECONDS:-900}
     ports:
       - "4001:4001"
 

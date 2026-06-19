@@ -4,6 +4,8 @@ import {
   OrderSheet,
   OrderValueEntry,
   ProductPayload,
+  PromotionDocument,
+  PromotionDocumentType,
   SellerOrder,
   Session,
   SessionUser,
@@ -78,6 +80,22 @@ const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOpt
   return (parsed ?? {}) as T;
 };
 
+const makeFormRequest = async <T>(baseUrl: string, path: string, form: FormData, bearerToken: string): Promise<T> => {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${bearerToken}`,
+    },
+    body: form,
+  });
+  const parsed = (await response.json().catch(() => null)) as { message?: string } | null;
+  if (!response.ok) {
+    throw new ApiError(parsed?.message || 'Request failed.', response.status);
+  }
+  return (parsed ?? {}) as T;
+};
+
 const fetchOpsToken = async (ruToken: string): Promise<string> => {
   const cached = opsTokenCache.get(ruToken);
   if (cached && cached.expiresAt - Date.now() > 30_000) {
@@ -102,6 +120,20 @@ const dxbRequest = async <T>(path: string, options: RequestOptions = {}) => {
       opsTokenCache.delete(options.token);
       const opsToken = await fetchOpsToken(options.token);
       return makeRequest<T>(DXB_API_BASE_URL, path, options, opsToken);
+    }
+    throw error;
+  }
+};
+
+const dxbFormRequest = async <T>(path: string, token: string, form: FormData) => {
+  try {
+    const opsToken = await fetchOpsToken(token);
+    return await makeFormRequest<T>(DXB_API_BASE_URL, path, form, opsToken);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      opsTokenCache.delete(token);
+      const opsToken = await fetchOpsToken(token);
+      return makeFormRequest<T>(DXB_API_BASE_URL, path, form, opsToken);
     }
     throw error;
   }
@@ -199,6 +231,23 @@ export const api = {
     ) => (await dxbRequest<{ order: SellerOrder }>('/api/orders', { method: 'POST', token, body: payload })).order,
     updateStatus: async (token: string, orderId: string, status: 'new' | 'processed') =>
       (await dxbRequest<{ order: SellerOrder }>(`/api/orders/${orderId}/status`, { method: 'PATCH', token, body: { status } })).order,
+  },
+  promotions: {
+    documents: async (token: string) =>
+      (await dxbRequest<{ documents: PromotionDocument[] }>('/api/promotions/documents', { token })).documents,
+    uploadDocument: async (token: string, documentType: Exclude<PromotionDocumentType, 'final_table_csv'>, file: File) => {
+      const form = new FormData();
+      form.append('documentType', documentType);
+      form.append('file', file);
+      return (await dxbFormRequest<{ document: PromotionDocument }>('/api/promotions/documents', token, form)).document;
+    },
+    createFinalTable: async (token: string) =>
+      (await dxbRequest<{ document: PromotionDocument }>('/api/promotions/documents/final-table', { method: 'POST', token })).document,
+    downloadDocument: async (token: string, params: { documentType?: PromotionDocumentType; documentId?: string }) =>
+      dxbRequest<{ url: string; fileName: string; document: PromotionDocument }>(
+        `/api/promotions/documents/download${query({ type: params.documentType, id: params.documentId })}`,
+        { token },
+      ),
   },
   checkin: {
     stats: async (token: string, from: string, to: string) =>

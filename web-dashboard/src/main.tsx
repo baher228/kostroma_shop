@@ -7,6 +7,7 @@ import { addDays, startOfWeek } from './dateUtils';
 import './styles.css';
 import { OrdersPanel } from './panels/orders/OrdersPanel';
 import { ProductsPanel } from './panels/products/ProductsPanel';
+import { PromotionsPanel } from './panels/promotions/PromotionsPanel';
 import {
   formatDate,
   formatDateTime,
@@ -27,7 +28,7 @@ import {
   WorkerCheckInEvent,
 } from './types';
 
-type Section = 'overview' | 'attendance' | 'users' | 'shops' | 'products' | 'orders';
+type Section = 'overview' | 'attendance' | 'users' | 'shops' | 'products' | 'orders' | 'promotions';
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -77,6 +78,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
     { key: 'shops', label: 'Магазины' },
     { key: 'products', label: 'Остатки' },
     { key: 'orders', label: 'Заказ' },
+    { key: 'promotions', label: 'Акции' },
   ];
 
   return (
@@ -106,6 +108,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         {section === 'shops' && <ShopsPanel session={session} />}
         {section === 'products' && <ProductsPanel session={session} />}
         {section === 'orders' && <OrdersPanel session={session} />}
+        {section === 'promotions' && <PromotionsPanel session={session} />}
       </main>
     </div>
   );

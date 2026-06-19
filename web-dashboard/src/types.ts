@@ -89,6 +89,19 @@ export type OrderSheet = {
   rows: OrderSheetRow[];
 };
 
+export type PromotionDocumentType = 'invoice' | 'two_month_plan' | 'final_table_csv';
+
+export type PromotionDocument = {
+  id: string;
+  documentType: PromotionDocumentType;
+  fileName: string;
+  contentType: string;
+  storageKey: string;
+  sizeBytes: number;
+  uploadedBy: string | null;
+  uploadedAt: string;
+};
+
 export type ProductPayload = {
   name: string;
   category: ProductCategory;

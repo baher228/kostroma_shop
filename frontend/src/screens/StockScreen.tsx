@@ -1230,17 +1230,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             return (
               <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
                 <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
-                    <Text numberOfLines={1} style={styles.nameText}>
-                      {row.name}
-                    </Text>
-                  </ScrollView>
+                  <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
+                    {row.name}
+                  </Text>
                   {!!reference && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
-                      <Text numberOfLines={1} style={styles.referenceText}>
-                        {reference}
-                      </Text>
-                    </ScrollView>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.referenceText}>
+                      {reference}
+                    </Text>
                   )}
                 </View>
               </View>
@@ -1915,7 +1911,7 @@ const styles = StyleSheet.create({
   },
   categoryTitleRow: {
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 7,
     backgroundColor: '#d6dfd6',
     borderBottomWidth: 1,
     borderBottomColor: '#9eb09f',
@@ -1923,7 +1919,7 @@ const styles = StyleSheet.create({
   categoryTitle: {
     color: '#24382d',
     fontWeight: '800',
-    fontSize: 16,
+    fontSize: 15,
   },
   categoryTable: {
     flexDirection: 'row',
@@ -1931,8 +1927,8 @@ const styles = StyleSheet.create({
   },
   stickyColumn: {
     zIndex: 2,
-    borderRightWidth: 2,
-    borderRightColor: '#657667',
+    borderRightWidth: 1,
+    borderRightColor: '#8fa091',
     backgroundColor: '#f7f7f7',
   },
   scrollableColumns: {
@@ -1948,9 +1944,10 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
-    minHeight: 54,
-    paddingHorizontal: 4,
-    paddingVertical: 5,
+    minHeight: 50,
+    paddingHorizontal: 5,
+    paddingVertical: 4,
+    overflow: 'hidden',
   },
   headerText: {
     fontSize: 14,
@@ -2007,25 +2004,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
     minHeight: 46,
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
+    overflow: 'hidden',
   },
   nameColumn: {
-    width: 156,
+    width: 224,
     alignItems: 'flex-start',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     backgroundColor: '#f7f7f7',
   },
   dateColumn: {
     width: 62,
   },
   dashboardStockColumn: {
-    width: 124,
+    width: 118,
   },
   dashboardOrderColumn: {
-    width: 128,
+    width: 122,
   },
   dashboardMetricColumn: {
-    width: 76,
+    width: 106,
   },
   actionColumn: {
     width: 74,
@@ -2038,15 +2036,17 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   nameText: {
-    fontSize: 15,
+    fontSize: 14,
+    lineHeight: 17,
     color: '#222222',
-    fontWeight: '600',
+    fontWeight: '800',
   },
   referenceText: {
-    marginTop: 2,
-    fontSize: 12,
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 14,
     color: '#4e5d53',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   valueCell: {
     backgroundColor: '#f9fbf8',
@@ -2058,39 +2058,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f8f1',
   },
   dashboardHeaderCell: {
-    minHeight: 86,
+    minHeight: 82,
     gap: 2,
   },
   dashboardNameHeader: {
-    minHeight: 86,
+    minHeight: 82,
   },
   dashboardHeaderTitle: {
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 13,
     color: '#1f2a21',
-    fontWeight: '600',
+    fontWeight: '800',
     textAlign: 'center',
   },
   dashboardHeaderTitleStock: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '800',
   },
   dashboardHeaderTitleExpanded: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 15,
+    fontWeight: '800',
     textAlignVertical: 'center',
   },
   dashboardHeaderSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#1f2a21',
-    fontWeight: '500',
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 12,
+    lineHeight: 11,
   },
   dashboardHeaderSubtitleStock: {
-    fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 12,
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 11,
   },
   dashboardHeaderSubtitleHidden: {
     display: 'none',
@@ -2111,13 +2114,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#90c7da',
   },
   dashboardDataRow: {
-    height: 56,
+    height: 58,
   },
   dashboardNameCell: {
-    height: 56,
+    height: 58,
   },
   dashboardValueCell: {
-    height: 56,
+    height: 58,
     backgroundColor: '#f4f6f4',
   },
   dashboardValueNeutral: {
@@ -2140,28 +2143,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#223528',
     fontSize: 16,
+    lineHeight: 18,
     fontWeight: '600',
     paddingVertical: 0,
   },
   dashboardOrderInputExpanded: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 19,
+    fontWeight: '700',
   },
   pendingCell: {
     opacity: 0.6,
   },
   valueText: {
     color: '#223528',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   valueTextStock: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
   },
   valueTextOrder: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
   },
   deleteButton: {
     backgroundColor: '#9f4038',
@@ -2181,20 +2186,20 @@ const styles = StyleSheet.create({
   },
   bottomTabs: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 6,
     borderWidth: 1,
     borderColor: '#c8d4cb',
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: '#f3f7f3',
-    padding: 6,
+    padding: 5,
   },
   bottomTabButton: {
-    minHeight: 56,
+    minHeight: 50,
     flex: 1,
-    borderRadius: 10,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 11,
+    paddingVertical: 9,
     paddingHorizontal: 6,
   },
   bottomTabButtonActive: {
@@ -2203,7 +2208,7 @@ const styles = StyleSheet.create({
   bottomTabButtonText: {
     color: '#2f4437',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
   },
   bottomTabButtonTextActive: {

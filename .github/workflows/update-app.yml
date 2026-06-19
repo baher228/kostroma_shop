@@ -6,7 +6,7 @@ on:
       channel:
         description: EAS update channel
         required: true
-        default: production
+        default: preview
         type: choice
         options:
           - preview
@@ -35,7 +35,7 @@ jobs:
     environment: expo-production
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      UPDATE_CHANNEL: ${{ inputs.channel || 'production' }}
+      UPDATE_CHANNEL: ${{ inputs.channel || 'preview' }}
       UPDATE_MESSAGE: ${{ inputs.message }}
     steps:
       - name: Checkout

@@ -37,6 +37,7 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       UPDATE_CHANNEL: ${{ inputs.channel || 'preview' }}
       UPDATE_MESSAGE: ${{ inputs.message }}
+      CI: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,4 +82,7 @@ jobs:
           if [ -z "$MESSAGE" ]; then
             MESSAGE="${GITHUB_SHA}"
           fi
-          eas update --channel "$UPDATE_CHANNEL" --message "$MESSAGE" --non-interactive
+          eas branch:create "$UPDATE_CHANNEL" --non-interactive || true
+          eas channel:create "$UPDATE_CHANNEL" --non-interactive || true
+          eas channel:edit "$UPDATE_CHANNEL" --branch "$UPDATE_CHANNEL" --non-interactive
+          eas update --branch "$UPDATE_CHANNEL" --message "$MESSAGE" --non-interactive

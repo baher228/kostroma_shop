@@ -187,7 +187,7 @@ Recommended environment variable:
 
 EAS Update is enabled through `expo-updates`, `runtimeVersion.policy = appVersion`, and EAS channels in `eas.json`.
 
-- Dashboard APK downloads are `preview` builds, so automatic OTA updates publish to the `preview` channel.
+- Dashboard APK downloads are `preview` builds, so automatic OTA updates publish to the `preview` branch and keep the `preview` channel pointed at that branch.
 - `production` builds receive OTA updates from the `production` channel when the workflow is run manually with `channel=production`.
 - Native/runtime changes still require a new EAS build; JS/asset-only changes can ship through `Update Expo app`.
 

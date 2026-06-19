@@ -88,6 +88,12 @@ VITE_RU_API_URL=http://localhost:4000
 VITE_DXB_API_URL=http://localhost:4001
 ```
 
+Tablet APK download:
+
+- Put the real tablet APK at `web-dashboard/public/tablet.apk`.
+- The dashboard exposes it publicly at `/tablet.apk`.
+- Replace that file and rebuild/redeploy the dashboard to update the download.
+
 ## Default Login
 
 ```text

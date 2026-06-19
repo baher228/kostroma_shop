@@ -31,9 +31,9 @@ const PRODUCT_CATEGORIES = [
   '\u0422\u0432\u043e\u0440\u043e\u0433',
 ] as const;
 const MACHINE_NUMBERS: MachineNumber[] = [1, 2, 3];
-const SHOP_COL_WIDTH = 72;
-const TOTAL_COL_WIDTH = 62;
-const WEIGHT_COL_WIDTH = 70;
+const SHOP_COL_WIDTH = 96;
+const TOTAL_COL_WIDTH = 82;
+const WEIGHT_COL_WIDTH = 92;
 const ALLOWED_ORDER_WEEKDAYS = new Set([2, 4, 6]);
 
 const todayDateKey = (): string => {
@@ -402,7 +402,7 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
 const styles = StyleSheet.create({
   panel: {
     flex: 1,
-    gap: 8,
+    gap: 12,
   },
   loadingWrap: {
     flex: 1,
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '800',
     color: '#213428',
   },
@@ -425,31 +425,31 @@ const styles = StyleSheet.create({
     borderColor: '#c6d3c8',
     borderRadius: 10,
     backgroundColor: '#f8fbf9',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 17,
     fontWeight: '600',
     color: '#1f2f26',
   },
   dateButton: {
     borderRadius: 10,
     backgroundColor: '#e0e8e1',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
   },
   dateButtonText: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
     color: '#2f6f4f',
   },
   loadButton: {
     borderRadius: 10,
     backgroundColor: '#2f6f4f',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
   },
   loadButtonText: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '700',
     color: '#ffffff',
   },
@@ -458,9 +458,9 @@ const styles = StyleSheet.create({
     borderColor: '#c6d3c8',
     borderRadius: 10,
     backgroundColor: '#f8fbf9',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 17,
     color: '#1f2f26',
   },
   error: {
@@ -471,17 +471,17 @@ const styles = StyleSheet.create({
   weekdayBadge: {
     alignSelf: 'flex-start',
     marginBottom: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: '#edf3ee',
     color: '#2f6f4f',
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '800',
     textTransform: 'capitalize',
   },
   sheetDate: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
     color: '#4f6155',
     marginBottom: 6,
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     borderColor: '#b7c5b8',
     backgroundColor: '#dce4dc',
     overflow: 'hidden',
-    padding: 8,
+    padding: 10,
   },
   bodyScroll: {
     flex: 1,
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   machineTitleCell: {
-    minHeight: 32,
+    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ecf1ec',
   },
   machineText: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '800',
     color: '#000',
     textAlign: 'center',
@@ -535,8 +535,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#7f8d81',
   },
   headerCell: {
-    paddingHorizontal: 2,
-    paddingVertical: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 8,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
@@ -546,13 +546,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#ecf1ec',
   },
   headerNameText: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '800',
     color: '#000',
     textAlign: 'center',
   },
   shopHeaderText: {
-    fontSize: 9,
+    fontSize: 13,
     fontWeight: '700',
     color: '#000',
     textAlign: 'center',
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d9d9d9',
   },
   totalHeaderText: {
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: '800',
     color: '#1f2a21',
     textAlign: 'center',
@@ -573,14 +573,14 @@ const styles = StyleSheet.create({
     borderBottomColor: '#9eb09f',
   },
   categoryCell: {
-    paddingVertical: 3,
-    paddingHorizontal: 2,
+    paddingVertical: 7,
+    paddingHorizontal: 5,
     borderRightWidth: 1,
     borderRightColor: '#9eb09f',
     justifyContent: 'center',
   },
   categoryText: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '800',
     color: '#24382d',
     textAlign: 'center',
@@ -591,24 +591,24 @@ const styles = StyleSheet.create({
     borderBottomColor: '#d0d0d0',
   },
   cell: {
-    paddingHorizontal: 2,
-    paddingVertical: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 7,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
     borderRightColor: '#7f8d81',
-    minHeight: 30,
+    minHeight: 46,
   },
   nameColumn: {
-    width: 240,
+    width: 310,
     alignItems: 'flex-start',
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
   },
   nameCell: {
     backgroundColor: '#f7f7f7',
   },
   nameText: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '500',
     color: '#222222',
   },
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f8f1',
   },
   valueText: {
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: '700',
     color: '#000',
     textAlign: 'center',
@@ -634,12 +634,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f2f2f2',
   },
   totalValueText: {
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: '800',
     color: '#223528',
   },
   weightValueText: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: '#223528',
   },

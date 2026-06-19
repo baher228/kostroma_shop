@@ -177,7 +177,7 @@ const AppDownloadPanel = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/downloads/analitika-latest.json', { cache: 'no-store' });
+      const response = await fetch(`/downloads/analitika-latest.json?t=${Date.now()}`, { cache: 'no-store' });
       if (!response.ok) {
         throw new Error('APK еще не опубликован. Запустите сборку Android APK.');
       }
@@ -193,6 +193,10 @@ const AppDownloadPanel = () => {
 
   useEffect(() => {
     void load();
+    const interval = window.setInterval(() => {
+      void load();
+    }, 30_000);
+    return () => window.clearInterval(interval);
   }, []);
 
   return (

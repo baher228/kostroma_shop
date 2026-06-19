@@ -21,10 +21,16 @@ export const Login = ({ onLogin }: { onLogin: (session: Session) => void }) => {
   const [manifest, setManifest] = useState<ApkManifest | null>(null);
 
   useEffect(() => {
-    fetch('/downloads/analitika-latest.json', { cache: 'no-store' })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((nextManifest: ApkManifest | null) => setManifest(nextManifest))
-      .catch(() => setManifest(null));
+    const loadManifest = () => {
+      fetch(`/downloads/analitika-latest.json?t=${Date.now()}`, { cache: 'no-store' })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((nextManifest: ApkManifest | null) => setManifest(nextManifest))
+        .catch(() => setManifest(null));
+    };
+
+    loadManifest();
+    const interval = window.setInterval(loadManifest, 30_000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const submit = async (event: React.FormEvent) => {

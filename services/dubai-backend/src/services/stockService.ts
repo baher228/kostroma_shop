@@ -50,5 +50,5 @@ export const setShopOrderValue = (payload: z.infer<typeof upsertOrderSheetValueS
     shopId: payload.shopId,
     productId: payload.productId,
     date: payload.date,
-    value: payload.value === '0' ? '' : payload.value,
+    value: payload.value,
   });

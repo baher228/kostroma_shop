@@ -3,14 +3,13 @@ import { api } from '../../api';
 import { Feedback, Modal, NumberInput, PageHeader, RefreshButton } from '../../components/ui';
 import {
   DASHBOARD_COLUMNS,
-  DASHBOARD_WINDOW_START,
   MAX_ORDER_VALUE_LEN,
   PRODUCT_CATEGORIES,
   WEEK_DAYS,
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, getTwoWeeksEnd } from '../../dateUtils';
+import { addDays, formatDateLabel, getTwoWeeksEnd, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
@@ -28,11 +27,12 @@ import { intOrZero, messageOf, normalizeText, numberOrZero } from '../../shared/
 import type { Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
+  const currentWeekStart = startOfWeek();
   const [shops, setShops] = useState<Shop[]>([]);
   const [table, setTable] = useState<StockTable | null>(null);
   const [selectedShopId, setSelectedShopId] = useState('');
   const [query, setQuery] = useState('');
-  const [windowStart, setWindowStart] = useState(DASHBOARD_WINDOW_START);
+  const [windowStart, setWindowStart] = useState(currentWeekStart);
   const [orderValues, setOrderValues] = useState<Record<string, string>>({});
   const [form, setForm] = useState<ProductPayload>(productToForm());
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -324,7 +324,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
           </select>
           <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, -WEEK_DAYS))}>-1 нед.</button>
-          <button className="secondary" onClick={() => setWindowStart(DASHBOARD_WINDOW_START)}>Текущая нед.</button>
+          <button className="secondary" onClick={() => setWindowStart(startOfWeek())}>Текущая нед.</button>
           <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, WEEK_DAYS))}>+1 нед.</button>
           <button onClick={() => setIsAddProductOpen(true)}>Добавить товар</button>
           <button className="secondary" onClick={exportDashboard}>Экспорт в Excel</button>

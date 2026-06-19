@@ -140,7 +140,8 @@ export const upsertOrderSheetValue = async (
     return false;
   }
 
-  if (!params.value) {
+  const packs = Number.parseInt(params.value, 10);
+  if (!params.value || Number.isNaN(packs) || packs <= 0) {
     await opsDb.query(
       `
         DELETE FROM order_sheet_values
@@ -151,11 +152,6 @@ export const upsertOrderSheetValue = async (
       [params.shopId, params.productId, params.date],
     );
     return true;
-  }
-
-  const packs = Number.parseInt(params.value, 10);
-  if (Number.isNaN(packs) || packs < 0) {
-    return false;
   }
 
   await opsDb.query(

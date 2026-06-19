@@ -5,11 +5,13 @@ import {
   changeSellerOrderStatus,
   getManagerOrderSheet,
   getSellerOrders,
+  submitSellerOrderBulk,
   submitSellerOrder,
   updateManagerOrderSheetValue,
 } from '../services/orderService';
 import { toValidationMessage } from '../http/http';
 import {
+  createSellerOrderBulkSchema,
   createSellerOrderSchema,
   idParamSchema,
   orderSheetQuerySchema,
@@ -96,6 +98,25 @@ export const registerOrderRoutes = (app: Express) => {
         return;
       }
       res.status(500).json({ message: 'Failed to update order sheet value.' });
+    }
+  });
+
+  app.post('/api/orders/bulk', requireOpsScope('orders:write'), async (req: Request, res: Response) => {
+    try {
+      const viewer = (req as AuthorizedOpsRequest).ops;
+      const payload = createSellerOrderBulkSchema.parse(req.body);
+      const orders = await submitSellerOrderBulk(viewer, payload);
+      if (!orders) {
+        res.status(404).json({ message: 'Unable to create order for selected products/shop.' });
+        return;
+      }
+      res.status(201).json({ orders });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to create seller order.' });
     }
   });
 };

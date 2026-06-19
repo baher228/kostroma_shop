@@ -149,6 +149,7 @@ export type SellerOrder = {
   requestedPacks: number;
   requestedUnits: number;
   autoSuggested: boolean;
+  orderDate: string | null;
   status: 'new' | 'processed';
   createdAt: string;
 };

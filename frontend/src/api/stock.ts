@@ -118,14 +118,6 @@ export const stockApi = {
     });
   },
 
-  listOrderValues: async (token: string, from: string, to: string): Promise<OrderValueEntry[]> => {
-    const result = await request<{ orderValues: OrderValueEntry[] }>(
-      `/api/stock/order-values?from=${from}&to=${to}`,
-      { token },
-    );
-    return result.orderValues;
-  },
-
   listShopOrderValues: async (token: string, shopId: string, from: string, to: string): Promise<OrderValueEntry[]> => {
     const result = await request<{ orderValues: OrderValueEntry[] }>(
       `/api/stock/order-values?shopId=${encodeURIComponent(shopId)}&from=${from}&to=${to}`,

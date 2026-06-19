@@ -104,9 +104,6 @@ const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0
 const WEEK_DAYS = 7;
 const TWO_WEEKS_DAYS = 14;
 const MAX_ORDER_VALUE_LEN = 5;
-// Fixed 2-week window so the rightmost Monday in the dashboard is 11.05.2026.
-const DASHBOARD_WINDOW_START = '2026-04-28';
-
 const DASHBOARD_COLUMNS: DashboardColumn[] = [
   { key: 'currentTue', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0412\u0442\u043e\u0440\u043d\u0438\u043a', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
   { key: 'orderPackThu', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0447\u0435\u0442\u0432\u0435\u0440\u0433', subtitle: '\u0412\u0442\u043e\u0440\u043d\u0438\u043a', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
@@ -399,7 +396,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
-  const [managerWindowStart, setManagerWindowStart] = useState<string>(DASHBOARD_WINDOW_START);
+  const [managerWindowStart, setManagerWindowStart] = useState<string>(currentWeekStart());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -698,6 +695,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (!date || !shopId) return;
     const nextValue = sanitizeOrderValue(value);
     const fieldKey = `${productId}:${date}`;
+    const previousValue = dashboardOrderValues[fieldKey] ?? '';
     setDashboardOrderValues((current) => ({
       ...current,
       [fieldKey]: nextValue,
@@ -708,6 +706,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       productId,
       orderDate: date,
       packs: Number.isNaN(packs) ? 0 : packs,
+    }).catch((saveError) => {
+      setDashboardOrderValues((current) => ({
+        ...current,
+        [fieldKey]: previousValue,
+      }));
+      setError(errorMessage(saveError));
     });
   };
 
@@ -1361,7 +1365,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 >
                   <Text style={styles.calendarNavButtonText}>-1 нед.</Text>
                 </Pressable>
-                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(DASHBOARD_WINDOW_START)}>
+                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(currentWeekStart())}>
                   <Text style={styles.calendarNavButtonText}>Текущая нед.</Text>
                 </Pressable>
                 <Pressable

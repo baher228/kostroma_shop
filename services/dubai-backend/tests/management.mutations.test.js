@@ -84,6 +84,7 @@ test('seller order status update returns resolved order details', async () => {
                 requested_packs: 1,
                 requested_units: 6,
                 auto_suggested: false,
+                order_date: '2026-05-02',
                 status: 'processed',
                 created_at: '2026-05-13T10:00:00.000Z',
               }],
@@ -101,6 +102,7 @@ test('seller order status update returns resolved order details', async () => {
                 requested_packs: 1,
                 requested_units: 6,
                 auto_suggested: false,
+                order_date: '2026-05-02',
                 status: 'processed',
                 created_at: '2026-05-13T10:00:00.000Z',
               }],
@@ -137,14 +139,17 @@ test('seller order creation writes through to order sheet values', async () => {
       opsDb: {
         query: async (sql, params = []) => {
           calls.push({ sql, params });
+          if (sql.includes('FROM shops')) {
+            return { rows: [{ id: params[0] }] };
+          }
           if (sql.includes('FROM stock_products')) {
             return { rows: [{ id: params[0] }] };
           }
           if (sql.includes('WITH inserted AS')) {
             assert.match(sql, /INSERT INTO seller_orders/);
             assert.match(sql, /INSERT INTO order_sheet_values/);
-            assert.match(sql, /packs = order_sheet_values\.packs \+ EXCLUDED\.packs/);
-            assert.match(params[8], /^\d{4}-\d{2}-\d{2}$/);
+            assert.match(sql, /packs = EXCLUDED\.packs/);
+            assert.equal(params[7], '2026-05-02');
             return {
               rows: [{
                 id: params[0],
@@ -156,6 +161,7 @@ test('seller order creation writes through to order sheet values', async () => {
                 requested_packs: params[4],
                 requested_units: params[5],
                 auto_suggested: params[6],
+                order_date: params[7],
                 status: 'new',
                 created_at: '2026-05-01T10:00:00.000Z',
               }],
@@ -171,7 +177,7 @@ test('seller order creation writes through to order sheet values', async () => {
   const { createSellerOrder, nearestOrderSheetDate } = require('../dist/repositories/ordersRepository');
 
   assert.equal(nearestOrderSheetDate(new Date(2026, 3, 27)), '2026-04-28');
-  assert.equal(nearestOrderSheetDate(new Date(2026, 3, 30)), '2026-04-30');
+  assert.equal(nearestOrderSheetDate(new Date(2026, 3, 30)), '2026-05-02');
 
   const order = await createSellerOrder(
     { role: 'worker', shopIds: ['shop_main'], scopes: ['orders:write'], jti: 'jti_1' },
@@ -182,10 +188,145 @@ test('seller order creation writes through to order sheet values', async () => {
       requestedPacks: 3,
       requestedUnits: 18,
       autoSuggested: true,
+      orderDate: '2026-05-02',
     },
   );
 
   assert.equal(order.productName, 'Milk');
   assert.equal(calls.filter((call) => call.sql.includes('INSERT INTO seller_orders')).length, 1);
   assert.equal(calls.filter((call) => call.sql.includes('INSERT INTO order_sheet_values')).length, 1);
+});
+
+test('bulk seller order creation replaces the full shop/date order in one transaction', async () => {
+  const opsDbPath = require.resolve('../dist/db/opsDb');
+  const calls = [];
+
+  require.cache[opsDbPath] = {
+    id: opsDbPath,
+    filename: opsDbPath,
+    loaded: true,
+    exports: {
+      opsDb: {
+        query: async () => {
+          throw new Error('Expected transactional client');
+        },
+        withClient: async (callback) => {
+          const client = {
+            query: async (sql, params = []) => {
+              calls.push({ sql, params });
+              if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+                return { rows: [] };
+              }
+              if (sql.includes('FROM shops')) {
+                return { rows: [{ id: params[0] }] };
+              }
+              if (sql.includes('FROM stock_products')) {
+                return { rows: params[0].map((id) => ({ id })) };
+              }
+              if (sql.includes('DELETE FROM order_sheet_values')) {
+                return { rows: [] };
+              }
+              if (sql.includes('INSERT INTO order_sheet_values')) {
+                return { rows: [] };
+              }
+              if (sql.includes('WITH inserted AS')) {
+                return {
+                  rows: [{
+                    id: params[0],
+                    shop_id: params[1],
+                    shop_name: 'Main shop',
+                    product_id: params[2],
+                    product_name: params[2] === 'prod_1' ? 'Milk' : 'Kefir',
+                    stock_on_hand: params[3],
+                    requested_packs: params[4],
+                    requested_units: params[5],
+                    auto_suggested: params[6],
+                    order_date: params[7],
+                    status: 'new',
+                    created_at: '2026-05-01T10:00:00.000Z',
+                  }],
+                };
+              }
+              throw new Error(`Unexpected SQL: ${sql}`);
+            },
+          };
+          return callback(client);
+        },
+      },
+    },
+  };
+
+  delete require.cache[require.resolve('../dist/repositories/ordersRepository')];
+  const { createSellerOrderBulk } = require('../dist/repositories/ordersRepository');
+
+  const orders = await createSellerOrderBulk(
+    { role: 'worker', shopIds: ['shop_main'], scopes: ['orders:write'], jti: 'jti_1' },
+    {
+      shopId: 'shop_main',
+      orderDate: '2026-05-02',
+      items: [
+        { productId: 'prod_1', stockOnHand: 2, requestedPacks: 3, requestedUnits: 18, autoSuggested: true },
+        { productId: 'prod_2', stockOnHand: 1, requestedPacks: 2, requestedUnits: 12, autoSuggested: false },
+      ],
+    },
+  );
+
+  assert.equal(orders.length, 2);
+  assert.equal(orders[0].orderDate, '2026-05-02');
+  assert.equal(calls[0].sql, 'BEGIN');
+  assert.equal(calls.at(-1).sql, 'COMMIT');
+  assert.equal(calls.filter((call) => call.sql.includes('DELETE FROM order_sheet_values')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.includes('INSERT INTO order_sheet_values')).length, 2);
+});
+
+test('bulk seller order creation rolls back before writes when products are invalid', async () => {
+  const opsDbPath = require.resolve('../dist/db/opsDb');
+  const calls = [];
+
+  require.cache[opsDbPath] = {
+    id: opsDbPath,
+    filename: opsDbPath,
+    loaded: true,
+    exports: {
+      opsDb: {
+        query: async () => {
+          throw new Error('Expected transactional client');
+        },
+        withClient: async (callback) => {
+          const client = {
+            query: async (sql, params = []) => {
+              calls.push({ sql, params });
+              if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+                return { rows: [] };
+              }
+              if (sql.includes('FROM shops')) {
+                return { rows: [{ id: params[0] }] };
+              }
+              if (sql.includes('FROM stock_products')) {
+                return { rows: [] };
+              }
+              throw new Error(`Unexpected SQL: ${sql}`);
+            },
+          };
+          return callback(client);
+        },
+      },
+    },
+  };
+
+  delete require.cache[require.resolve('../dist/repositories/ordersRepository')];
+  const { createSellerOrderBulk } = require('../dist/repositories/ordersRepository');
+
+  const orders = await createSellerOrderBulk(
+    { role: 'worker', shopIds: ['shop_main'], scopes: ['orders:write'], jti: 'jti_1' },
+    {
+      shopId: 'shop_main',
+      orderDate: '2026-05-02',
+      items: [{ productId: 'missing', stockOnHand: 2, requestedPacks: 3, requestedUnits: 18, autoSuggested: true }],
+    },
+  );
+
+  assert.equal(orders, null);
+  assert.equal(calls.at(-1).sql, 'ROLLBACK');
+  assert.equal(calls.some((call) => call.sql.includes('DELETE FROM order_sheet_values')), false);
 });

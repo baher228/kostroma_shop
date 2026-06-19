@@ -72,9 +72,6 @@ const shiftToAllowedOrderDate = (dateKey: string, direction: 1 | -1): string => 
 };
 
 const nearestAllowedOrderDate = (dateKey: string): string => {
-  if (isAllowedOrderDate(dateKey)) {
-    return dateKey;
-  }
   return shiftToAllowedOrderDate(dateKey, 1);
 };
 

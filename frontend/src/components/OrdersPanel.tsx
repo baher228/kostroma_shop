@@ -31,6 +31,36 @@ const todayDateKey = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+const parseDateKey = (raw: string): Date => {
+  const [year, month, day] = raw.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
+
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const nextOrderDate = (from = new Date()): string => {
+  const allowedDays = new Set([2, 4, 6]);
+  const target = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  target.setDate(target.getDate() + 1);
+  while (!allowedDays.has(target.getDay())) {
+    target.setDate(target.getDate() + 1);
+  }
+  return toDateKey(target);
+};
+
+const formatDateShort = (iso: string): string => {
+  const [, month, day] = iso.split('-');
+  return `${day}.${month}`;
+};
+
+const formatTargetWeekday = (iso: string): string =>
+  parseDateKey(iso).toLocaleDateString('ru-RU', { weekday: 'long' });
+
 const preferredDate = (dates: string[]): string | null => {
   if (!dates.length) {
     return null;
@@ -78,6 +108,8 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   const canManage = session.user.role === 'manager';
   const [loading, setLoading] = useState(true);
   const [savingByProduct, setSavingByProduct] = useState<Record<string, boolean>>({});
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [submittedByProduct, setSubmittedByProduct] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
   const [orders, setOrders] = useState<SellerOrder[]>([]);
   const [table, setTable] = useState<StockTable | null>(null);
@@ -131,6 +163,8 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   }, [session.token]);
 
   const stockDate = useMemo(() => (table ? preferredDate(table.dates) : null), [table]);
+  const orderDate = nextOrderDate();
+  const orderTargetLabel = `Заказ упаковок на ${formatTargetWeekday(orderDate)} ${formatDateShort(orderDate)}`;
 
   const saveMeta = async (productId: string) => {
     try {
@@ -163,41 +197,50 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
     }
   };
 
-  const createOrder = async (row: StockTable['rows'][number]) => {
+  const submitWorkerOrder = async () => {
     const assignedShopId = session.user.shopId ?? table?.shop.id ?? null;
     if (!table || !assignedShopId) {
       setError('Для создания заказа сотрудник должен быть привязан к магазину.');
       return;
     }
 
-    const requestedPacks = Number.parseInt((packsByProduct[row.productId] ?? '').trim(), 10);
-    if (!Number.isFinite(requestedPacks) || requestedPacks <= 0) {
-      setError('Введите корректное количество упаковок.');
-      return;
-    }
-    const unitsInPack = row.unitsInPack && row.unitsInPack > 0 ? row.unitsInPack : 1;
-    const requestedUnits = requestedPacks * unitsInPack;
-    const stockOnHand = stockDate ? parseStock(row.values[stockDate]) : null;
-    const suggested = suggestPacks(row, stockOnHand);
-    const autoSuggested = suggested > 0 && suggested === requestedPacks;
+    const rowsToSubmit = table.rows
+      .map((row) => {
+        const requestedPacks = Number.parseInt((packsByProduct[row.productId] ?? '').trim(), 10);
+        return Number.isFinite(requestedPacks) && requestedPacks > 0 ? { row, requestedPacks } : null;
+      })
+      .filter((item): item is { row: StockTable['rows'][number]; requestedPacks: number } => item !== null);
 
     try {
-      setSavingByProduct((current) => ({ ...current, [row.productId]: true }));
+      setSubmittingOrder(true);
+      setSavingByProduct(Object.fromEntries(rowsToSubmit.map(({ row }) => [row.productId, true])));
       setError('');
-      const created = await ordersApi.create(session.token, {
-        shopId: assignedShopId,
-        productId: row.productId,
-        stockOnHand,
-        requestedPacks,
-        requestedUnits,
-        autoSuggested,
+      const items = rowsToSubmit.map(({ row, requestedPacks }) => {
+        const unitsInPack = row.unitsInPack && row.unitsInPack > 0 ? row.unitsInPack : 1;
+        const requestedUnits = requestedPacks * unitsInPack;
+        const stockOnHand = stockDate ? parseStock(row.values[stockDate]) : null;
+        const suggested = suggestPacks(row, stockOnHand);
+        const autoSuggested = suggested > 0 && suggested === requestedPacks;
+        return {
+          productId: row.productId,
+          stockOnHand,
+          requestedPacks,
+          requestedUnits,
+          autoSuggested,
+        };
       });
-      setOrders((current) => [created, ...current]);
-      setPacksByProduct((current) => ({ ...current, [row.productId]: '' }));
+      const createdOrders = await ordersApi.createBulk(session.token, {
+        shopId: assignedShopId,
+        orderDate,
+        items,
+      });
+      setOrders((current) => [...createdOrders.reverse(), ...current]);
+      setSubmittedByProduct(Object.fromEntries(rowsToSubmit.map(({ row }) => [row.productId, true])));
     } catch (createError) {
       setError(errorMessage(createError));
     } finally {
-      setSavingByProduct((current) => ({ ...current, [row.productId]: false }));
+      setSubmittingOrder(false);
+      setSavingByProduct({});
     }
   };
 
@@ -215,7 +258,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
 
       {!canManage && (
         <View style={[styles.block, styles.workerOrderBlock]}>
-          <Text style={styles.blockTitle}>Заказ для продавцов</Text>
+          <Text style={styles.orderTitle}>{orderTargetLabel}</Text>
           <Text style={styles.blockMeta}>
             {stockDate ? `Текущий остаток для расчета: ${stockDate}` : 'Нет дат для расчета остатков'}
           </Text>
@@ -237,12 +280,13 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                       <Text style={styles.orderLabel}>Заказ</Text>
                       <TextInput
                         value={packsByProduct[row.productId] ?? ''}
-                        onChangeText={(value) =>
+                        onChangeText={(value) => {
+                          setSubmittedByProduct((current) => ({ ...current, [row.productId]: false }));
                           setPacksByProduct((current) => ({
                             ...current,
                             [row.productId]: value.replace(/[^0-9]/g, '').slice(0, 4),
-                          }))
-                        }
+                          }));
+                        }}
                         style={styles.orderValueInput}
                         keyboardType="number-pad"
                         placeholder="Коробки"
@@ -256,20 +300,22 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                   </View>
                   <Text style={styles.productMetaStrong}>Шт/кор: {row.unitsInPack ?? '-'}</Text>
                   <Text style={styles.productMetaStrong}>Границы: {row.minStockUnits ?? '-'} / {row.maxStockUnits ?? '-'}</Text>
-
-                  <View style={styles.rowInputs}>
-                    <Pressable
-                      style={[styles.saveButton, pending && styles.saveButtonDisabled]}
-                      onPress={() => void createOrder(row)}
-                      disabled={pending}
-                    >
-                      <Text style={styles.saveButtonText}>{pending ? '...' : 'Отправить'}</Text>
-                    </Pressable>
-                  </View>
+                  {(pending || submittedByProduct[row.productId]) && (
+                    <Text style={styles.submissionState}>{pending ? 'Отправляется...' : 'Отправлено'}</Text>
+                  )}
                 </View>
               );
             })}
           </ScrollView>
+          <View style={styles.submitBar}>
+            <Pressable
+              style={[styles.submitAllButton, submittingOrder && styles.saveButtonDisabled]}
+              onPress={() => void submitWorkerOrder()}
+              disabled={submittingOrder}
+            >
+              <Text style={styles.submitAllButtonText}>{submittingOrder ? 'Отправляем...' : 'Отправить заказ'}</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -339,7 +385,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                   {order.productName} · {order.requestedPacks} кор. ({order.requestedUnits} шт.)
                 </Text>
                 <Text style={styles.historyMeta}>
-                  {order.shopName ?? order.shopId} · {toIsoLabel(order.createdAt)}
+                  {order.shopName ?? order.shopId} · {order.orderDate ? `на ${order.orderDate} · ` : ''}{toIsoLabel(order.createdAt)}
                 </Text>
                 <Text style={styles.historyMeta}>
                   Остаток: {order.stockOnHand ?? '-'} · {order.autoSuggested ? 'Авто' : 'Ручной'} · {order.status}
@@ -373,14 +419,22 @@ const styles = StyleSheet.create({
   },
   workerOrderBlock: {
     flex: 1,
+    padding: 18,
   },
   blockTitle: {
     fontSize: 22,
     fontWeight: '900',
     color: '#213428',
   },
+  orderTitle: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '900',
+    color: '#213428',
+    textTransform: 'capitalize',
+  },
   blockMeta: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#4f6155',
     fontWeight: '700',
   },
@@ -402,13 +456,14 @@ const styles = StyleSheet.create({
   orderCard: {
     borderWidth: 1,
     borderColor: '#d1dbd2',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    gap: 10,
+    borderRadius: 14,
+    padding: 22,
+    marginBottom: 16,
+    gap: 16,
   },
   productName: {
-    fontSize: 18,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: '900',
     color: '#233629',
   },
@@ -420,39 +475,39 @@ const styles = StyleSheet.create({
   orderTopRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 18,
     alignItems: 'stretch',
   },
   stockBlock: {
-    minWidth: 118,
-    paddingVertical: 4,
+    minWidth: 150,
+    paddingVertical: 6,
   },
   orderBlock: {
     flex: 1,
-    minWidth: 180,
+    minWidth: 240,
     justifyContent: 'center',
   },
   recommendationBlock: {
     flexGrow: 1,
     flexShrink: 1,
-    minWidth: 150,
+    minWidth: 190,
     justifyContent: 'center',
   },
   stockLabel: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '800',
     color: '#355443',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   orderLabel: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '800',
     color: '#355443',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   stockValueText: {
-    fontSize: 38,
-    lineHeight: 42,
+    fontSize: 50,
+    lineHeight: 56,
     fontWeight: '900',
     color: '#1d3326',
   },
@@ -461,25 +516,30 @@ const styles = StyleSheet.create({
     borderColor: '#c6d3c8',
     borderRadius: 12,
     backgroundColor: '#f8fbf9',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 26,
-    lineHeight: 30,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    fontSize: 42,
+    lineHeight: 48,
     fontWeight: '900',
     color: '#1d3326',
     textAlign: 'left',
-    minHeight: 56,
+    minHeight: 86,
   },
   recommendationValueText: {
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 40,
+    lineHeight: 46,
     fontWeight: '900',
     color: '#1d3326',
   },
   productMetaStrong: {
-    fontSize: 20,
+    fontSize: 24,
     color: '#4f6155',
     fontWeight: '900',
+  },
+  submissionState: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#2f6f4f',
   },
   rowInputs: {
     flexDirection: 'row',
@@ -516,6 +576,23 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#ffffff',
     fontSize: 16,
+    fontWeight: '900',
+  },
+  submitBar: {
+    borderTopWidth: 1,
+    borderTopColor: '#d1dbd2',
+    paddingTop: 14,
+  },
+  submitAllButton: {
+    borderRadius: 14,
+    backgroundColor: '#2f6f4f',
+    paddingHorizontal: 22,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  submitAllButtonText: {
+    color: '#ffffff',
+    fontSize: 24,
     fontWeight: '900',
   },
   historyCard: {

@@ -14,6 +14,30 @@ const stockValue = z
 
 const dateTimeString = z.string().datetime().optional().nullable();
 
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const isRealDateKey = (dateKey: string): boolean => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  return toDateKey(date) === dateKey;
+};
+
+const dateKeySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isRealDateKey, { message: 'Invalid calendar date.' });
+
+const isAllowedOrderDate = (dateKey: string): boolean => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  return new Set([2, 4, 6]).has(date.getDay());
+};
+
 const columnKeys: [ColumnKey, ...ColumnKey[]] = [
   'packCount',
   'stockTue',
@@ -144,15 +168,15 @@ export const updateShopMachineSchema = z.object({
 
 export const listStockTableQuerySchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: dateKeySchema.optional(),
+  to: dateKeySchema.optional(),
   range: z.enum(['week', 'year']).optional(),
 });
 
 export const upsertStockValueSchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
   productId: z.string().trim().min(1).max(100),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: dateKeySchema,
   value: z
     .string()
     .regex(/^\d{0,2}$/)
@@ -242,7 +266,29 @@ export const createSellerOrderSchema = z.object({
   requestedPacks: z.number().int().min(1).max(9999),
   requestedUnits: z.number().int().min(1).max(99999),
   autoSuggested: z.boolean().optional().default(false),
+  orderDate: dateKeySchema.refine(isAllowedOrderDate, {
+    message: 'Order date must be Tuesday, Thursday or Saturday.',
+  }).optional(),
 }).strict();
+
+const sellerOrderItemSchema = z.object({
+  productId: z.string().trim().min(1).max(100),
+  stockOnHand: z.number().int().min(0).max(9999).optional().nullable(),
+  requestedPacks: z.number().int().min(1).max(9999),
+  requestedUnits: z.number().int().min(1).max(99999),
+  autoSuggested: z.boolean().optional().default(false),
+}).strict();
+
+export const createSellerOrderBulkSchema = z.object({
+  shopId: z.string().trim().min(1).max(100),
+  orderDate: dateKeySchema.refine(isAllowedOrderDate, {
+    message: 'Order date must be Tuesday, Thursday or Saturday.',
+  }),
+  items: z.array(sellerOrderItemSchema).max(1000),
+}).strict()
+  .refine((payload) => new Set(payload.items.map((item) => item.productId)).size === payload.items.length, {
+    message: 'Order items must have unique products.',
+  });
 
 export const updateSellerOrderStatusSchema = z.object({
   status: z.enum(['new', 'processed']),
@@ -253,12 +299,12 @@ export const updateCheckInStatusSchema = z.object({
 });
 
 export const orderSheetQuerySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: dateKeySchema,
 });
 
 export const upsertOrderSheetValueSchema = z.object({
   shopId: z.string().trim().min(1).max(100),
   productId: z.string().trim().min(1).max(100),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: dateKeySchema,
   value: z.string().regex(/^\d{0,5}$/),
 });

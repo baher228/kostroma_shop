@@ -195,7 +195,7 @@ export const api = {
       (await dxbRequest<{ sheet: OrderSheet }>(`/api/orders/sheet?date=${date}`, { token })).sheet,
     create: async (
       token: string,
-      payload: { shopId: string; productId: string; stockOnHand: number | null; requestedPacks: number; requestedUnits: number; autoSuggested: boolean },
+      payload: { shopId: string; productId: string; stockOnHand: number | null; requestedPacks: number; requestedUnits: number; autoSuggested: boolean; orderDate?: string },
     ) => (await dxbRequest<{ order: SellerOrder }>('/api/orders', { method: 'POST', token, body: payload })).order,
     updateStatus: async (token: string, orderId: string, status: 'new' | 'processed') =>
       (await dxbRequest<{ order: SellerOrder }>(`/api/orders/${orderId}/status`, { method: 'PATCH', token, body: { status } })).order,

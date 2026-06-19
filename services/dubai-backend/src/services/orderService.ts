@@ -1,7 +1,8 @@
 import { getOrderSheet, upsertOrderSheetValue } from '../repositories/orderSheetRepository';
-import { createSellerOrder, listSellerOrders, updateSellerOrderStatus } from '../repositories/ordersRepository';
+import { createSellerOrder, createSellerOrderBulk, listSellerOrders, updateSellerOrderStatus } from '../repositories/ordersRepository';
 import { OpsTokenClaims } from '../domain/types';
 import {
+  createSellerOrderBulkSchema,
   createSellerOrderSchema,
   updateSellerOrderStatusSchema,
   upsertOrderSheetValueSchema,
@@ -14,6 +15,11 @@ export const submitSellerOrder = async (
   viewer: OpsTokenClaims,
   payload: z.infer<typeof createSellerOrderSchema>,
 ) => createSellerOrder(viewer, payload);
+
+export const submitSellerOrderBulk = async (
+  viewer: OpsTokenClaims,
+  payload: z.infer<typeof createSellerOrderBulkSchema>,
+) => createSellerOrderBulk(viewer, payload);
 
 export const changeSellerOrderStatus = (
   viewer: OpsTokenClaims,

@@ -37,6 +37,8 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       UPDATE_CHANNEL: ${{ inputs.channel || 'preview' }}
       UPDATE_MESSAGE: ${{ inputs.message }}
+      EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
+      EXPO_PUBLIC_DXB_API_URL: https://affera.co.uk/dxb
       CI: '1'
     steps:
       - name: Checkout

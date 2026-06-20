@@ -284,7 +284,7 @@ export const createSellerOrderBulkSchema = z.object({
   orderDate: dateKeySchema.refine(isAllowedOrderDate, {
     message: 'Order date must be Tuesday, Thursday or Saturday.',
   }),
-  items: z.array(sellerOrderItemSchema).max(1000),
+  items: z.array(sellerOrderItemSchema).min(1).max(1000),
 }).strict()
   .refine((payload) => new Set(payload.items.map((item) => item.productId)).size === payload.items.length, {
     message: 'Order items must have unique products.',

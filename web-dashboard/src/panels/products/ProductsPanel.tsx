@@ -62,7 +62,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       try {
         const loaded: Record<string, string> = {};
-        const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, to);
+        const orderValuesTo = addDays(to, 2);
+        const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, orderValuesTo);
         for (const entry of nextOrderValues) {
           loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
         }

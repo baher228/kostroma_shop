@@ -71,6 +71,11 @@ test('Dubai order schema rejects personal and free-text fields', () => {
   assert.throws(() => createSellerOrderBulkSchema.parse({
     shopId: 'shop_main',
     orderDate: '2026-05-02',
+    items: [],
+  }));
+  assert.throws(() => createSellerOrderBulkSchema.parse({
+    shopId: 'shop_main',
+    orderDate: '2026-05-02',
     items: [
       { productId: 'prod_1', requestedPacks: 1, requestedUnits: 6 },
       { productId: 'prod_1', requestedPacks: 2, requestedUnits: 12 },

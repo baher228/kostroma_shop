@@ -211,6 +211,11 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       })
       .filter((item): item is { row: StockTable['rows'][number]; requestedPacks: number } => item !== null);
 
+    if (rowsToSubmit.length === 0) {
+      setError('Введите хотя бы одну позицию заказа.');
+      return;
+    }
+
     try {
       setSubmittingOrder(true);
       setSavingByProduct(Object.fromEntries(rowsToSubmit.map(({ row }) => [row.productId, true])));

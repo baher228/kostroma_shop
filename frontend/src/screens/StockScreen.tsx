@@ -375,7 +375,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         const targetShopId = selectedShopId ?? nextTable.shop.id;
         if (targetShopId) {
           try {
-            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, to);
+            const orderValuesTo = shiftDateKey(to, 2);
+            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, orderValuesTo);
             const loaded: Record<string, string> = {};
             for (const entry of orderValues) {
               loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
@@ -2238,4 +2239,3 @@ const styles = StyleSheet.create({
     color: '#1f4f37',
   },
 });
-

@@ -57,8 +57,8 @@ export const Login = ({ onLogin }: { onLogin: (session: Session) => void }) => {
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               autoCapitalize="none"
-              autoComplete="off"
-              name="analitika-login"
+              autoComplete="username"
+              name="username"
             />
           </label>
           <label>
@@ -67,8 +67,8 @@ export const Login = ({ onLogin }: { onLogin: (session: Session) => void }) => {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              autoComplete="new-password"
-              name="analitika-passcode"
+              autoComplete="current-password"
+              name="password"
             />
           </label>
           {error && <p className="error">{error}</p>}

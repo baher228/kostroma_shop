@@ -35,6 +35,7 @@ export class ApiError extends Error {
 }
 
 const opsTokenCache = new Map<string, CachedOpsToken>();
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const parseJwtExp = (token: string): number => {
   try {
@@ -49,8 +50,24 @@ const parseJwtExp = (token: string): number => {
   }
 };
 
+const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('Сервер не ответил. Проверьте интернет и попробуйте снова.', 0);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
 const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOptions, bearerToken?: string): Promise<T> => {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       Accept: 'application/json',

@@ -515,7 +515,7 @@ const DocumentsModal = ({
       setFile(null);
       if (fileInput.current) fileInput.current.value = '';
       await load();
-      if (document.documentType === 'invoice') {
+      if (document.documentType === 'invoice' || document.documentType === 'two_month_plan') {
         await onInvoiceImported();
       }
     } catch (err) {

@@ -16,6 +16,6 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "../product-ordering.ts"],
+  "include": ["src", "../shared/**/*.ts"],
   "references": []
 }

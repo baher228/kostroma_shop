@@ -1,4 +1,4 @@
-import { sortProductsLikeImage as sortSharedProductsLikeImage } from '../../../product-ordering';
+import { sortProductsLikeImage as sortSharedProductsLikeImage } from '../../../shared/product-ordering';
 import { StockTableRow } from '../types/models';
 
 export const sortProductsLikeImage = sortSharedProductsLikeImage;

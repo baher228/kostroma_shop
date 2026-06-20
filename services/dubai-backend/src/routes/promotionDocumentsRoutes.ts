@@ -10,6 +10,7 @@ import {
   listPromotionDocuments,
 } from '../repositories/promotionDocumentsRepository';
 import { listPromotionRows } from '../repositories/promotionRowsRepository';
+import { importPromotionPriceList } from '../services/promotionPriceListImportService';
 import { createDownloadUrl, uploadObject } from '../services/r2StorageService';
 
 const upload = multer({
@@ -23,10 +24,11 @@ const upload = multer({
 const labels: Record<PromotionDocumentType, string> = {
   invoice: 'накладная',
   two_month_plan: 'план на два месяца',
+  retail_price_list: 'прайс розничных цен',
   final_table_csv: 'итоговая таблица',
 };
 
-const allowedTypes = new Set<PromotionDocumentType>(['invoice', 'two_month_plan', 'final_table_csv']);
+const allowedTypes = new Set<PromotionDocumentType>(['invoice', 'two_month_plan', 'retail_price_list', 'final_table_csv']);
 const uploadedBy = (req: Request) => (req as AuthorizedOpsRequest).ops?.jti ?? null;
 
 const decodeFileName = (fileName: string) => {
@@ -49,6 +51,9 @@ const validateUpload = (documentType: PromotionDocumentType, fileName: string) =
   }
   if (documentType === 'two_month_plan' && !lower.endsWith('.xlsx') && !lower.endsWith('.xls') && !lower.endsWith('.csv')) {
     throw new Error('План на два месяца должен быть в формате Excel или CSV.');
+  }
+  if (documentType === 'retail_price_list' && !lower.endsWith('.xlsx')) {
+    throw new Error('Прайс розничных цен должен быть в формате XLSX.');
   }
 };
 
@@ -112,7 +117,7 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
       try {
         const documentType = documentTypeFromRequest(req.body.documentType);
         if (!documentType || documentType === 'final_table_csv') {
-          res.status(400).json({ message: 'Выберите тип документа: накладная или план на два месяца.' });
+          res.status(400).json({ message: 'Выберите тип документа: накладная, план или прайс розничных цен.' });
           return;
         }
         if (!req.file) {
@@ -131,7 +136,10 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
           sizeBytes: req.file.size,
           uploadedBy: uploadedBy(req),
         });
-        res.status(201).json({ document });
+        const importResult = documentType === 'retail_price_list'
+          ? await importPromotionPriceList({ buffer: req.file.buffer, sourceDocumentId: document.id, sourceFileName: fileName })
+          : null;
+        res.status(201).json({ document, import: importResult });
       } catch (error) {
         res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось прикрепить документ.' });
       }

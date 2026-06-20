@@ -89,7 +89,7 @@ export type OrderSheet = {
   rows: OrderSheetRow[];
 };
 
-export type PromotionDocumentType = 'invoice' | 'two_month_plan' | 'final_table_csv';
+export type PromotionDocumentType = 'invoice' | 'two_month_plan' | 'retail_price_list' | 'final_table_csv';
 
 export type PromotionDocument = {
   id: string;

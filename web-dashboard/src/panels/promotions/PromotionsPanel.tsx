@@ -51,6 +51,12 @@ const uploadOptions: Array<{ value: Exclude<PromotionDocumentType, 'final_table_
     hint: 'Excel или CSV',
     accept: '.xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   },
+  {
+    value: 'retail_price_list',
+    label: 'Розничные цены',
+    hint: 'Только XLSX',
+    accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  },
 ];
 
 const statusLabels: Record<PromotionRowStatus, string> = {
@@ -438,6 +444,7 @@ const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () =>
   const [file, setFile] = useState<File | null>(null);
   const [invoiceId, setInvoiceId] = useState('');
   const [planId, setPlanId] = useState('');
+  const [priceListId, setPriceListId] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -447,6 +454,7 @@ const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () =>
 
   const invoices = useMemo(() => documents.filter((document) => document.documentType === 'invoice'), [documents]);
   const plans = useMemo(() => documents.filter((document) => document.documentType === 'two_month_plan'), [documents]);
+  const priceLists = useMemo(() => documents.filter((document) => document.documentType === 'retail_price_list'), [documents]);
 
   const load = async () => {
     setLoading(true);
@@ -456,6 +464,7 @@ const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () =>
       setDocuments(nextDocuments);
       setInvoiceId((current) => current || nextDocuments.find((document) => document.documentType === 'invoice')?.id || '');
       setPlanId((current) => current || nextDocuments.find((document) => document.documentType === 'two_month_plan')?.id || '');
+      setPriceListId((current) => current || nextDocuments.find((document) => document.documentType === 'retail_price_list')?.id || '');
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -487,6 +496,7 @@ const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () =>
       const document = await api.promotions.uploadDocument(session.token, documentType, file);
       if (document.documentType === 'invoice') setInvoiceId(document.id);
       if (document.documentType === 'two_month_plan') setPlanId(document.id);
+      if (document.documentType === 'retail_price_list') setPriceListId(document.id);
       setNotice('Документ прикреплен.');
       setFile(null);
       if (fileInput.current) fileInput.current.value = '';
@@ -584,7 +594,13 @@ const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () =>
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               />
               <span>{file ? file.name : 'Перетащите файл сюда или нажмите для выбора'}</span>
-              <small>{selectedOption.value === 'invoice' ? 'Доступен только PDF' : 'Доступны Excel и CSV'}</small>
+              <small>
+                {selectedOption.value === 'invoice'
+                  ? 'Доступен только PDF'
+                  : selectedOption.value === 'retail_price_list'
+                    ? 'Доступен только XLSX'
+                    : 'Доступны Excel и CSV'}
+              </small>
             </label>
 
             <button className="documents-primary-action" disabled={uploading}>
@@ -612,6 +628,14 @@ const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () =>
                 empty="Планов пока нет"
                 onChange={setPlanId}
                 onDownload={() => void downloadById(planId)}
+              />
+              <DownloadRow
+                label="Прайс розничных цен"
+                value={priceListId}
+                documents={priceLists}
+                empty="Прайсов пока нет"
+                onChange={setPriceListId}
+                onDownload={() => void downloadById(priceListId)}
               />
               <DownloadRow
                 label="Итоговая таблица CSV"

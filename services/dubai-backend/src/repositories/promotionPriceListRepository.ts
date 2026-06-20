@@ -11,7 +11,41 @@ export type PromotionPriceListItemInput = {
   regularPrice: number;
 };
 
+export type PromotionPriceListItem = {
+  id: string;
+  productName: string;
+  productNameRaw: string | null;
+  productNameClean: string;
+  normalizedProductName: string;
+  regularPrice: number;
+};
+
+type PromotionPriceListItemRow = {
+  id: string;
+  product_name: string | null;
+  product_name_raw: string | null;
+  product_name_clean: string | null;
+  normalized_product_name: string;
+  regular_price: string | number;
+};
+
 const id = () => `promo_price_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+export const listPromotionPriceListItems = async (): Promise<PromotionPriceListItem[]> => {
+  const result = await opsDb.query<PromotionPriceListItemRow>(
+    `SELECT id, product_name, product_name_raw, product_name_clean, normalized_product_name, regular_price
+     FROM promotion_price_list_items
+     WHERE normalized_product_name IS NOT NULL AND regular_price IS NOT NULL;`,
+  );
+  return result.rows.map((row: PromotionPriceListItemRow) => ({
+    id: row.id,
+    productName: row.product_name_clean || row.product_name || '',
+    productNameRaw: row.product_name_raw,
+    productNameClean: row.product_name_clean || row.product_name || '',
+    normalizedProductName: row.normalized_product_name,
+    regularPrice: Number(row.regular_price),
+  }));
+};
 
 export const upsertPromotionPriceListItems = async (items: PromotionPriceListItemInput[]): Promise<number> => {
   if (!items.length) return 0;

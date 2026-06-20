@@ -27,6 +27,15 @@ export type PromotionRowInput = {
   regularPrice: number | null;
 };
 
+export type PromotionInvoiceRowInput = PromotionRowInput & {
+  sourceDocumentId: string;
+  sourceDocumentFileName: string;
+  sourceProductName: string;
+  sourceLineText: string;
+  priceListItemId: string | null;
+  matchConfidence: number | null;
+};
+
 type PromotionTableRowDb = {
   id: string;
   row_number: number;
@@ -96,6 +105,78 @@ export const createPromotionRow = async (input: PromotionRowInput): Promise<Prom
     [id(), rowNumber, input.status, input.productName, input.startDate, input.endDate, input.promoPrice, input.regularPrice],
   );
   return mapRow(result.rows[0]);
+};
+
+export const createPromotionInvoiceRows = async (items: PromotionInvoiceRowInput[]): Promise<PromotionTableRow[]> => {
+  if (!items.length) return [];
+
+  return opsDb.withClient(async (client) => {
+    await client.query('BEGIN');
+    try {
+      const sourceFileName = items[0]?.sourceDocumentFileName;
+      if (sourceFileName) {
+        await client.query(
+          'DELETE FROM promotion_table_rows WHERE source_document_file_name = $1;',
+          [sourceFileName],
+        );
+      }
+
+      const next = await client.query<{ row_number: number }>(
+        'SELECT COALESCE(MAX(row_number), 0) + 1 AS row_number FROM promotion_table_rows;',
+      );
+      let rowNumber = Number(next.rows[0]?.row_number ?? 1);
+      const created: PromotionTableRow[] = [];
+
+      for (const item of items) {
+        const result = await client.query<PromotionTableRowDb>(
+          `INSERT INTO promotion_table_rows (
+             id,
+             row_number,
+             status,
+             product_name,
+             start_date,
+             end_date,
+             promo_price,
+             regular_price,
+             source_document_id,
+             source_document_file_name,
+             source_product_name,
+             source_line_text,
+             price_list_item_id,
+             match_confidence,
+             created_at,
+             updated_at
+           )
+           VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),NOW())
+           RETURNING *;`,
+          [
+            id(),
+            rowNumber,
+            item.status,
+            item.productName,
+            item.startDate,
+            item.endDate,
+            item.promoPrice,
+            item.regularPrice,
+            item.sourceDocumentId,
+            item.sourceDocumentFileName,
+            item.sourceProductName,
+            item.sourceLineText,
+            item.priceListItemId,
+            item.matchConfidence,
+          ],
+        );
+        created.push(mapRow(result.rows[0]));
+        rowNumber += 1;
+      }
+
+      await client.query('COMMIT');
+      return created;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
 };
 
 export const updatePromotionRowByNumber = async (rowNumber: number, input: PromotionRowInput): Promise<PromotionTableRow | null> => {

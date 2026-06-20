@@ -10,6 +10,7 @@ import {
   listPromotionDocuments,
 } from '../repositories/promotionDocumentsRepository';
 import { listPromotionRows } from '../repositories/promotionRowsRepository';
+import { importPromotionInvoice } from '../services/promotionInvoiceImportService';
 import { importPromotionPriceList } from '../services/promotionPriceListImportService';
 import { createDownloadUrl, uploadObject } from '../services/r2StorageService';
 
@@ -138,7 +139,9 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
         });
         const importResult = documentType === 'retail_price_list'
           ? await importPromotionPriceList({ buffer: req.file.buffer, sourceDocumentId: document.id, sourceFileName: fileName })
-          : null;
+          : documentType === 'invoice'
+            ? await importPromotionInvoice({ buffer: req.file.buffer, sourceDocumentId: document.id, sourceFileName: fileName })
+            : null;
         res.status(201).json({ document, import: importResult });
       } catch (error) {
         res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось прикрепить документ.' });

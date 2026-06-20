@@ -238,7 +238,13 @@ export const PromotionsPanel = ({ session }: { session: Session }) => {
           }}
         />
       )}
-      {documentsOpen && <DocumentsModal session={session} onClose={() => setDocumentsOpen(false)} />}
+      {documentsOpen && (
+        <DocumentsModal
+          session={session}
+          onClose={() => setDocumentsOpen(false)}
+          onInvoiceImported={loadRows}
+        />
+      )}
     </section>
   );
 };
@@ -438,7 +444,15 @@ const RowModal = ({
   );
 };
 
-const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () => void }) => {
+const DocumentsModal = ({
+  session,
+  onClose,
+  onInvoiceImported,
+}: {
+  session: Session;
+  onClose: () => void;
+  onInvoiceImported: () => void | Promise<void>;
+}) => {
   const [documents, setDocuments] = useState<PromotionDocument[]>([]);
   const [documentType, setDocumentType] = useState<Exclude<PromotionDocumentType, 'final_table_csv'>>('invoice');
   const [file, setFile] = useState<File | null>(null);
@@ -501,6 +515,9 @@ const DocumentsModal = ({ session, onClose }: { session: Session; onClose: () =>
       setFile(null);
       if (fileInput.current) fileInput.current.value = '';
       await load();
+      if (document.documentType === 'invoice') {
+        await onInvoiceImported();
+      }
     } catch (err) {
       setError(messageOf(err));
     } finally {

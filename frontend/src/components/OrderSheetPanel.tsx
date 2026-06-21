@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { ordersApi } from '../api/orders';
+import { ALLOWED_ORDER_WEEKDAYS, MACHINE_NUMBERS, PRODUCT_CATEGORIES, type MachineNumber } from '../constants/dashboard';
 import { sortProductsLikeImage } from '../constants/productOrdering';
 import { OrderSheet, OrderSheetRow, Session, Shop } from '../types/models';
 
@@ -16,25 +17,15 @@ type OrderSheetPanelProps = {
   session: Session;
 };
 
-type MachineNumber = 1 | 2 | 3;
 type MachineGroup = {
   machineNumber: MachineNumber;
   shops: Shop[];
   width: number;
 };
 
-const PRODUCT_CATEGORIES = [
-  '\u0419\u043e\u0433\u0443\u0440\u0442\u044b',
-  '\u041a\u0435\u0444\u0438\u0440, \u0420\u044f\u0436\u0435\u043d\u043a\u0430, \u0421\u043d\u0435\u0436\u043e\u043a',
-  '\u041c\u043e\u043b\u043e\u043a\u043e',
-  '\u0421\u043c\u0435\u0442\u0430\u043d\u0430',
-  '\u0422\u0432\u043e\u0440\u043e\u0433',
-] as const;
-const MACHINE_NUMBERS: MachineNumber[] = [1, 2, 3];
 const SHOP_COL_WIDTH = 96;
 const TOTAL_COL_WIDTH = 82;
 const WEIGHT_COL_WIDTH = 92;
-const ALLOWED_ORDER_WEEKDAYS = new Set([2, 4, 6]);
 
 const todayDateKey = (): string => {
   const now = new Date();

@@ -26,7 +26,9 @@ export type Shop = {
   machineNumber: number;
 };
 
-export type ProductCategory = 'Йогурты' | 'Кефир, Ряженка, Снежок' | 'Молоко' | 'Сметана' | 'Творог';
+export const PRODUCT_CATEGORIES = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'] as const;
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+export const DEFAULT_PRODUCT_CATEGORY: ProductCategory = PRODUCT_CATEGORIES[0];
 
 export type SessionUser = {
   id: string;

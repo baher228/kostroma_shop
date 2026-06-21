@@ -34,14 +34,19 @@ import {
   type DashboardColumn,
   type DashboardColumnKey,
   type DashboardManualOrderKey,
-  type DashboardOverrideKey,
   type DashboardRowValues,
   type DashboardTone,
-  type DashboardWeekRef,
   type WeekDateMap,
-  type WeekSlot,
 } from '../constants/dashboard';
 import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
+import {
+  buildDashboardRowValues,
+  dashboardHeaderSubtitle,
+  deriveDashboardWeeks,
+  isManualOrderKey,
+  isManualStockKey,
+  sanitizeOrderValue,
+} from '../../../shared/dashboard-calculations';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
@@ -126,58 +131,6 @@ const shiftDateKey = (dateKey: string, deltaDays: number): string => {
 
 const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
 
-const sanitizeOrderValue = (raw: string): string => raw.replace(/[^0-9]/g, '').slice(0, MAX_ORDER_VALUE_LEN);
-const orderUnitsFromPacks = (packsRaw: string, unitsInPack: number | null): string => {
-  if (!packsRaw) {
-    return '';
-  }
-  if (unitsInPack === null || unitsInPack <= 0) {
-    return '';
-  }
-  const packs = Number.parseInt(packsRaw, 10);
-  return Number.isNaN(packs) ? '' : String(packs * unitsInPack);
-};
-const isManualOrderKey = (key: DashboardColumnKey): key is DashboardManualOrderKey =>
-  key === 'orderPackThu' || key === 'orderPackSat' || key === 'orderPackTue';
-const isManualStockKey = (
-  key: DashboardColumnKey,
-): key is 'currentTue' | 'currentWed' | 'currentThu' | 'currentFri' | 'currentSun' | 'currentMon' =>
-  key === 'currentTue' ||
-  key === 'currentWed' ||
-  key === 'currentThu' ||
-  key === 'currentFri' ||
-  key === 'currentSun' ||
-  key === 'currentMon';
-
-const parseStockNumber = (raw?: string): number | null => {
-  if (!raw) {
-    return null;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isNaN(parsed) ? null : parsed;
-};
-
-const diffStocks = (startRaw?: string, endRaw?: string): string => {
-  const start = parseStockNumber(startRaw);
-  const end = parseStockNumber(endRaw);
-  if (start === null || end === null) {
-    return '';
-  }
-  return String(start - end);
-};
-
-const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
-  const start = parseStockNumber(startRaw);
-  const end = parseStockNumber(endRaw);
-  if (start === null || end === null) {
-    return '';
-  }
-  const delivery = parseStockNumber(deliveryRaw) ?? 0;
-  return String(start + delivery - end);
-};
-
-const hasValue = (value?: string): value is string => typeof value === 'string' && value.trim() !== '';
-
 const formatOptionalPrice = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
     return '';
@@ -189,74 +142,11 @@ const formatOptionalPrice = (value: unknown): string => {
   return `${parsed.toFixed(2)} руб`;
 };
 
-const weekdaySlot = (dateKey: string): keyof WeekDateMap | null => {
-  const day = parseDateKey(dateKey).getDay();
-  if (day === 1) {
-    return 'mon';
-  }
-  if (day === 2) {
-    return 'tue';
-  }
-  if (day === 3) {
-    return 'wed';
-  }
-  if (day === 4) {
-    return 'thu';
-  }
-  if (day === 5) {
-    return 'fri';
-  }
-  if (day === 0) {
-    return 'sun';
-  }
-  return null;
-};
-
-const splitWeeks = (dates: string[]): string[][] => {
-  const chunks: string[][] = [];
-  for (let i = 0; i < dates.length; i += 7) {
-    const chunk = dates.slice(i, i + 7);
-    if (chunk.length === 7) {
-      chunks.push(chunk);
-    }
-  }
-  return chunks;
-};
-
-const mapWeekDates = (weekDates: string[]): WeekDateMap => {
-  const mapped: WeekDateMap = {};
-  for (const date of weekDates) {
-    const slot = weekdaySlot(date);
-    if (slot) {
-      mapped[slot] = date;
-    }
-  }
-  return mapped;
-};
-
 const csvEscape = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 
 const buildCsv = (rows: string[][]): string => rows.map((row) => row.map((item) => csvEscape(item)).join(';')).join('\n');
 
 const safeFileName = (raw: string): string => raw.replace(/[\\/:*?"<>|]/g, '_');
-
-const applyDashboardOverrides = (
-  base: DashboardRowValues,
-  row: StockTableRow,
-  weekStart?: string,
-): DashboardRowValues => {
-  if (!weekStart || !row.dashboardOverrides) {
-    return base;
-  }
-  const next = { ...base };
-  (Object.keys(base) as DashboardOverrideKey[]).forEach((key) => {
-    const override = row.dashboardOverrides?.[`${weekStart}:${key}`];
-    if (override !== undefined) {
-      next[key] = override;
-    }
-  });
-  return next;
-};
 
 const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
   PRODUCT_CATEGORIES.reduce(
@@ -444,63 +334,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         previousStart: undefined as string | undefined,
       };
     }
-    const weeks = splitWeeks(table.dates);
-    if (weeks.length === 0) {
-      return {
-        current: mapWeekDates(table.dates),
-        previous: null,
-        currentStart: table.dates[0],
-        previousStart: undefined,
-      };
-    }
-    const currentWeek = weeks[weeks.length - 1];
-    const previousWeek = weeks.length > 1 ? weeks[weeks.length - 2] : null;
-    return {
-      current: mapWeekDates(currentWeek),
-      previous: previousWeek ? mapWeekDates(previousWeek) : null,
-      currentStart: currentWeek[0],
-      previousStart: previousWeek?.[0],
-    };
+    return deriveDashboardWeeks(table.dates);
   }, [table]);
-
-  const dashboardDateFor = (week: DashboardWeekRef, slot: WeekSlot): string | undefined => {
-    if (week === 'previous') {
-      return dashboardWeeks.previous?.[slot];
-    }
-    return dashboardWeeks.current[slot];
-  };
-
-  const dashboardRangeLabel = (
-    week: DashboardWeekRef,
-    from: WeekSlot,
-    to: WeekSlot,
-    toWeek?: DashboardWeekRef,
-  ): string => {
-    const fromDate = dashboardDateFor(week, from);
-    const toDate = dashboardDateFor(toWeek ?? week, to);
-    if (!fromDate || !toDate) {
-      return '';
-    }
-    return `${formatDate(fromDate)}-${formatDate(toDate)}`;
-  };
-
-  const dashboardHeaderSubtitle = (column: DashboardColumn): string => {
-    if (!column.subtitle) {
-      return '';
-    }
-
-    if (column.dateKind === 'day' && column.dateDay && column.dateWeek) {
-      const date = dashboardDateFor(column.dateWeek, column.dateDay);
-      return date ? `${column.subtitle}\n${formatDate(date)}` : column.subtitle;
-    }
-
-    if (column.dateKind === 'range' && column.dateWeek && column.dateFrom && column.dateTo) {
-      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo, column.dateToWeek);
-      return range ? `${column.subtitle}\n${range}` : column.subtitle;
-    }
-
-    return column.subtitle;
-  };
 
   const productReferenceLabel = (row: StockTableRow): string => {
     const parts: string[] = [];
@@ -600,81 +435,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const dashboardRowValues = (row: StockTableRow): DashboardRowValues => {
-    const current = dashboardWeeks.current;
-    const previous = dashboardWeeks.previous;
-    const previousStart = dashboardWeeks.previousStart;
-    const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
-    const units = row.unitsInPack;
-    const previousWeekSoldValue = (key: 'soldMonWed' | 'soldWedFri' | 'soldFriMon'): string => {
-      const value = previousStart ? row.dashboardOverrides?.[`${previousStart}:${key}`] : undefined;
-      return hasValue(value) ? value : '';
-    };
-
-    // Excel formula: ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾ = start_stock + delivery_units - end_stock
-    // soldMonWed: period Monâ†’Wed, start=Sun, delivery=orderTue (placed prev Sun)
-    const prevOrderTueUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.tue), units);
-    const soldMonWedCurrent = computeSold(stock(previous?.sun), prevOrderTueUnits, stock(current.wed));
-    // soldWedFri: period Wedâ†’Fri, start=Tue, delivery=orderThu (placed current Tue)
-    const curOrderThuUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.thu), units);
-    const soldWedFriCurrent = computeSold(stock(current.tue), curOrderThuUnits, stock(current.fri));
-    // soldFriMon: period Friâ†’Mon, start=Thu, delivery=orderSat (placed prev Thu)
-    const prevOrderSatUnits = previous?.thu
-      ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
-      : '';
-    const soldFriMonCurrent = computeSold(stock(previous?.thu), prevOrderSatUnits, stock(current.mon));
-
-    // Previous week sold: same formula structure but some start dates unavailable (before 14-day window)
-    // soldPrevMonWed: start=Sun before prev.mon (unavailable), fallback to simple diff
-    const soldMonWedPrevious = previous ? diffStocks(stock(previous.mon), stock(previous.wed)) : '';
-    // soldPrevWedFri: start=prev.tue, delivery=orderThu placed on prev.tue
-    const prevOrderThuUnits = previous?.thu
-      ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.thu), units)
-      : '';
-    const soldWedFriPrevious = previous ? computeSold(stock(previous.tue), prevOrderThuUnits, stock(previous.fri)) : '';
-    // soldPrevFriMon: period prev.friâ†’current.mon, start=prev.thu, delivery=orderSat placed prev.thu
-    const prevPrevOrderSatUnits = previous?.thu
-      ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
-      : '';
-    const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(previous.mon)) : '';
-    const copiedSoldMonWedPrevious = previousWeekSoldValue('soldMonWed');
-    const copiedSoldWedFriPrevious = previousWeekSoldValue('soldWedFri');
-    const copiedSoldFriMonPrevious = previousWeekSoldValue('soldFriMon');
-
-    const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
-    const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
-    const orderPackTue = orderCellValue(row.productId, 'orderPackTue');
-
-    const base: DashboardRowValues = {
-      currentTue: stock(current.tue),
-      orderPackThu,
-      orderUnitsThu: orderUnitsFromPacks(orderPackThu, units),
-      prevWed: previous ? stock(previous.wed) : '',
-      soldPrevMonWed: copiedSoldMonWedPrevious || soldMonWedPrevious,
-      soldMonWed: soldMonWedCurrent,
-      currentWed: stock(current.wed),
-      currentThu: stock(current.thu),
-      orderPackSat,
-      orderUnitsSat: orderUnitsFromPacks(orderPackSat, units),
-      prevFri: previous ? stock(previous.fri) : '',
-      soldPrevWedFri: copiedSoldWedFriPrevious || soldWedFriPrevious,
-      soldWedFri: soldWedFriCurrent,
-      currentFri: stock(current.fri),
-      currentSun: stock(current.sun),
-      orderPackTue,
-      orderUnitsTue: orderUnitsFromPacks(orderPackTue, units),
-      prevMon: previous ? stock(previous.mon) : '',
-      soldPrevFriMon: copiedSoldFriMonPrevious || soldFriMonPrevious,
-      soldFriMon: soldFriMonCurrent,
-      currentMon: stock(current.mon),
-    };
-    const withOverrides = applyDashboardOverrides(base, row, dashboardWeeks.currentStart);
-    return {
-      ...withOverrides,
-      soldPrevMonWed: copiedSoldMonWedPrevious || withOverrides.soldPrevMonWed,
-      soldPrevWedFri: copiedSoldWedFriPrevious || withOverrides.soldPrevWedFri,
-      soldPrevFriMon: copiedSoldFriMonPrevious || withOverrides.soldPrevFriMon,
-    };
+    return buildDashboardRowValues({ row, weeks: dashboardWeeks, orderPacks: orderPacksForDate });
   };
+
+  const dashboardColumnSubtitle = (column: DashboardColumn): string =>
+    dashboardHeaderSubtitle(dashboardWeeks, column);
 
   const exportDashboard = async () => {
     if (!table) {
@@ -690,7 +455,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       'Срок годности, сут',
       'Цена в руб, с НДС',
       ...DASHBOARD_COLUMNS.map((column) => {
-        const subtitle = dashboardHeaderSubtitle(column).replace('\n', ' ');
+        const subtitle = dashboardColumnSubtitle(column).replace('\n', ' ');
         return subtitle ? `${column.title} (${subtitle})` : column.title;
       }),
     ];
@@ -1077,13 +842,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const dashboardHeaderTitleStyle = (column: DashboardColumn) => [
     styles.dashboardHeaderTitle,
     column.kind === 'stock' && styles.dashboardHeaderTitleStock,
-    column.kind === 'order' && !dashboardHeaderSubtitle(column) && styles.dashboardHeaderTitleExpanded,
+    column.kind === 'order' && !dashboardColumnSubtitle(column) && styles.dashboardHeaderTitleExpanded,
   ];
 
   const dashboardHeaderSubtitleStyle = (column: DashboardColumn) => [
     styles.dashboardHeaderSubtitle,
     column.kind === 'stock' && styles.dashboardHeaderSubtitleStock,
-    !dashboardHeaderSubtitle(column) && styles.dashboardHeaderSubtitleHidden,
+    !dashboardColumnSubtitle(column) && styles.dashboardHeaderSubtitleHidden,
   ];
 
   const dashboardValueTextStyle = (column: DashboardColumn) => [
@@ -1136,7 +901,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   ]}
                 >
                   <Text style={dashboardHeaderTitleStyle(column)}>{column.title}</Text>
-                  <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardHeaderSubtitle(column)}</Text>
+                  <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardColumnSubtitle(column)}</Text>
                 </View>
               ))}
             </View>

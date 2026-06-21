@@ -1,5 +1,6 @@
 import { opsDb } from '../db/opsDb';
-import { OpsTokenClaims, ProductCategory, Shop, StockProduct, StockTable, StockTableRow } from '../domain/types';
+import { DEFAULT_PRODUCT_CATEGORY, PRODUCT_CATEGORIES } from '../domain/types';
+import type { OpsTokenClaims, ProductCategory, Shop, StockProduct, StockTable, StockTableRow } from '../domain/types';
 
 type ShopDbRow = {
   id: string;
@@ -49,9 +50,6 @@ type CreateProductInput = {
   minStockUnits: number;
   maxStockUnits: number;
 };
-
-const PRODUCT_CATEGORIES: ProductCategory[] = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'];
-const DEFAULT_PRODUCT_CATEGORY: ProductCategory = 'Йогурты';
 
 const toDateKey = (date: Date): string => {
   const year = date.getFullYear();
@@ -605,4 +603,3 @@ export const upsertStockValue = async (
   );
   return true;
 };
-

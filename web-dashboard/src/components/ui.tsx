@@ -42,7 +42,7 @@ export const Modal = ({ title, children, onClose }: { title: string; children: R
         <h3>{title}</h3>
         <button className="ghost" onClick={onClose}>Закрыть</button>
       </header>
-      {children}
+      <div className="modal-body">{children}</div>
     </div>
   </div>
 );

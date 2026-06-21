@@ -26,6 +26,7 @@ const RU = {
   new: '\u043d\u043e\u0432',
   promo: '\u0430\u043a\u0446',
   recommended: '\u0440\u0435\u043a\u043e\u043c\u0435\u043d\u0434',
+  recommendedRetailPriceShort: '\u0440\u0440\u0446',
   start: '\u043d\u0430\u0447\u0430',
   end: '\u043e\u043a\u043e\u043d\u0447',
   date: '\u0434\u0430\u0442',
@@ -101,7 +102,8 @@ const isProductHeader = (value: string) =>
   value.includes(RU.productName) || value.includes(RU.product) || value.includes(RU.position);
 
 const isPromoPriceHeader = (value: string) =>
-  value.includes(RU.price) && (value.includes(RU.new) || value.includes(RU.promo) || value.includes(RU.recommended));
+  value.replace(/\s+/g, '') === RU.recommendedRetailPriceShort ||
+  (value.includes(RU.price) && (value.includes(RU.new) || value.includes(RU.promo) || value.includes(RU.recommended)));
 
 const isStartDateHeader = (value: string) =>
   value.includes(RU.date) && (value.includes(RU.start) || value === RU.from);

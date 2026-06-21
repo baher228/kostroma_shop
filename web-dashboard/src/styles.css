@@ -985,12 +985,18 @@ td.sticky {
   z-index: 10;
   display: grid;
   place-items: center;
+  overflow-y: auto;
   background: rgba(25, 38, 30, 0.38);
   padding: 18px;
 }
 
 .modal-card {
+  display: flex;
+  flex-direction: column;
   width: min(760px, 100%);
+  max-height: calc(100dvh - 36px);
+  overflow: hidden;
+  overscroll-behavior: contain;
   border: 1px solid #d5ded8;
   border-radius: 8px;
   background: #fff;
@@ -1004,6 +1010,17 @@ td.sticky {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.modal-card > header {
+  flex: 0 0 auto;
+  padding-bottom: 12px;
+}
+
+.modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal-form {

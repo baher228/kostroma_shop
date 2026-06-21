@@ -14,6 +14,12 @@ export type PromotionTableRow = {
   priceDifference: number | null;
   realDiscountPercent: number | null;
   advertisingDiscountPercent: number | null;
+  sourceDocumentId: string | null;
+  sourceDocumentFileName: string | null;
+  invoiceDocumentId: string | null;
+  invoiceDocumentFileName: string | null;
+  planDocumentId: string | null;
+  planDocumentFileName: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -27,7 +33,7 @@ export type PromotionRowInput = {
   regularPrice: number | null;
 };
 
-export type PromotionInvoiceRowInput = PromotionRowInput & {
+export type PromotionDocumentRowInput = PromotionRowInput & {
   sourceDocumentId: string;
   sourceDocumentFileName: string;
   sourceProductName: string;
@@ -48,6 +54,12 @@ type PromotionTableRowDb = {
   price_difference: string | number | null;
   real_discount_percent: string | number | null;
   advertising_discount_percent: string | number | null;
+  source_document_id: string | null;
+  source_document_file_name: string | null;
+  invoice_document_id: string | null;
+  invoice_document_file_name: string | null;
+  plan_document_id: string | null;
+  plan_document_file_name: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -72,6 +84,12 @@ const mapRow = (row: PromotionTableRowDb): PromotionTableRow => ({
   priceDifference: num(row.price_difference),
   realDiscountPercent: num(row.real_discount_percent),
   advertisingDiscountPercent: num(row.advertising_discount_percent),
+  sourceDocumentId: row.source_document_id,
+  sourceDocumentFileName: row.source_document_file_name,
+  invoiceDocumentId: row.invoice_document_id,
+  invoiceDocumentFileName: row.invoice_document_file_name,
+  planDocumentId: row.plan_document_id,
+  planDocumentFileName: row.plan_document_file_name,
   createdAt: iso(row.created_at),
   updatedAt: iso(row.updated_at),
 });
@@ -107,28 +125,102 @@ export const createPromotionRow = async (input: PromotionRowInput): Promise<Prom
   return mapRow(result.rows[0]);
 };
 
-export const createPromotionInvoiceRows = async (items: PromotionInvoiceRowInput[]): Promise<PromotionTableRow[]> => {
+export const upsertPromotionDocumentRows = async (
+  items: PromotionDocumentRowInput[],
+  sourceType: 'invoice' | 'plan',
+): Promise<PromotionTableRow[]> => {
   if (!items.length) return [];
 
   return opsDb.withClient(async (client) => {
     await client.query('BEGIN');
     try {
-      const sourceFileName = items[0]?.sourceDocumentFileName;
-      if (sourceFileName) {
-        await client.query(
-          'DELETE FROM promotion_table_rows WHERE source_document_file_name = $1;',
-          [sourceFileName],
-        );
-      }
-
       const next = await client.query<{ row_number: number }>(
         'SELECT COALESCE(MAX(row_number), 0) + 1 AS row_number FROM promotion_table_rows;',
       );
       let rowNumber = Number(next.rows[0]?.row_number ?? 1);
-      const created: PromotionTableRow[] = [];
+      const saved: PromotionTableRow[] = [];
 
       for (const item of items) {
-        const result = await client.query<PromotionTableRowDb>(
+        const existing = await client.query<PromotionTableRowDb>(
+          `SELECT *
+           FROM promotion_table_rows
+           WHERE (
+             ($1::text IS NOT NULL AND price_list_item_id = $1) OR
+             ($1::text IS NULL AND LOWER(product_name) = LOWER($2))
+           )
+             AND (
+               start_date IS NULL OR end_date IS NULL OR
+               $3::date IS NULL OR $4::date IS NULL OR
+               (start_date <= $4::date AND $3::date <= end_date)
+             )
+           ORDER BY
+             CASE WHEN invoice_document_id IS NOT NULL THEN 0 ELSE 1 END,
+             updated_at DESC
+           LIMIT 1
+           FOR UPDATE;`,
+          [item.priceListItemId, item.productName, item.startDate, item.endDate],
+        );
+
+        const current = existing.rows[0];
+        if (current) {
+          if (sourceType === 'plan' && current.invoice_document_id) {
+            const linked = await client.query<PromotionTableRowDb>(
+              `UPDATE promotion_table_rows
+               SET plan_document_id = $1,
+                   plan_document_file_name = $2,
+                   regular_price = COALESCE(regular_price, $3),
+                   updated_at = NOW()
+               WHERE id = $4
+               RETURNING *;`,
+              [item.sourceDocumentId, item.sourceDocumentFileName, item.regularPrice, current.id],
+            );
+            saved.push(mapRow(linked.rows[0]));
+            continue;
+          }
+
+          const updated = await client.query<PromotionTableRowDb>(
+            `UPDATE promotion_table_rows
+             SET status = $1,
+                 product_name = $2,
+                 start_date = $3::date,
+                 end_date = $4::date,
+                 promo_price = $5,
+                 regular_price = $6,
+                 source_document_id = $7,
+                 source_document_file_name = $8,
+                 source_product_name = $9,
+                 source_line_text = $10,
+                 price_list_item_id = $11,
+                 match_confidence = $12,
+                 invoice_document_id = CASE WHEN $13 = 'invoice' THEN $7 ELSE invoice_document_id END,
+                 invoice_document_file_name = CASE WHEN $13 = 'invoice' THEN $8 ELSE invoice_document_file_name END,
+                 plan_document_id = CASE WHEN $13 = 'plan' THEN $7 ELSE plan_document_id END,
+                 plan_document_file_name = CASE WHEN $13 = 'plan' THEN $8 ELSE plan_document_file_name END,
+                 updated_at = NOW()
+             WHERE id = $14
+             RETURNING *;`,
+            [
+              item.status,
+              item.productName,
+              item.startDate,
+              item.endDate,
+              item.promoPrice,
+              item.regularPrice,
+              item.sourceDocumentId,
+              item.sourceDocumentFileName,
+              item.sourceProductName,
+              item.sourceLineText,
+              item.priceListItemId,
+              item.matchConfidence,
+              sourceType,
+              current.id,
+            ],
+          );
+          saved.push(mapRow(updated.rows[0]));
+          continue;
+        }
+
+        const inserted = await client.query<PromotionTableRowDb>(
           `INSERT INTO promotion_table_rows (
              id,
              row_number,
@@ -144,10 +236,21 @@ export const createPromotionInvoiceRows = async (items: PromotionInvoiceRowInput
              source_line_text,
              price_list_item_id,
              match_confidence,
+             invoice_document_id,
+             invoice_document_file_name,
+             plan_document_id,
+             plan_document_file_name,
              created_at,
              updated_at
            )
-           VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),NOW())
+           VALUES (
+             $1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,
+             CASE WHEN $15 = 'invoice' THEN $9 ELSE NULL END,
+             CASE WHEN $15 = 'invoice' THEN $10 ELSE NULL END,
+             CASE WHEN $15 = 'plan' THEN $9 ELSE NULL END,
+             CASE WHEN $15 = 'plan' THEN $10 ELSE NULL END,
+             NOW(),NOW()
+           )
            RETURNING *;`,
           [
             id(),
@@ -164,14 +267,15 @@ export const createPromotionInvoiceRows = async (items: PromotionInvoiceRowInput
             item.sourceLineText,
             item.priceListItemId,
             item.matchConfidence,
+            sourceType,
           ],
         );
-        created.push(mapRow(result.rows[0]));
+        saved.push(mapRow(inserted.rows[0]));
         rowNumber += 1;
       }
 
       await client.query('COMMIT');
-      return created;
+      return saved;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

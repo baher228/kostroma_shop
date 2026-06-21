@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { listPromotionPriceListItems } from '../repositories/promotionPriceListRepository';
-import { createPromotionInvoiceRows, PromotionRowStatus } from '../repositories/promotionRowsRepository';
+import { PromotionRowStatus, upsertPromotionDocumentRows } from '../repositories/promotionRowsRepository';
 import { matchPromotionProduct } from './promotionProductMatcher';
 
 type ParsedPlanItem = {
@@ -260,7 +260,7 @@ export const importPromotionPlan = async (input: {
   const parsedItems = lowerName.endsWith('.csv') ? parseCsv(input.buffer) : await parseXlsx(input.buffer);
   const priceListItems = await listPromotionPriceListItems();
 
-  const rows = await createPromotionInvoiceRows(parsedItems.map((item) => {
+  const rows = await upsertPromotionDocumentRows(parsedItems.map((item) => {
     const match = matchPromotionProduct(item.rawName, priceListItems);
     return {
       status: statusForPeriod(item.startDate, item.endDate),
@@ -276,7 +276,7 @@ export const importPromotionPlan = async (input: {
       priceListItemId: match?.item.id ?? null,
       matchConfidence: match?.score ?? null,
     };
-  }));
+  }), 'plan');
 
   return {
     imported: rows.length,

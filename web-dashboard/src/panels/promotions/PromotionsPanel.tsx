@@ -118,7 +118,8 @@ const sortValue = (row: PromotionTableRow, key: SortKey): string | number | null
 
 export const PromotionsPanel = ({ session }: { session: Session }) => {
   const [documentsOpen, setDocumentsOpen] = useState(false);
-  const [editingOpen, setEditingOpen] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<PromotionTableRow | null>(null);
+  const [editingRow, setEditingRow] = useState<PromotionTableRow | null>(null);
   const [addingOpen, setAddingOpen] = useState(false);
   const [rows, setRows] = useState<PromotionTableRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(true);
@@ -197,20 +198,18 @@ export const PromotionsPanel = ({ session }: { session: Session }) => {
           <option value="future">Будущие</option>
         </select>
         <button className="secondary" onClick={() => setAddingOpen(true)}>Добавить строку</button>
-        <button className="secondary" onClick={() => setEditingOpen(true)}>Редактировать строку</button>
       </div>
       <Feedback error={rowsError} notice={notice} />
       {loadingRows ? (
         <p className="documents-loading">Загружаем таблицу акций...</p>
       ) : (
-        <PromotionRowsTable rows={visibleRows} sort={sort} onSort={cycleSort} />
+        <PromotionRowsTable rows={visibleRows} sort={sort} onSort={cycleSort} onRowClick={setSelectedRow} />
       )}
       {addingOpen && (
         <RowModal
           title="Добавить строку"
           mode="add"
           session={session}
-          rows={rows}
           onClose={() => setAddingOpen(false)}
           onSaved={async () => {
             setAddingOpen(false);
@@ -219,20 +218,36 @@ export const PromotionsPanel = ({ session }: { session: Session }) => {
           }}
         />
       )}
-      {editingOpen && (
+      {selectedRow && (
+        <PromotionProductCard
+          row={selectedRow}
+          session={session}
+          onClose={() => setSelectedRow(null)}
+          onEdit={() => {
+            setEditingRow(selectedRow);
+            setSelectedRow(null);
+          }}
+          onDeleted={async () => {
+            setSelectedRow(null);
+            setNotice('Строка удалена.');
+            await loadRows();
+          }}
+        />
+      )}
+      {editingRow && (
         <RowModal
           title="Редактировать строку"
           mode="edit"
           session={session}
-          rows={rows}
-          onClose={() => setEditingOpen(false)}
+          initialRow={editingRow}
+          onClose={() => setEditingRow(null)}
           onSaved={async () => {
-            setEditingOpen(false);
+            setEditingRow(null);
             setNotice('Строка обновлена.');
             await loadRows();
           }}
           onDeleted={async () => {
-            setEditingOpen(false);
+            setEditingRow(null);
             setNotice('Строка удалена.');
             await loadRows();
           }}
@@ -264,10 +279,12 @@ const PromotionRowsTable = ({
   rows,
   sort,
   onSort,
+  onRowClick,
 }: {
   rows: PromotionTableRow[];
   sort: { key: SortKey; direction: SortDirection };
   onSort: (key: SortKey) => void;
+  onRowClick: (row: PromotionTableRow) => void;
 }) => (
   <div className="promotions-table-scroll">
     <Table>
@@ -291,7 +308,15 @@ const PromotionRowsTable = ({
           <td colSpan={10}>Строк не найдено.</td>
         </tr>
       ) : rows.map((row) => (
-        <tr key={row.id}>
+        <tr
+          key={row.id}
+          className="promotion-table-row"
+          tabIndex={0}
+          onClick={() => onRowClick(row)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') onRowClick(row);
+          }}
+        >
           <td>{row.rowNumber}</td>
           <td><span className={`promotion-status ${row.status}`}>{statusLabels[row.status]}</span></td>
           <td>{row.productName}</td>
@@ -309,11 +334,93 @@ const PromotionRowsTable = ({
   </div>
 );
 
+const PromotionProductCard = ({
+  row,
+  session,
+  onClose,
+  onEdit,
+  onDeleted,
+}: {
+  row: PromotionTableRow;
+  session: Session;
+  onClose: () => void;
+  onEdit: () => void;
+  onDeleted: () => void | Promise<void>;
+}) => {
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const invoiceDocumentId = row.invoiceDocumentId ?? (
+    row.sourceDocumentFileName?.toLowerCase().endsWith('.pdf') ? row.sourceDocumentId : null
+  );
+  const invoiceDocumentFileName = row.invoiceDocumentFileName ?? (
+    row.sourceDocumentFileName?.toLowerCase().endsWith('.pdf') ? row.sourceDocumentFileName : null
+  );
+  const hasInvoice = Boolean(invoiceDocumentId);
+
+  const openInvoice = async () => {
+    if (!invoiceDocumentId) return;
+    setError('');
+    try {
+      const result = await api.promotions.downloadDocument(session.token, { documentId: invoiceDocumentId });
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`Удалить строку №${row.rowNumber}?`)) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await api.promotions.deleteRowByNumber(session.token, row.rowNumber);
+      await onDeleted();
+    } catch (err) {
+      setError(messageOf(err));
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Modal title="Карточка товара" onClose={onClose}>
+      <div className="promotion-product-card">
+        <div className="promotion-card-top-actions">
+          <button className="secondary" onClick={onEdit}>Редактировать</button>
+          <button className="danger" disabled={deleting} onClick={() => void remove()}>
+            {deleting ? 'Удаляем...' : 'Удалить'}
+          </button>
+        </div>
+        <Feedback error={error} />
+        <dl className="promotion-card-details">
+          <div><dt>Номер строки</dt><dd>{row.rowNumber}</dd></div>
+          <div><dt>Статус акции</dt><dd><span className={`promotion-status ${row.status}`}>{statusLabels[row.status]}</span></dd></div>
+          <div className="promotion-card-wide"><dt>Название позиции</dt><dd>{row.productName}</dd></div>
+          <div><dt>Дата начала</dt><dd>{dateText(row.startDate) || 'Не указана'}</dd></div>
+          <div><dt>Дата окончания</dt><dd>{dateText(row.endDate) || 'Не указана'}</dd></div>
+          <div><dt>Новая цена</dt><dd>{money(row.promoPrice) || 'Не указана'}</dd></div>
+          <div><dt>Старая цена</dt><dd>{money(row.regularPrice) || 'Не указана'}</dd></div>
+          <div><dt>Разница</dt><dd>{money(row.priceDifference) || 'Не рассчитана'}</dd></div>
+          <div><dt>Реальный процент</dt><dd>{percent(row.realDiscountPercent) || 'Не рассчитан'}</dd></div>
+          <div><dt>Рекламный процент</dt><dd>{percent(row.advertisingDiscountPercent) || 'Не рассчитан'}</dd></div>
+          <div className="promotion-card-wide"><dt>Накладная</dt><dd>{invoiceDocumentFileName || 'Не привязана'}</dd></div>
+          <div className="promotion-card-wide"><dt>План акций</dt><dd>{row.planDocumentFileName || 'Не привязан'}</dd></div>
+        </dl>
+        <div className="promotion-card-actions">
+          <button className="secondary" disabled={!hasInvoice} onClick={() => void openInvoice()}>
+            Посмотреть накладную
+          </button>
+          <button disabled title="Генерация ценников будет добавлена позже">Сделать ценник</button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
 const RowModal = ({
   title,
   mode,
   session,
-  rows,
+  initialRow,
   onClose,
   onSaved,
   onDeleted,
@@ -321,52 +428,22 @@ const RowModal = ({
   title: string;
   mode: 'add' | 'edit';
   session: Session;
-  rows: PromotionTableRow[];
+  initialRow?: PromotionTableRow;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
   onDeleted?: () => void | Promise<void>;
 }) => {
-  const [form, setForm] = useState<RowForm>(emptyForm);
+  const [form, setForm] = useState<RowForm>(() => initialRow ? formFromRow(initialRow) : emptyForm());
   const [error, setError] = useState('');
-  const [loadingRow, setLoadingRow] = useState(false);
   const isEdit = mode === 'edit';
-
-  const fillByRowNumber = async (value: string) => {
-    setForm((current) => ({ ...current, rowNumber: value }));
-    setError('');
-    const rowNumber = Number(value);
-    if (!Number.isInteger(rowNumber) || rowNumber < 1) return;
-    const local = rows.find((row) => row.rowNumber === rowNumber);
-    if (local) {
-      setForm(formFromRow(local));
-      return;
-    }
-    setLoadingRow(true);
-    try {
-      const row = await api.promotions.rowByNumber(session.token, rowNumber);
-      setForm(formFromRow(row));
-    } catch (err) {
-      setError(messageOf(err));
-    } finally {
-      setLoadingRow(false);
-    }
-  };
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
     try {
       if (isEdit) {
-        const rowNumber = Number(form.rowNumber);
-        if (!Number.isInteger(rowNumber) || rowNumber < 1) {
-          setError('Введите корректный номер строки.');
-          return;
-        }
-        const exists = rows.some((row) => row.rowNumber === rowNumber);
-        if (!exists) {
-          await api.promotions.rowByNumber(session.token, rowNumber);
-        }
-        await api.promotions.updateRowByNumber(session.token, rowNumber, payloadFromForm(form));
+        if (!initialRow) return;
+        await api.promotions.updateRowByNumber(session.token, initialRow.rowNumber, payloadFromForm(form));
       } else {
         await api.promotions.addRow(session.token, payloadFromForm(form));
       }
@@ -378,16 +455,9 @@ const RowModal = ({
 
   const remove = async () => {
     setError('');
-    const rowNumber = Number(form.rowNumber);
-    if (!Number.isInteger(rowNumber) || rowNumber < 1) {
-      setError('Введите корректный номер строки.');
-      return;
-    }
+    if (!initialRow) return;
+    const rowNumber = initialRow.rowNumber;
     try {
-      const exists = rows.some((row) => row.rowNumber === rowNumber);
-      if (!exists) {
-        await api.promotions.rowByNumber(session.token, rowNumber);
-      }
       const confirmed = window.confirm(`Удалить строку №${rowNumber}?`);
       if (!confirmed) return;
       await api.promotions.deleteRowByNumber(session.token, rowNumber);
@@ -401,13 +471,6 @@ const RowModal = ({
     <Modal title={title} onClose={onClose}>
       <form className="promotion-row-form" onSubmit={save}>
         <Feedback error={error} />
-        {isEdit && (
-          <label>
-            Номер строки
-            <input value={form.rowNumber} onChange={(event) => void fillByRowNumber(event.target.value)} placeholder="Например, 3" />
-          </label>
-        )}
-        {loadingRow ? <p className="documents-loading">Загружаем строку...</p> : null}
         <label>
           Статус акции
           <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as PromotionRowStatus })}>

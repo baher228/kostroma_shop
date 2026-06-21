@@ -1044,7 +1044,7 @@ td.sticky {
 
 .promotions-toolbar {
   display: grid;
-  grid-template-columns: 220px minmax(240px, 1fr) 180px auto auto;
+  grid-template-columns: 220px minmax(240px, 1fr) 180px auto;
   gap: 10px;
   align-items: center;
 }
@@ -1075,6 +1075,75 @@ td.sticky {
   z-index: 2;
   background: #f4f7f5;
   box-shadow: 0 1px 0 #d5ded8;
+}
+
+.promotion-table-row {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.promotion-table-row:hover,
+.promotion-table-row:focus-visible {
+  outline: none;
+  background: #eef5f0;
+}
+
+.promotion-product-card {
+  display: grid;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.promotion-card-top-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.promotion-card-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #d5ded8;
+  border-radius: 8px;
+  background: #d5ded8;
+  margin: 0;
+}
+
+.promotion-card-details > div {
+  min-width: 0;
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.promotion-card-details .promotion-card-wide {
+  grid-column: 1 / -1;
+}
+
+.promotion-card-details dt {
+  margin-bottom: 5px;
+  color: #65766c;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.promotion-card-details dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #21332a;
+  font-weight: 750;
+}
+
+.promotion-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.promotion-card-actions button {
+  min-height: 48px;
 }
 
 .sortable-header {
@@ -1264,6 +1333,15 @@ td.sticky {
 
   .promotions-documents-button {
     width: 100%;
+  }
+
+  .promotion-card-details,
+  .promotion-card-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .promotion-card-details .promotion-card-wide {
+    grid-column: auto;
   }
 
 }

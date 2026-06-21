@@ -116,6 +116,12 @@ export type PromotionTableRow = {
   priceDifference: number | null;
   realDiscountPercent: number | null;
   advertisingDiscountPercent: number | null;
+  sourceDocumentId: string | null;
+  sourceDocumentFileName: string | null;
+  invoiceDocumentId: string | null;
+  invoiceDocumentFileName: string | null;
+  planDocumentId: string | null;
+  planDocumentFileName: string | null;
   createdAt: string;
   updatedAt: string;
 };

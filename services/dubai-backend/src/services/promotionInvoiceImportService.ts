@@ -2,7 +2,7 @@ import { PDFParse } from 'pdf-parse';
 import {
   listPromotionPriceListItems,
 } from '../repositories/promotionPriceListRepository';
-import { createPromotionInvoiceRows } from '../repositories/promotionRowsRepository';
+import { upsertPromotionDocumentRows } from '../repositories/promotionRowsRepository';
 import { matchPromotionProduct } from './promotionProductMatcher';
 
 type ParsedInvoiceItem = {
@@ -126,7 +126,7 @@ export const importPromotionInvoice = async (input: {
   const priceListItems = await listPromotionPriceListItems();
   const status = statusForPeriod(period.startDate, period.endDate);
 
-  const rows = await createPromotionInvoiceRows(parsedItems.map((item) => {
+  const rows = await upsertPromotionDocumentRows(parsedItems.map((item) => {
     const match = matchPromotionProduct(item.rawName, priceListItems);
     return {
       status,
@@ -142,7 +142,7 @@ export const importPromotionInvoice = async (input: {
       priceListItemId: match?.item.id ?? null,
       matchConfidence: match?.score ?? null,
     };
-  }));
+  }), 'invoice');
 
   return {
     imported: rows.length,

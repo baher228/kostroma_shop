@@ -33,8 +33,3 @@ CREATE TABLE IF NOT EXISTS promotion_table_rows (
 
 CREATE INDEX IF NOT EXISTS promotion_table_rows_status_idx ON promotion_table_rows (status);
 CREATE INDEX IF NOT EXISTS promotion_table_rows_period_idx ON promotion_table_rows (start_date, end_date);
-
-INSERT INTO promotion_table_rows (id, row_number)
-SELECT 'promo_row_' || index::text, index
-FROM generate_series(1, 10) AS index
-ON CONFLICT (id) DO NOTHING;

@@ -1077,6 +1077,24 @@ td.sticky {
   box-shadow: 0 1px 0 #d5ded8;
 }
 
+.promotions-table-scroll th:nth-child(n + 4),
+.promotions-table-scroll td:nth-child(n + 4) {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.promotions-table-scroll th:nth-child(4),
+.promotions-table-scroll th:nth-child(5),
+.promotions-table-scroll td:nth-child(4),
+.promotions-table-scroll td:nth-child(5) {
+  min-width: 120px;
+}
+
+.promotions-table-scroll th:nth-child(n + 6),
+.promotions-table-scroll td:nth-child(n + 6) {
+  min-width: 124px;
+}
+
 .promotion-table-row {
   cursor: pointer;
   transition: background 120ms ease;

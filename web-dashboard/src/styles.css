@@ -1031,6 +1031,9 @@ td.sticky {
 
 .promotions-page {
   align-items: start;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .promotions-actions {
@@ -1050,6 +1053,28 @@ td.sticky {
   width: 220px;
   min-height: 52px;
   font-size: 18px;
+}
+
+.promotions-table-scroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.promotions-table-scroll .table-scroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  max-height: calc(100dvh - 230px);
+  overflow: auto;
+}
+
+.promotions-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f4f7f5;
+  box-shadow: 0 1px 0 #d5ded8;
 }
 
 .sortable-header {

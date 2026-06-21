@@ -269,9 +269,10 @@ const PromotionRowsTable = ({
   sort: { key: SortKey; direction: SortDirection };
   onSort: (key: SortKey) => void;
 }) => (
-  <Table>
-    <thead>
-      <tr>
+  <div className="promotions-table-scroll">
+    <Table>
+      <thead>
+        <tr>
         <SortHeader label="№" column="rowNumber" sort={sort} onSort={onSort} />
         <SortHeader label="Статус акции" column="status" sort={sort} onSort={onSort} />
         <SortHeader label="Название позиции" column="productName" sort={sort} onSort={onSort} />
@@ -282,9 +283,9 @@ const PromotionRowsTable = ({
         <SortHeader label="Разница" column="priceDifference" sort={sort} onSort={onSort} />
         <SortHeader label="Реальный % акции" column="realDiscountPercent" sort={sort} onSort={onSort} />
         <SortHeader label="Рекламный % акции" column="advertisingDiscountPercent" sort={sort} onSort={onSort} />
-      </tr>
-    </thead>
-    <tbody>
+        </tr>
+      </thead>
+      <tbody>
       {rows.length === 0 ? (
         <tr>
           <td colSpan={10}>Строк не найдено.</td>
@@ -303,8 +304,9 @@ const PromotionRowsTable = ({
           <td>{percent(row.advertisingDiscountPercent)}</td>
         </tr>
       ))}
-    </tbody>
-  </Table>
+      </tbody>
+    </Table>
+  </div>
 );
 
 const RowModal = ({

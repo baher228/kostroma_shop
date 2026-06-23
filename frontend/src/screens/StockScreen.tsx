@@ -719,20 +719,20 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const renderCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
     <View key={category} style={styles.categoryBlock}>
       <View style={styles.categoryTitleRow}>
-        <Text style={styles.categoryTitle}>{category}</Text>
+        <Text style={[styles.categoryTitle, styles.workerCategoryTitle]}>{category}</Text>
       </View>
       <View style={styles.categoryTable}>
-        <View style={styles.stickyColumn}>
+        <View style={[styles.stickyColumn, styles.workerStickyColumn]}>
           <View style={styles.headerRow}>
-            <View style={[styles.headerCell, styles.nameColumn]}>
-              <Text style={styles.headerText}>Товар</Text>
+            <View style={[styles.headerCell, styles.nameColumn, styles.workerNameColumn, styles.workerHeaderCell]}>
+              <Text style={[styles.headerText, styles.workerHeaderText]}>Товар</Text>
             </View>
           </View>
           {rows.map((row) => (
             <View key={row.productId} style={styles.row}>
-              <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+              <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.workerNameColumn, styles.workerCell]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
-                  <Text numberOfLines={1} style={styles.nameText}>
+                  <Text numberOfLines={1} style={[styles.nameText, styles.workerNameText]}>
                     {row.name}
                   </Text>
                 </ScrollView>
@@ -740,31 +740,32 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           ))}
         </View>
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
-          <View>
-            <View style={styles.headerRow}>
-              {table?.dates.map((date) => (
-                <View
-                  key={date}
-                  style={[
-                    styles.headerCell,
-                    styles.dateColumn,
-                    columnToneHeader(date),
-                    secondWeekBoundaryStyle(date),
-                  ]}
-                >
-                  <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
-                  <Text style={styles.dateDayText}>{formatDate(date)}</Text>
-                </View>
-              ))}
-            </View>
-
-            {rows.length === 0 ? (
-              <View style={[styles.emptyRow, styles.emptyScrollableRow]}>
-                <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+        <View style={styles.workerDataColumns}>
+          <View style={styles.headerRow}>
+            {table?.dates.map((date) => (
+              <View
+                key={date}
+                style={[
+                  styles.headerCell,
+                  styles.dateColumn,
+                  styles.workerDateColumn,
+                  styles.workerHeaderCell,
+                  columnToneHeader(date),
+                  secondWeekBoundaryStyle(date),
+                ]}
+              >
+                <Text style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>{formatWeekday(date)}</Text>
+                <Text style={[styles.dateDayText, styles.workerDateDayText]}>{formatDate(date)}</Text>
               </View>
-            ) : (
-              rows.map((row) => (
+            ))}
+          </View>
+
+          {rows.length === 0 ? (
+            <View style={[styles.emptyRow, styles.workerEmptyRow]}>
+              <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+            </View>
+          ) : (
+            rows.map((row) => (
               <View key={row.productId} style={styles.row}>
                 {table?.dates.map((date) => {
                   const key = `${row.productId}:${date}`;
@@ -777,6 +778,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       style={[
                         styles.cell,
                         styles.dateColumn,
+                        styles.workerDateColumn,
+                        styles.workerCell,
                         styles.valueCell,
                         columnToneValue(date),
                         secondWeekBoundaryStyle(date),
@@ -784,15 +787,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       ]}
                       onPress={() => openEditCell(row, date)}
                     >
-                      <Text style={styles.valueText}>{value || '-'}</Text>
+                      <Text style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
                     </Pressable>
                   );
                 })}
               </View>
-              ))
-            )}
-          </View>
-        </ScrollView>
+            ))
+          )}
+        </View>
       </View>
     </View>
   );
@@ -1565,6 +1567,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 15,
   },
+  workerCategoryTitle: {
+    fontSize: 16,
+  },
   categoryTable: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1575,8 +1580,16 @@ const styles = StyleSheet.create({
     borderRightColor: '#8fa091',
     backgroundColor: '#f7f7f7',
   },
+  workerStickyColumn: {
+    width: '31%',
+    minWidth: 140,
+  },
   scrollableColumns: {
     flex: 1,
+  },
+  workerDataColumns: {
+    flex: 1,
+    minWidth: 0,
   },
   headerRow: {
     flexDirection: 'row',
@@ -1599,6 +1612,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
   },
+  workerHeaderText: {
+    fontSize: 15,
+  },
   dateWeekdayText: {
     fontSize: 12,
     color: '#2e312f',
@@ -1606,11 +1622,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textTransform: 'uppercase',
   },
+  workerDateWeekdayText: {
+    fontSize: 13,
+  },
   dateDayText: {
     marginTop: 1,
     fontSize: 11,
     color: '#3a4b3e',
     fontWeight: '700',
+  },
+  workerDateDayText: {
+    fontSize: 12,
   },
   headerToneA: {
     backgroundColor: '#ffffff',
@@ -1657,8 +1679,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: '#f7f7f7',
   },
+  workerNameColumn: {
+    width: '100%',
+  },
   dateColumn: {
     width: 62,
+  },
+  workerDateColumn: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
+  workerHeaderCell: {
+    minHeight: 54,
+  },
+  workerCell: {
+    minHeight: 52,
+  },
+  workerEmptyRow: {
+    flex: 1,
   },
   dashboardStockColumn: {
     width: 118,
@@ -1684,6 +1723,10 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: '#222222',
     fontWeight: '800',
+  },
+  workerNameText: {
+    fontSize: 16,
+    lineHeight: 20,
   },
   referenceText: {
     marginTop: 3,
@@ -1803,6 +1846,9 @@ const styles = StyleSheet.create({
     color: '#223528',
     fontSize: 15,
     fontWeight: '600',
+  },
+  workerValueText: {
+    fontSize: 17,
   },
   valueTextStock: {
     fontSize: 17,

@@ -304,7 +304,6 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                     </View>
                   </View>
                   <Text style={styles.productMetaStrong}>Шт/кор: {row.unitsInPack ?? '-'}</Text>
-                  <Text style={styles.productMetaStrong}>Границы: {row.minStockUnits ?? '-'} / {row.maxStockUnits ?? '-'}</Text>
                   {(pending || submittedByProduct[row.productId]) && (
                     <Text style={styles.submissionState}>{pending ? 'Отправляется...' : 'Отправлено'}</Text>
                   )}

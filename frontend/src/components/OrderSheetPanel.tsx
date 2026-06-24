@@ -9,9 +9,16 @@ import {
   View,
 } from 'react-native';
 import { ordersApi } from '../api/orders';
-import { ALLOWED_ORDER_WEEKDAYS, MACHINE_NUMBERS, PRODUCT_CATEGORIES, type MachineNumber } from '../constants/dashboard';
+import {
+  ALLOWED_ORDER_WEEKDAYS,
+  BUSINESS_CATEGORIES,
+  DEFAULT_BUSINESS_CATEGORY,
+  MACHINE_NUMBERS,
+  PRODUCT_CATEGORIES,
+  type MachineNumber,
+} from '../constants/dashboard';
 import { sortProductsLikeImage } from '../constants/productOrdering';
-import { OrderSheet, OrderSheetRow, Session, Shop } from '../types/models';
+import { BusinessCategory, OrderSheet, OrderSheetRow, Session, Shop } from '../types/models';
 
 type OrderSheetPanelProps = {
   session: Session;
@@ -62,6 +69,12 @@ const shiftToAllowedOrderDate = (dateKey: string, direction: 1 | -1): string => 
   return toDateKey(nextDate);
 };
 
+const shiftOneDay = (dateKey: string, direction: 1 | -1): string => {
+  const nextDate = parseDateKey(dateKey);
+  nextDate.setDate(nextDate.getDate() + direction);
+  return toDateKey(nextDate);
+};
+
 const nearestAllowedOrderDate = (dateKey: string): string => {
   return shiftToAllowedOrderDate(dateKey, 1);
 };
@@ -81,6 +94,7 @@ const cellKey = (productId: string, shopId: string) => `${productId}:${shopId}`;
 export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
   const [date, setDate] = useState(nearestAllowedOrderDate(todayDateKey()));
   const [inputDate, setInputDate] = useState(nearestAllowedOrderDate(todayDateKey()));
+  const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sheet, setSheet] = useState<OrderSheet | null>(null);
@@ -90,7 +104,7 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     try {
       setLoading(true);
       setError('');
-      const result = await ordersApi.sheet(session.token, targetDate);
+      const result = await ordersApi.sheet(session.token, targetDate, activeBusinessCategory);
       setSheet(result);
       setDate(targetDate);
       setInputDate(targetDate);
@@ -107,14 +121,14 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
 
   useEffect(() => {
     void loadSheet(date);
-  }, []);
+  }, [activeBusinessCategory]);
 
   const handleLoadDate = () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
       setError('\u0424\u043e\u0440\u043c\u0430\u0442 \u0434\u0430\u0442\u044b: YYYY-MM-DD');
       return;
     }
-    if (!isAllowedOrderDate(inputDate)) {
+    if (activeBusinessCategory === 'Молоко' && !isAllowedOrderDate(inputDate)) {
       setError(
         '\u041b\u0438\u0441\u0442 \u0437\u0430\u043a\u0430\u0437\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d \u0442\u043e\u043b\u044c\u043a\u043e \u0432\u043e \u0432\u0442\u043e\u0440\u043d\u0438\u043a, \u0447\u0435\u0442\u0432\u0435\u0440\u0433 \u0438 \u0441\u0443\u0431\u0431\u043e\u0442\u0443.',
       );
@@ -124,10 +138,19 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
   };
 
   const shiftDate = (direction: 1 | -1) => {
-    const next = shiftToAllowedOrderDate(date, direction);
+    const next = activeBusinessCategory === 'Молоко'
+      ? shiftToAllowedOrderDate(date, direction)
+      : shiftOneDay(date, direction);
     setInputDate(next);
     void loadSheet(next);
   };
+
+  const orderSheetCategories = useMemo(() => {
+    if (activeBusinessCategory === 'Молоко') {
+      return [...PRODUCT_CATEGORIES];
+    }
+    return Array.from(new Set((sheet?.rows ?? []).map((row) => row.category))).filter(Boolean);
+  }, [activeBusinessCategory, sheet]);
 
   const rowsByCategory = useMemo(() => {
     if (!sheet) {
@@ -135,25 +158,28 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     }
     const normalizedQuery = query.trim().toLowerCase();
     const grouped: Record<string, OrderSheetRow[]> = {};
-    for (const category of PRODUCT_CATEGORIES) {
+    for (const category of orderSheetCategories) {
       grouped[category] = [];
     }
     for (const row of sheet.rows) {
       if (normalizedQuery && !row.productName.toLowerCase().includes(normalizedQuery)) {
         continue;
       }
-      const category = PRODUCT_CATEGORIES.includes(row.category as (typeof PRODUCT_CATEGORIES)[number])
+      const category = orderSheetCategories.includes(row.category)
         ? row.category
-        : PRODUCT_CATEGORIES[0];
+        : orderSheetCategories[0];
+      if (!category) {
+        continue;
+      }
       grouped[category].push(row);
     }
-    for (const category of PRODUCT_CATEGORIES) {
+    for (const category of orderSheetCategories) {
       grouped[category] = sortProductsLikeImage(
-        grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category as (typeof PRODUCT_CATEGORIES)[number] })),
+        grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category })),
       ).map(({ name: _name, ...row }) => row as OrderSheetRow);
     }
     return grouped;
-  }, [query, sheet]);
+  }, [orderSheetCategories, query, sheet]);
 
   const shopsByMachine = useMemo(() => {
     const grouped: Record<MachineNumber, Shop[]> = {
@@ -294,7 +320,7 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
           </View>
 
           <ScrollView style={styles.bodyScroll} nestedScrollEnabled>
-            {PRODUCT_CATEGORIES.map((category) => {
+            {orderSheetCategories.map((category) => {
               const rows = rowsByCategory[category];
               if (!rows || rows.length === 0) {
                 return null;
@@ -310,6 +336,7 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
                         {
                           productId: `category-${category}`,
                           productName: category,
+                          businessCategory: activeBusinessCategory,
                           category,
                           packType: null,
                           unitsInPack: null,
@@ -347,6 +374,21 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
   return (
     <View style={styles.panel}>
       <Text style={styles.title}>{'\u0417\u0430\u043a\u0430\u0437'}</Text>
+
+      <View style={styles.businessTabs}>
+        {BUSINESS_CATEGORIES.map((category) => {
+          const active = activeBusinessCategory === category;
+          return (
+            <Pressable
+              key={category}
+              style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
+              onPress={() => setActiveBusinessCategory(category)}
+            >
+              <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <View style={styles.dateRow}>
         <Pressable style={styles.dateButton} onPress={() => shiftDate(-1)}>
@@ -394,6 +436,31 @@ const styles = StyleSheet.create({
   panel: {
     flex: 1,
     gap: 12,
+  },
+  businessTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  businessTabButton: {
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    borderRadius: 10,
+    backgroundColor: '#f3f6f4',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  businessTabButtonActive: {
+    backgroundColor: '#1f4f37',
+    borderColor: '#1f4f37',
+  },
+  businessTabText: {
+    color: '#2f4437',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  businessTabTextActive: {
+    color: '#ffffff',
   },
   loadingWrap: {
     flex: 1,

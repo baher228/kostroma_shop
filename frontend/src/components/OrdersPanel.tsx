@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { ordersApi } from '../api/orders';
 import { stockApi } from '../api/stock';
-import { Session, SellerOrder, StockTable } from '../types/models';
+import { BUSINESS_CATEGORIES, DEFAULT_BUSINESS_CATEGORY } from '../constants/dashboard';
+import { BusinessCategory, Session, SellerOrder, StockTable } from '../types/models';
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Ошибка сервера.';
@@ -50,6 +51,12 @@ const nextOrderDate = (from = new Date()): string => {
   while (!allowedDays.has(target.getDay())) {
     target.setDate(target.getDate() + 1);
   }
+  return toDateKey(target);
+};
+
+const tomorrowDate = (from = new Date()): string => {
+  const target = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  target.setDate(target.getDate() + 1);
   return toDateKey(target);
 };
 
@@ -113,6 +120,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   const [error, setError] = useState('');
   const [orders, setOrders] = useState<SellerOrder[]>([]);
   const [table, setTable] = useState<StockTable | null>(null);
+  const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [packsByProduct, setPacksByProduct] = useState<Record<string, string>>({});
   const [metaUnitsByProduct, setMetaUnitsByProduct] = useState<Record<string, string>>({});
   const [metaMinByProduct, setMetaMinByProduct] = useState<Record<string, string>>({});
@@ -123,8 +131,8 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       setLoading(true);
       setError('');
       const [nextOrders, nextTable] = await Promise.all([
-        ordersApi.list(session.token),
-        stockApi.list(session.token, { range: 'week' }),
+        ordersApi.list(session.token, activeBusinessCategory),
+        stockApi.list(session.token, { businessCategory: activeBusinessCategory, range: 'week' }),
       ]);
       setOrders(nextOrders);
       setTable(nextTable);
@@ -160,10 +168,10 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
 
   useEffect(() => {
     void loadData();
-  }, [session.token]);
+  }, [session.token, activeBusinessCategory]);
 
   const stockDate = useMemo(() => (table ? preferredDate(table.dates) : null), [table]);
-  const orderDate = nextOrderDate();
+  const orderDate = activeBusinessCategory === 'Молоко' ? nextOrderDate() : tomorrowDate();
   const orderTargetLabel = `Заказ упаковок на ${formatTargetWeekday(orderDate)} ${formatDateShort(orderDate)}`;
 
   const saveMeta = async (productId: string) => {
@@ -236,6 +244,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       });
       const createdOrders = await ordersApi.createBulk(session.token, {
         shopId: assignedShopId,
+        businessCategory: activeBusinessCategory,
         orderDate,
         items,
       });
@@ -260,6 +269,21 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   return (
     <View style={styles.panel}>
       {!!error && <Text style={styles.error}>{error}</Text>}
+
+      <View style={styles.businessTabs}>
+        {BUSINESS_CATEGORIES.map((category) => {
+          const active = activeBusinessCategory === category;
+          return (
+            <Pressable
+              key={category}
+              style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
+              onPress={() => setActiveBusinessCategory(category)}
+            >
+              <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       {!canManage && (
         <View style={[styles.block, styles.workerOrderBlock]}>
@@ -407,6 +431,31 @@ const styles = StyleSheet.create({
   panel: {
     flex: 1,
     gap: 10,
+  },
+  businessTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  businessTabButton: {
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    borderRadius: 10,
+    backgroundColor: '#f3f6f4',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  businessTabButtonActive: {
+    backgroundColor: '#1f4f37',
+    borderColor: '#1f4f37',
+  },
+  businessTabText: {
+    color: '#2f4437',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  businessTabTextActive: {
+    color: '#ffffff',
   },
   loadingWrap: {
     flex: 1,

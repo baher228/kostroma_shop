@@ -220,11 +220,11 @@ test('bulk seller order creation replaces the full shop/date order in one transa
               if (sql.includes('FROM shops')) {
                 return { rows: [{ id: params[0] }] };
               }
-              if (sql.includes('FROM stock_products')) {
-                return { rows: params[0].map((id) => ({ id })) };
-              }
               if (sql.includes('DELETE FROM order_sheet_values')) {
                 return { rows: [] };
+              }
+              if (sql.includes('FROM stock_products')) {
+                return { rows: params[0].map((id) => ({ id })) };
               }
               if (sql.includes('INSERT INTO order_sheet_values')) {
                 return { rows: [] };
@@ -237,6 +237,7 @@ test('bulk seller order creation replaces the full shop/date order in one transa
                     shop_name: 'Main shop',
                     product_id: params[2],
                     product_name: params[2] === 'prod_1' ? 'Milk' : 'Kefir',
+                    business_category: 'Молоко',
                     stock_on_hand: params[3],
                     requested_packs: params[4],
                     requested_units: params[5],
@@ -263,6 +264,7 @@ test('bulk seller order creation replaces the full shop/date order in one transa
     { role: 'worker', shopIds: ['shop_main'], scopes: ['orders:write'], jti: 'jti_1' },
     {
       shopId: 'shop_main',
+      businessCategory: 'Хлеб',
       orderDate: '2026-05-02',
       items: [
         { productId: 'prod_1', stockOnHand: 2, requestedPacks: 3, requestedUnits: 18, autoSuggested: true },
@@ -275,7 +277,11 @@ test('bulk seller order creation replaces the full shop/date order in one transa
   assert.equal(orders[0].orderDate, '2026-05-02');
   assert.equal(calls[0].sql, 'BEGIN');
   assert.equal(calls.at(-1).sql, 'COMMIT');
-  assert.equal(calls.filter((call) => call.sql.includes('DELETE FROM order_sheet_values')).length, 1);
+  const productValidation = calls.find((call) => call.sql.includes('FROM stock_products') && call.sql.includes('business_category'));
+  assert.deepEqual(productValidation.params, [['prod_1', 'prod_2'], 'Хлеб']);
+  const deleteCall = calls.find((call) => call.sql.includes('DELETE FROM order_sheet_values'));
+  assert.match(deleteCall.sql, /sp\.business_category = \$3/);
+  assert.deepEqual(deleteCall.params, ['shop_main', '2026-05-02', 'Хлеб']);
   assert.equal(calls.filter((call) => call.sql.includes('INSERT INTO order_sheet_values')).length, 2);
 });
 

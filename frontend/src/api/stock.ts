@@ -1,4 +1,4 @@
-import { OrderValueEntry, ProductCategory, StockTable } from '../types/models';
+import { BusinessCategory, OrderValueEntry, ProductCategory, StockTable } from '../types/models';
 import { request } from './http';
 
 type StockTableResponse = {
@@ -9,6 +9,7 @@ type ProductResponse = {
   product: {
     id: string;
     name: string;
+    businessCategory: BusinessCategory;
     category: ProductCategory;
     packType: string | null;
     unitsInPack: number | null;
@@ -22,6 +23,7 @@ type ProductResponse = {
 
 export type CreateProductPayload = {
   name: string;
+  businessCategory: BusinessCategory;
   category: ProductCategory;
   packType: string;
   unitsInPack: number;
@@ -34,6 +36,7 @@ export type CreateProductPayload = {
 
 type StockListQuery = {
   shopId?: string;
+  businessCategory?: BusinessCategory;
   from?: string;
   to?: string;
   range?: 'week' | 'year';
@@ -43,6 +46,9 @@ const toQueryString = (query: StockListQuery): string => {
   const params = new URLSearchParams();
   if (query.shopId) {
     params.set('shopId', query.shopId);
+  }
+  if (query.businessCategory) {
+    params.set('businessCategory', query.businessCategory);
   }
   if (query.from) {
     params.set('from', query.from);
@@ -95,6 +101,34 @@ export const stockApi = {
     return result.product;
   },
 
+  listSubcategories: async (token: string): Promise<Record<BusinessCategory, ProductCategory[]>> => {
+    const result = await request<{ subcategories: Record<BusinessCategory, ProductCategory[]> }>('/api/stock/subcategories', { token });
+    return result.subcategories;
+  },
+
+  createSubcategory: async (
+    token: string,
+    payload: { businessCategory: BusinessCategory; name: string },
+  ): Promise<Record<BusinessCategory, ProductCategory[]>> => {
+    const result = await request<{ subcategories: Record<BusinessCategory, ProductCategory[]> }>('/api/stock/subcategories', {
+      method: 'POST',
+      token,
+      body: payload,
+    });
+    return result.subcategories;
+  },
+
+  deleteSubcategory: async (
+    token: string,
+    payload: { businessCategory: BusinessCategory; name: string },
+  ): Promise<void> => {
+    await request<{}>('/api/stock/subcategories', {
+      method: 'DELETE',
+      token,
+      body: payload,
+    });
+  },
+
   deleteProduct: async (token: string, productId: string): Promise<void> => {
     await request<{}>(`/api/stock/products/${productId}`, {
       method: 'DELETE',
@@ -118,9 +152,19 @@ export const stockApi = {
     });
   },
 
-  listShopOrderValues: async (token: string, shopId: string, from: string, to: string): Promise<OrderValueEntry[]> => {
+  listShopOrderValues: async (
+    token: string,
+    shopId: string,
+    from: string,
+    to: string,
+    businessCategory?: BusinessCategory,
+  ): Promise<OrderValueEntry[]> => {
+    const params = new URLSearchParams({ shopId, from, to });
+    if (businessCategory) {
+      params.set('businessCategory', businessCategory);
+    }
     const result = await request<{ orderValues: OrderValueEntry[] }>(
-      `/api/stock/order-values?shopId=${encodeURIComponent(shopId)}&from=${from}&to=${to}`,
+      `/api/stock/order-values?${params.toString()}`,
       { token },
     );
     return result.orderValues;

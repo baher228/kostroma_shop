@@ -26,6 +26,8 @@ import { UsersPanel } from '../components/UsersPanel';
 import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
 import {
   DASHBOARD_COLUMNS,
+  BUSINESS_CATEGORIES,
+  DEFAULT_BUSINESS_CATEGORY,
   DEFAULT_PRODUCT_CATEGORY,
   MAX_ORDER_VALUE_LEN,
   PRODUCT_CATEGORIES,
@@ -36,6 +38,7 @@ import {
   type DashboardManualOrderKey,
   type DashboardRowValues,
   type DashboardTone,
+  type BusinessCategory,
   type WeekDateMap,
 } from '../constants/dashboard';
 import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
@@ -161,6 +164,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const canManage = session.user.role === 'manager';
 
   const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
+  const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
@@ -253,6 +257,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       const to = canManage ? dashboardTo : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
+        businessCategory: activeBusinessCategory,
         from,
         to,
         range: canManage ? undefined : 'week',
@@ -266,7 +271,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         if (targetShopId) {
           try {
             const orderValuesTo = shiftDateKey(to, 2);
-            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, orderValuesTo);
+            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, orderValuesTo, activeBusinessCategory);
             const loaded: Record<string, string> = {};
             for (const entry of orderValues) {
               loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
@@ -293,7 +298,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return;
     }
     void loadTable();
-  }, [session.token, canManage, selectedShopId, managerWindowStart]);
+  }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory]);
 
   const visibleRows = useMemo(() => {
     if (!table) {
@@ -309,20 +314,37 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   }, [table, query]);
 
   const rowsByCategory = useMemo(() => {
-    const grouped = createCategoryMap();
+    const categories = table?.subcategories?.length ? table.subcategories : [...PRODUCT_CATEGORIES];
+    const grouped = categories.reduce(
+      (acc, category) => {
+        acc[category] = [];
+        return acc;
+      },
+      {} as Record<ProductCategory, StockTableRow[]>,
+    );
     for (const row of visibleRows) {
-      const category = PRODUCT_CATEGORIES.includes(row.category) ? row.category : DEFAULT_PRODUCT_CATEGORY;
+      const category = categories.includes(row.category) ? row.category : categories[0] ?? DEFAULT_PRODUCT_CATEGORY;
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
       grouped[category].push(row);
     }
-    for (const category of PRODUCT_CATEGORIES) {
+    for (const category of categories) {
       grouped[category] = sortStockTableRowsLikeImage(grouped[category]);
     }
     return grouped;
-  }, [visibleRows]);
+  }, [table?.subcategories, visibleRows]);
+
+  const activeSubcategories = useMemo(
+    () => (table?.subcategories?.length ? table.subcategories : [...PRODUCT_CATEGORIES]),
+    [table?.subcategories],
+  );
+
+  const isMilkTable = activeBusinessCategory === 'Молоко';
 
   const orderedRows = useMemo(
-    () => PRODUCT_CATEGORIES.flatMap((category) => rowsByCategory[category]),
-    [rowsByCategory],
+    () => activeSubcategories.flatMap((category) => rowsByCategory[category] ?? []),
+    [activeSubcategories, rowsByCategory],
   );
 
   const dashboardWeeks = useMemo(() => {
@@ -636,9 +658,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (!normalizedName) {
       throw new Error('Введите название товара.');
     }
-    if (!newProductCategory) {
-      throw new Error('Выберите категорию товара.');
-    }
+    const productCategory = newProductCategory ?? activeSubcategories[0] ?? DEFAULT_PRODUCT_CATEGORY;
     if (!packType) {
       throw new Error('Введите тип упаковки.');
     }
@@ -651,7 +671,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
     return {
       name: normalizedName,
-      category: newProductCategory,
+      businessCategory: activeBusinessCategory,
+      category: productCategory,
       packType,
       unitsInPack: parseRequiredInteger('Штук в упаковке', newProductUnitsInPack),
       packWeightKg: parseRequiredDecimal('Вес упаковки, кг', newProductPackWeightKg),
@@ -795,6 +816,121 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             ))
           )}
         </View>
+      </View>
+    </View>
+  );
+
+  const stockNumberFor = (row: StockTableRow, date: string): number | null => {
+    const raw = row.values[date];
+    if (!raw) {
+      return null;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const soldForDate = (row: StockTableRow, date: string): string => {
+    const previous = stockNumberFor(row, shiftDateKey(date, -1));
+    const current = stockNumberFor(row, date);
+    if (previous === null || current === null) {
+      return '';
+    }
+    return String(Math.max(0, previous - current));
+  };
+
+  const setDailyOrderValue = (productId: string, orderDate: string, value: string) => {
+    const shopId = selectedShopId;
+    if (!shopId) return;
+    const nextValue = sanitizeOrderValue(value);
+    const fieldKey = `${productId}:${orderDate}`;
+    const previousValue = dashboardOrderValues[fieldKey] ?? '';
+    setDashboardOrderValues((current) => ({ ...current, [fieldKey]: nextValue }));
+    const packs = nextValue ? Number.parseInt(nextValue, 10) : 0;
+    void stockApi.updateOrderValue(session.token, {
+      shopId,
+      productId,
+      orderDate,
+      packs: Number.isNaN(packs) ? 0 : packs,
+    }).catch((saveError) => {
+      setDashboardOrderValues((current) => ({ ...current, [fieldKey]: previousValue }));
+      setError(errorMessage(saveError));
+    });
+  };
+
+  const renderDailyManagerCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
+    <View key={category} style={styles.categoryBlock}>
+      <View style={styles.categoryTitleRow}>
+        <Text style={styles.categoryTitle}>{category}</Text>
+      </View>
+      <View style={styles.categoryTable}>
+        <View style={styles.stickyColumn}>
+          <View style={styles.headerRow}>
+            <View style={[styles.headerCell, styles.nameColumn, styles.dashboardNameHeader]}>
+              <Text style={styles.headerText}>Товар</Text>
+            </View>
+          </View>
+          {rows.map((row) => (
+            <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
+              <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
+                <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
+                  {row.name}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
+          <View>
+            <View style={styles.headerRow}>
+              {table?.dates.map((date) => (
+                <View key={date} style={styles.dailyHeaderGroup}>
+                  <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
+                  <Text style={styles.dateDayText}>{formatDate(date)}</Text>
+                  <View style={styles.dailySubHeaderRow}>
+                    <Text style={styles.dailySubHeaderText}>Ост</Text>
+                    <Text style={styles.dailySubHeaderText}>Зак</Text>
+                    <Text style={styles.dailySubHeaderText}>Прод</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {rows.length === 0 ? (
+              <View style={[styles.emptyRow, styles.emptyScrollableRow]}>
+                <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+              </View>
+            ) : (
+              rows.map((row) => (
+                <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
+                  {table?.dates.map((date) => {
+                    const orderDate = shiftDateKey(date, 1);
+                    return (
+                      <View key={`${row.productId}:${date}`} style={styles.dailyValueGroup}>
+                        <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
+                          <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
+                        </Pressable>
+                        <View style={[styles.cell, styles.dailyValueCell]}>
+                          <TextInput
+                            value={orderPacksForDate(row.productId, orderDate)}
+                            onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
+                            keyboardType="number-pad"
+                            style={styles.dashboardOrderInput}
+                            maxLength={MAX_ORDER_VALUE_LEN}
+                            placeholder="-"
+                            placeholderTextColor="#6d7d72"
+                          />
+                        </View>
+                        <View style={[styles.cell, styles.dailyValueCell]}>
+                          <Text style={styles.valueText}>{soldForDate(row, date) || '-'}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))
+            )}
+          </View>
+        </ScrollView>
       </View>
     </View>
   );
@@ -997,6 +1133,23 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     <>
       {!canManage && <WorkerCheckInCard token={session.token} />}
       <View style={styles.controls}>
+        <View style={styles.businessTabs}>
+          {BUSINESS_CATEGORIES.map((category) => {
+            const active = activeBusinessCategory === category;
+            return (
+              <Pressable
+                key={category}
+                style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
+                onPress={() => {
+                  setActiveBusinessCategory(category);
+                  setNewProductCategory(null);
+                }}
+              >
+                <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <View style={styles.controlButtons}>
           {canManage && (
             <>
@@ -1032,10 +1185,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
       <View style={styles.tableWrap}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
-          {PRODUCT_CATEGORIES.map((category) =>
-            canManage
-              ? renderDashboardCategoryTable(category, rowsByCategory[category])
-              : renderCategoryTable(category, rowsByCategory[category]),
+          {activeSubcategories.map((category) =>
+            canManage && isMilkTable
+              ? renderDashboardCategoryTable(category, rowsByCategory[category] ?? [])
+              : canManage
+                ? renderDailyManagerCategoryTable(category, rowsByCategory[category] ?? [])
+              : renderCategoryTable(category, rowsByCategory[category] ?? []),
           )}
         </ScrollView>
       </View>
@@ -1167,9 +1322,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 autoFocus
                 maxLength={140}
               />
-              <Text style={styles.formLabel}>Категория *</Text>
+              <Text style={styles.formLabel}>Подкатегория *</Text>
               <View style={styles.categoryPicker}>
-                {PRODUCT_CATEGORIES.map((category) => {
+                {activeSubcategories.map((category) => {
                   const active = newProductCategory === category;
                   return (
                     <Pressable
@@ -1434,6 +1589,31 @@ const styles = StyleSheet.create({
   },
   controls: {
     gap: 10,
+  },
+  businessTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  businessTabButton: {
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    borderRadius: 10,
+    backgroundColor: '#f3f6f4',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  businessTabButtonActive: {
+    backgroundColor: '#1f4f37',
+    borderColor: '#1f4f37',
+  },
+  businessTabText: {
+    color: '#2f4437',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  businessTabTextActive: {
+    color: '#ffffff',
   },
   searchInput: {
     backgroundColor: '#ffffff',
@@ -1807,6 +1987,37 @@ const styles = StyleSheet.create({
     height: 58,
   },
   dashboardValueCell: {
+    height: 58,
+    backgroundColor: '#f4f6f4',
+  },
+  dailyHeaderGroup: {
+    width: 168,
+    minHeight: 82,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#7f8d81',
+    backgroundColor: '#ecf1ec',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  dailySubHeaderRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+  },
+  dailySubHeaderText: {
+    width: 56,
+    textAlign: 'center',
+    color: '#2e312f',
+    fontWeight: '800',
+    fontSize: 10,
+  },
+  dailyValueGroup: {
+    width: 168,
+    flexDirection: 'row',
+  },
+  dailyValueCell: {
+    width: 56,
     height: 58,
     backgroundColor: '#f4f6f4',
   },

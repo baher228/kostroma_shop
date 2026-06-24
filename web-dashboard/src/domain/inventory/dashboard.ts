@@ -5,6 +5,7 @@
 
 import {
   PRODUCT_CATEGORIES,
+  DEFAULT_BUSINESS_CATEGORY,
 } from '../../dashboardConfig';
 import type { Product, ProductPayload } from '../../types';
 import { formatOptionalPrice } from '../../shared/format';
@@ -36,6 +37,7 @@ export const sanitizeStock = (value: string): string => {
 
 export const productToForm = (product?: Product): ProductPayload => ({
   name: product?.name ?? '',
+  businessCategory: product?.businessCategory ?? DEFAULT_BUSINESS_CATEGORY,
   category: product?.category ?? PRODUCT_CATEGORIES[0],
   packType: product?.packType ?? '',
   unitsInPack: product?.unitsInPack ?? 1,

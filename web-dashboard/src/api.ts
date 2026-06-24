@@ -1,5 +1,6 @@
 import {
   CheckInStats,
+  BusinessCategory,
   ManagedUser,
   OrderSheet,
   OrderValueEntry,
@@ -182,7 +183,7 @@ export const api = {
     },
   },
   stock: {
-    table: async (token: string, params: { shopId?: string; from?: string; to?: string; range?: 'week' | 'year' }) =>
+    table: async (token: string, params: { shopId?: string; businessCategory?: BusinessCategory; from?: string; to?: string; range?: 'week' | 'year' }) =>
       (await dxbRequest<{ table: StockTable }>(`/api/stock${query(params)}`, { token })).table,
     createProduct: async (token: string, payload: ProductPayload) =>
       (await dxbRequest<{ product: unknown }>('/api/stock/products', { method: 'POST', token, body: payload })).product,
@@ -191,12 +192,23 @@ export const api = {
     deleteProduct: async (token: string, productId: string) => {
       await dxbRequest<{}>(`/api/stock/products/${productId}`, { method: 'DELETE', token });
     },
+    listSubcategories: async (token: string) =>
+      (await dxbRequest<{ subcategories: Record<BusinessCategory, string[]> }>('/api/stock/subcategories', { token })).subcategories,
+    createSubcategory: async (token: string, payload: { businessCategory: BusinessCategory; name: string }) =>
+      (await dxbRequest<{ subcategories: Record<BusinessCategory, string[]> }>('/api/stock/subcategories', {
+        method: 'POST',
+        token,
+        body: payload,
+      })).subcategories,
+    deleteSubcategory: async (token: string, payload: { businessCategory: BusinessCategory; name: string }) => {
+      await dxbRequest<{}>('/api/stock/subcategories', { method: 'DELETE', token, body: payload });
+    },
     updateValue: async (token: string, payload: { shopId: string; productId: string; date: string; value: string }) => {
       await dxbRequest<{}>('/api/stock/value', { method: 'PUT', token, body: payload });
     },
-    listShopOrderValues: async (token: string, shopId: string, from: string, to: string) =>
+    listShopOrderValues: async (token: string, shopId: string, from: string, to: string, businessCategory?: BusinessCategory) =>
       (await dxbRequest<{ orderValues: OrderValueEntry[] }>(
-        `/api/stock/order-values${query({ shopId, from, to })}`,
+        `/api/stock/order-values${query({ shopId, from, to, businessCategory })}`,
         { token },
       )).orderValues,
     updateOrderValue: async (
@@ -207,9 +219,10 @@ export const api = {
     },
   },
   orders: {
-    list: async (token: string) => (await dxbRequest<{ orders: SellerOrder[] }>('/api/orders', { token })).orders,
-    sheet: async (token: string, date: string) =>
-      (await dxbRequest<{ sheet: OrderSheet }>(`/api/orders/sheet?date=${date}`, { token })).sheet,
+    list: async (token: string, businessCategory?: BusinessCategory) =>
+      (await dxbRequest<{ orders: SellerOrder[] }>(`/api/orders${query({ businessCategory })}`, { token })).orders,
+    sheet: async (token: string, date: string, businessCategory?: BusinessCategory) =>
+      (await dxbRequest<{ sheet: OrderSheet }>(`/api/orders/sheet${query({ date, businessCategory })}`, { token })).sheet,
     create: async (
       token: string,
       payload: { shopId: string; productId: string; stockOnHand: number | null; requestedPacks: number; requestedUnits: number; autoSuggested: boolean; orderDate?: string },

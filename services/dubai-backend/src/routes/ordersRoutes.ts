@@ -9,11 +9,12 @@ import {
   submitSellerOrder,
   updateManagerOrderSheetValue,
 } from '../services/orderService';
-import { toValidationMessage } from '../http/http';
+import { toStringParam, toValidationMessage } from '../http/http';
 import {
   createSellerOrderBulkSchema,
   createSellerOrderSchema,
   idParamSchema,
+  listStockTableQuerySchema,
   orderSheetQuerySchema,
   updateSellerOrderStatusSchema,
   upsertOrderSheetValueSchema,
@@ -23,9 +24,16 @@ export const registerOrderRoutes = (app: Express) => {
   app.get('/api/orders', requireOpsScope('orders:read'), async (req: Request, res: Response) => {
     try {
       const viewer = (req as AuthorizedOpsRequest).ops;
-      const orders = await getSellerOrders(viewer);
+      const query = listStockTableQuerySchema.pick({ businessCategory: true }).parse({
+        businessCategory: toStringParam(req.query.businessCategory),
+      });
+      const orders = await getSellerOrders(viewer, query.businessCategory);
       res.json({ orders });
-    } catch {
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
       res.status(500).json({ message: 'Failed to load seller orders.' });
     }
   });
@@ -71,8 +79,11 @@ export const registerOrderRoutes = (app: Express) => {
 
   app.get('/api/orders/sheet', requireOpsRole('manager'), requireOpsScope('orders:read'), async (req: Request, res: Response) => {
     try {
-      const query = orderSheetQuerySchema.parse({ date: req.query.date });
-      const sheet = await getManagerOrderSheet(query.date);
+      const query = orderSheetQuerySchema.parse({
+        date: req.query.date,
+        businessCategory: toStringParam(req.query.businessCategory),
+      });
+      const sheet = await getManagerOrderSheet(query.date, query.businessCategory);
       res.json({ sheet });
     } catch (error) {
       if (error instanceof ZodError) {

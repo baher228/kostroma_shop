@@ -27,8 +27,11 @@ export type Shop = {
 };
 
 export const PRODUCT_CATEGORIES = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'] as const;
-export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+export type ProductCategory = string;
 export const DEFAULT_PRODUCT_CATEGORY: ProductCategory = PRODUCT_CATEGORIES[0];
+export const BUSINESS_CATEGORIES = ['Хлеб', 'Молоко', 'Деликатесы', 'Сыр'] as const;
+export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number];
+export const DEFAULT_BUSINESS_CATEGORY: BusinessCategory = 'Молоко';
 
 export type SessionUser = {
   id: string;
@@ -64,6 +67,7 @@ export type UserRecord = SessionUser & {
 export type StockProduct = {
   id: string;
   name: string;
+  businessCategory: BusinessCategory;
   category: ProductCategory;
   packType: string | null;
   unitsInPack: number | null;
@@ -77,6 +81,7 @@ export type StockProduct = {
 export type StockTableRow = {
   productId: string;
   name: string;
+  businessCategory: BusinessCategory;
   category: ProductCategory;
   packType: string | null;
   unitsInPack: number | null;
@@ -91,6 +96,8 @@ export type StockTableRow = {
 
 export type StockTable = {
   shop: Shop;
+  businessCategory: BusinessCategory;
+  subcategories: ProductCategory[];
   from: string;
   to: string;
   dates: string[];
@@ -147,6 +154,7 @@ export type SellerOrder = {
   shopName: string | null;
   productId: string;
   productName: string;
+  businessCategory: BusinessCategory;
   stockOnHand: number | null;
   requestedPacks: number;
   requestedUnits: number;

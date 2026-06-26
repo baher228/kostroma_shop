@@ -33,7 +33,12 @@ export const registerAuthRoutes = (app: Express) => {
   });
 
   app.post('/api/auth/ops-token', requireAuth, (req: Request, res: Response) => {
-    const token = createOpsTokenForUser((req as AuthorizedRequest).user);
+    const user = (req as AuthorizedRequest).user;
+    if (user.role === 'store_tablet') {
+      res.status(403).json({ message: 'Store tablet accounts cannot access the Dubai API.' });
+      return;
+    }
+    const token = createOpsTokenForUser(user);
     res.json({ token });
   });
 };

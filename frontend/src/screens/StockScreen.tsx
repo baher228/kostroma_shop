@@ -23,11 +23,12 @@ import { OrderSheetPanel } from '../components/OrderSheetPanel';
 import { SupportPanel } from '../components/SupportPanel';
 import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
-import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
+import { FobQrCard } from '../components/FobQrCard';
+import { FobScannerPanel } from '../components/FobScannerPanel';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
 
-type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
+type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob';
 
 type DashboardManualOrderKey = 'orderPackThu' | 'orderPackSat' | 'orderPackTue';
 type DashboardColumnKey =
@@ -391,8 +392,10 @@ const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
 
 export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const canManage = session.user.role === 'manager';
+  const isWorker = session.user.role === 'worker';
+  const isStoreTablet = session.user.role === 'store_tablet';
 
-  const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
+  const [activeTab, setActiveTab] = useState<ScreenTab>(isStoreTablet ? 'fob' : 'stock');
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
@@ -426,6 +429,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       setActiveTab('stock');
     }
   }, [activeTab, canManage]);
+
+  useEffect(() => {
+    if (isStoreTablet && activeTab !== 'fob') {
+      setActiveTab('fob');
+    }
+  }, [activeTab, isStoreTablet]);
 
   useEffect(() => {
     if (canManage && activeTab === 'orders') {
@@ -464,6 +473,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const loadShops = async () => {
+    if (isStoreTablet) {
+      return;
+    }
     try {
       const nextShops = await shopsApi.list(session.token);
       setShops(nextShops);
@@ -476,6 +488,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const loadTable = async () => {
+    if (isStoreTablet) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError('');
@@ -520,6 +536,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   }, [session.token]);
 
   useEffect(() => {
+    if (isStoreTablet) {
+      setLoading(false);
+      return;
+    }
     if (canManage && !selectedShopId && shops.length > 0) {
       return;
     }
@@ -1349,7 +1369,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const renderStockTab = () => (
     <>
-      {!canManage && <WorkerCheckInCard token={session.token} />}
       <View style={styles.controls}>
         <View style={styles.controlButtons}>
           {canManage && (
@@ -1397,6 +1416,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const renderContent = () => {
+    if (activeTab === 'fob') {
+      return (
+        <View style={styles.tabContentWrap}>
+          {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
+        </View>
+      );
+    }
     if (activeTab === 'tasks') {
       return (
         <View style={styles.tabContentWrap}>
@@ -1452,7 +1478,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         { key: 'support', label: 'Поддержка' },
         { key: 'users', label: 'Пользователи' },
       ]
+    : isStoreTablet
+      ? [{ key: 'fob', label: 'FOB' }]
     : [
+        ...(isWorker ? [{ key: 'fob' as ScreenTab, label: 'FOB' }] : []),
         { key: 'stock', label: 'Остатки' },
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
@@ -1467,7 +1496,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         <View>
           <Text style={styles.title}>Учет остатков</Text>
           <Text style={styles.subtitle}>
-            {session.user.fullName} · {canManage ? 'Менеджер' : 'Сотрудник'}
+            {session.user.fullName} · {canManage ? 'Менеджер' : isStoreTablet ? 'Планшет магазина' : 'Сотрудник'}
           </Text>
         </View>
         <View style={styles.headerActions}>

@@ -201,7 +201,7 @@ export const api = {
       (await dxbRequest<{ order: SellerOrder }>(`/api/orders/${orderId}/status`, { method: 'PATCH', token, body: { status } })).order,
   },
   checkin: {
-    stats: async (token: string, from: string, to: string) =>
-      (await ruRequest<{ stats: CheckInStats }>(`/api/checkin/stats${query({ from, to })}`, { token })).stats,
+    stats: async (token: string, from: string, to: string, shopId?: string) =>
+      (await ruRequest<{ stats: CheckInStats }>(`/api/checkin/stats${query({ from, to, shopId })}`, { token })).stats,
   },
 };

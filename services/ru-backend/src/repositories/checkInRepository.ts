@@ -8,6 +8,11 @@ type WorkerCheckInStatusRow = {
   worker_display_name: string;
   status: 'in' | 'out' | null;
   last_changed_at: Date | string | null;
+  shop_id?: string | null;
+  shop_name?: string | null;
+  source?: 'manual' | 'tablet_qr' | null;
+  scanned_by_tablet_id?: string | null;
+  scanned_by_tablet_display_name?: string | null;
 };
 
 type WorkerCheckInEventRow = {
@@ -16,6 +21,11 @@ type WorkerCheckInEventRow = {
   worker_display_name: string;
   status: 'in' | 'out';
   event_at: Date | string;
+  shop_id?: string | null;
+  shop_name?: string | null;
+  source?: 'manual' | 'tablet_qr' | null;
+  scanned_by_tablet_id?: string | null;
+  scanned_by_tablet_display_name?: string | null;
 };
 
 const mapStatus = (row: WorkerCheckInStatusRow): WorkerCheckInStatus => ({
@@ -23,6 +33,11 @@ const mapStatus = (row: WorkerCheckInStatusRow): WorkerCheckInStatus => ({
   workerDisplayName: row.worker_display_name,
   status: row.status ?? 'out',
   lastChangedAt: row.last_changed_at ? new Date(row.last_changed_at).toISOString() : '',
+  shopId: row.shop_id ?? null,
+  shopName: row.shop_name ?? null,
+  source: row.source ?? 'manual',
+  scannedByTabletId: row.scanned_by_tablet_id ?? null,
+  scannedByTabletDisplayName: row.scanned_by_tablet_display_name ?? null,
 });
 
 const mapEvent = (row: WorkerCheckInEventRow): WorkerCheckInEvent => ({
@@ -31,6 +46,11 @@ const mapEvent = (row: WorkerCheckInEventRow): WorkerCheckInEvent => ({
   workerDisplayName: row.worker_display_name,
   status: row.status,
   eventAt: new Date(row.event_at).toISOString(),
+  shopId: row.shop_id ?? null,
+  shopName: row.shop_name ?? null,
+  source: row.source ?? 'manual',
+  scannedByTabletId: row.scanned_by_tablet_id ?? null,
+  scannedByTabletDisplayName: row.scanned_by_tablet_display_name ?? null,
 });
 
 const toDateKey = (date: Date): string => {
@@ -76,7 +96,16 @@ const generateEventId = (): string => `checkin_${Date.now().toString(36)}_${Math
 export const getWorkerCheckInStatus = async (workerId: string): Promise<WorkerCheckInStatus | null> => {
   const result = await personalDb.query<WorkerCheckInStatusRow>(
     `
-      SELECT worker_id, worker_display_name, status, last_changed_at
+      SELECT
+        worker_id,
+        worker_display_name,
+        status,
+        last_changed_at,
+        shop_id,
+        shop_name,
+        source,
+        scanned_by_tablet_id,
+        scanned_by_tablet_display_name
       FROM worker_checkin_status
       WHERE worker_id = $1
       LIMIT 1;
@@ -86,33 +115,57 @@ export const getWorkerCheckInStatus = async (workerId: string): Promise<WorkerCh
   return result.rows[0] ? mapStatus(result.rows[0]) : null;
 };
 
-export const listWorkerCheckInStatuses = async (): Promise<WorkerCheckInStatus[]> => {
+export const listWorkerCheckInStatuses = async (shopId?: string): Promise<WorkerCheckInStatus[]> => {
+  const params = shopId ? [shopId] : [];
   const result = await personalDb.query<WorkerCheckInStatusRow>(
     `
       SELECT
         u.id AS worker_id,
         CONCAT(u.first_name, ' ', u.last_name) AS worker_display_name,
         s.status,
-        s.last_changed_at
+        s.last_changed_at,
+        s.shop_id,
+        s.shop_name,
+        s.source,
+        s.scanned_by_tablet_id,
+        s.scanned_by_tablet_display_name
       FROM users u
       LEFT JOIN worker_checkin_status s ON s.worker_id = u.id
       WHERE u.role = 'worker'
+        ${shopId ? 'AND u.shop_id = $1' : ''}
       ORDER BY u.last_name ASC, u.first_name ASC, u.username ASC;
     `,
+    params,
   );
   return result.rows.map(mapStatus);
 };
 
-export const listWorkerCheckInEvents = async (from: string, to: string): Promise<WorkerCheckInEvent[]> => {
+export const listWorkerCheckInEvents = async (
+  from: string,
+  to: string,
+  shopId?: string,
+): Promise<WorkerCheckInEvent[]> => {
+  const params = shopId ? [from, to, shopId] : [from, to];
   const result = await personalDb.query<WorkerCheckInEventRow>(
     `
-      SELECT id, worker_id, worker_display_name, status, event_at
+      SELECT
+        id,
+        worker_id,
+        worker_display_name,
+        status,
+        event_at,
+        shop_id,
+        shop_name,
+        source,
+        scanned_by_tablet_id,
+        scanned_by_tablet_display_name
       FROM worker_checkin_events
       WHERE event_at >= $1::date
         AND event_at < ($2::date + INTERVAL '1 day')
+        ${shopId ? 'AND shop_id = $3' : ''}
       ORDER BY event_at DESC, id DESC;
     `,
-    [from, to],
+    params,
   );
   return result.rows.map(mapEvent);
 };
@@ -121,6 +174,11 @@ export const upsertWorkerCheckInStatus = async (input: {
   workerId: string;
   workerDisplayName: string;
   status: 'in' | 'out';
+  shopId?: string | null;
+  shopName?: string | null;
+  source?: 'manual' | 'tablet_qr';
+  scannedByTabletId?: string | null;
+  scannedByTabletDisplayName?: string | null;
 }): Promise<WorkerCheckInStatus> => {
   const recorded = await recordWorkerCheckIn(input);
   return recorded.status;
@@ -130,30 +188,99 @@ export const recordWorkerCheckIn = async (input: {
   workerId: string;
   workerDisplayName: string;
   status: 'in' | 'out';
+  shopId?: string | null;
+  shopName?: string | null;
+  source?: 'manual' | 'tablet_qr';
+  scannedByTabletId?: string | null;
+  scannedByTabletDisplayName?: string | null;
 }): Promise<{ status: WorkerCheckInStatus; event: WorkerCheckInEvent }> => {
   await personalDb.query('BEGIN;');
   try {
     const statusResult = await personalDb.query<WorkerCheckInStatusRow>(
       `
-        INSERT INTO worker_checkin_status (worker_id, worker_display_name, status, last_changed_at)
-        VALUES ($1, $2, $3, NOW())
+        INSERT INTO worker_checkin_status (
+          worker_id,
+          worker_display_name,
+          status,
+          last_changed_at,
+          shop_id,
+          shop_name,
+          source,
+          scanned_by_tablet_id,
+          scanned_by_tablet_display_name
+        )
+        VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8)
         ON CONFLICT (worker_id)
         DO UPDATE SET
           worker_display_name = EXCLUDED.worker_display_name,
           status = EXCLUDED.status,
-          last_changed_at = NOW()
-        RETURNING worker_id, worker_display_name, status, last_changed_at;
+          last_changed_at = NOW(),
+          shop_id = $4,
+          shop_name = $5,
+          source = $6,
+          scanned_by_tablet_id = $7,
+          scanned_by_tablet_display_name = $8
+        RETURNING
+          worker_id,
+          worker_display_name,
+          status,
+          last_changed_at,
+          shop_id,
+          shop_name,
+          source,
+          scanned_by_tablet_id,
+          scanned_by_tablet_display_name;
       `,
-      [input.workerId, input.workerDisplayName, input.status],
+      [
+        input.workerId,
+        input.workerDisplayName,
+        input.status,
+        input.shopId ?? null,
+        input.shopName ?? null,
+        input.source ?? 'manual',
+        input.scannedByTabletId ?? null,
+        input.scannedByTabletDisplayName ?? null,
+      ],
     );
 
     const eventResult = await personalDb.query<WorkerCheckInEventRow>(
       `
-        INSERT INTO worker_checkin_events (id, worker_id, worker_display_name, status, event_at)
-        VALUES ($1, $2, $3, $4, NOW())
-        RETURNING id, worker_id, worker_display_name, status, event_at;
+        INSERT INTO worker_checkin_events (
+          id,
+          worker_id,
+          worker_display_name,
+          status,
+          event_at,
+          shop_id,
+          shop_name,
+          source,
+          scanned_by_tablet_id,
+          scanned_by_tablet_display_name
+        )
+        VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9)
+        RETURNING
+          id,
+          worker_id,
+          worker_display_name,
+          status,
+          event_at,
+          shop_id,
+          shop_name,
+          source,
+          scanned_by_tablet_id,
+          scanned_by_tablet_display_name;
       `,
-      [generateEventId(), input.workerId, input.workerDisplayName, input.status],
+      [
+        generateEventId(),
+        input.workerId,
+        input.workerDisplayName,
+        input.status,
+        input.shopId ?? null,
+        input.shopName ?? null,
+        input.source ?? 'manual',
+        input.scannedByTabletId ?? null,
+        input.scannedByTabletDisplayName ?? null,
+      ],
     );
 
     await personalDb.query('COMMIT;');
@@ -187,8 +314,8 @@ const workedMinutesForEvents = (events: WorkerCheckInEvent[], rangeEnd: string):
   return minutes;
 };
 
-export const getCheckInStats = async (from: string, to: string): Promise<CheckInStats> => {
-  const [statuses, events] = await Promise.all([listWorkerCheckInStatuses(), listWorkerCheckInEvents(from, to)]);
+export const getCheckInStats = async (from: string, to: string, shopId?: string): Promise<CheckInStats> => {
+  const [statuses, events] = await Promise.all([listWorkerCheckInStatuses(shopId), listWorkerCheckInEvents(from, to, shopId)]);
   const dates = dateRange(from, to);
   const startMinutes = expectedStartMinutes();
 

@@ -266,7 +266,7 @@ const UsersPanel = ({ session }: { session: Session }) => {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         role: form.role,
-        shopId: form.role === 'worker' ? form.shopId || null : null,
+        shopId: form.role === 'manager' ? null : form.shopId || null,
       };
       if (editingId) {
         await api.users.update(session.token, editingId, payload);
@@ -324,6 +324,7 @@ const UsersPanel = ({ session }: { session: Session }) => {
         <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as Role })}>
           <option value="worker">Работник</option>
           <option value="manager">Менеджер</option>
+          <option value="store_tablet">Планшет магазина</option>
         </select>
         <select value={form.shopId} disabled={form.role === 'manager'} onChange={(event) => setForm({ ...form, shopId: event.target.value })}>
           <option value="">Без магазина</option>
@@ -343,8 +344,8 @@ const UsersPanel = ({ session }: { session: Session }) => {
               <tr key={user.id}>
                 <td>{user.username}</td>
                 <td>{user.fullName}</td>
-                <td>{user.role === 'manager' ? 'Менеджер' : 'Работник'}</td>
-                <td>{user.role === 'worker' ? shopName(user) : '-'}</td>
+                <td>{user.role === 'manager' ? 'Менеджер' : user.role === 'store_tablet' ? 'Планшет магазина' : 'Работник'}</td>
+                <td>{user.role === 'manager' ? '-' : shopName(user)}</td>
                 <td className="actions">
                   <button className="secondary" onClick={() => edit(user)}>Редактировать</button>
                   <button className="secondary" onClick={() => {
@@ -474,6 +475,8 @@ const AttendancePanel = ({ session }: { session: Session }) => {
   const [from, setFrom] = useState(startOfWeek());
   const [to, setTo] = useState(addDays(startOfWeek(), 6));
   const [stats, setStats] = useState<CheckInStats | null>(null);
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [shopId, setShopId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -481,7 +484,12 @@ const AttendancePanel = ({ session }: { session: Session }) => {
     setLoading(true);
     setError('');
     try {
-      setStats(await api.checkin.stats(session.token, from, to));
+      const [nextStats, nextShops] = await Promise.all([
+        api.checkin.stats(session.token, from, to, shopId || undefined),
+        api.shops.list(session.token),
+      ]);
+      setStats(nextStats);
+      setShops(nextShops);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -500,6 +508,10 @@ const AttendancePanel = ({ session }: { session: Session }) => {
       <div className="toolbar hero-toolbar">
         <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
         <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+        <select value={shopId} onChange={(event) => setShopId(event.target.value)}>
+          <option value="">Все магазины</option>
+          {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
+        </select>
         <button onClick={() => void load()}>Показать период</button>
       </div>
       {loading ? <p>Считаем посещаемость...</p> : stats && (
@@ -543,21 +555,24 @@ const AttendancePanel = ({ session }: { session: Session }) => {
               ))}
             </tbody>
           </Table>
-          <EventsTable events={stats.events} />
+          <EventsTable events={stats.events} shops={shops} />
         </>
       )}
     </section>
   );
 };
 
-const EventsTable = ({ events }: { events: WorkerCheckInEvent[] }) => (
+const EventsTable = ({ events, shops }: { events: WorkerCheckInEvent[]; shops: Shop[] }) => (
   <Table>
-    <thead><tr><th>Время</th><th>Работник</th><th>Событие</th></tr></thead>
+    <thead><tr><th>Время</th><th>Работник</th><th>Магазин</th><th>Источник</th><th>Планшет</th><th>Событие</th></tr></thead>
     <tbody>
       {events.slice(0, 80).map((event) => (
         <tr key={event.id}>
           <td>{formatDateTime(event.eventAt)}</td>
           <td>{event.workerDisplayName}</td>
+          <td>{event.shopName ?? shops.find((shop) => shop.id === event.shopId)?.name ?? event.shopId ?? '-'}</td>
+          <td>{event.source === 'tablet_qr' ? 'FOB QR' : 'Manual'}</td>
+          <td>{event.scannedByTabletDisplayName ?? event.scannedByTabletId ?? '-'}</td>
           <td>{event.status === 'in' ? 'Пришел' : 'Ушел'}</td>
         </tr>
       ))}

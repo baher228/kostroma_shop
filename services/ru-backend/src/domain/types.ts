@@ -1,4 +1,4 @@
-export type Role = 'manager' | 'worker';
+export type Role = 'manager' | 'worker' | 'store_tablet';
 
 export type ColumnKey =
   | 'packCount'
@@ -157,6 +157,11 @@ export type WorkerCheckInStatus = {
   workerDisplayName: string;
   status: 'in' | 'out';
   lastChangedAt: string;
+  shopId: string | null;
+  shopName: string | null;
+  source: 'manual' | 'tablet_qr';
+  scannedByTabletId: string | null;
+  scannedByTabletDisplayName: string | null;
 };
 
 export type WorkerCheckInEvent = {
@@ -165,6 +170,17 @@ export type WorkerCheckInEvent = {
   workerDisplayName: string;
   status: 'in' | 'out';
   eventAt: string;
+  shopId: string | null;
+  shopName: string | null;
+  source: 'manual' | 'tablet_qr';
+  scannedByTabletId: string | null;
+  scannedByTabletDisplayName: string | null;
+};
+
+export type FobChallenge = {
+  payload: string;
+  expiresAt: string;
+  refreshAfterSeconds: number;
 };
 
 export type WorkerCheckInSummary = WorkerCheckInStatus & {

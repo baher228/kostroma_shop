@@ -20,7 +20,11 @@ type UsersPanelProps = {
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
 
-const roleLabel = (role: Role) => (role === 'manager' ? 'Менеджер' : 'Работник');
+const roleLabel = (role: Role) => {
+  if (role === 'manager') return 'Менеджер';
+  if (role === 'store_tablet') return 'Планшет магазина';
+  return 'Работник';
+};
 const MACHINE_NUMBERS = [1, 2, 3] as const;
 
 export const UsersPanel = ({ session }: UsersPanelProps) => {
@@ -86,7 +90,7 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
         lastName: normalizedLastName,
         password,
         role,
-        shopId: role === 'worker' ? createUserShopId : null,
+        shopId: role === 'manager' ? null : createUserShopId,
       });
       setUsers((current) => [...current, created]);
       setFirstName('');
@@ -276,9 +280,12 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
               <Pressable style={[styles.roleButton, role === 'manager' && styles.roleButtonActive]} onPress={() => setRole('manager')}>
                 <Text style={[styles.roleButtonText, role === 'manager' && styles.roleButtonTextActive]}>Менеджер</Text>
               </Pressable>
+              <Pressable style={[styles.roleButton, role === 'store_tablet' && styles.roleButtonActive]} onPress={() => setRole('store_tablet')}>
+                <Text style={[styles.roleButtonText, role === 'store_tablet' && styles.roleButtonTextActive]}>Планшет</Text>
+              </Pressable>
             </View>
 
-            {role === 'worker' && (
+            {role !== 'manager' && (
               <Pressable
                 style={styles.shopSelectButton}
                 onPress={() => {
@@ -394,7 +401,7 @@ export const UsersPanel = ({ session }: UsersPanelProps) => {
                   <Text style={styles.userMeta}>
                     @{user.username} · {roleLabel(user.role)}
                   </Text>
-                  {user.role === 'worker' && (
+                  {user.role !== 'manager' && (
                     <Pressable
                       style={styles.shopAssignButton}
                       onPress={() => {

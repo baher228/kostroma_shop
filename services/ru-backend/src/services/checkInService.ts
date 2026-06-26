@@ -13,11 +13,11 @@ export const getOwnCheckInStatus = (user: SessionUser) => getWorkerCheckInStatus
 
 export const getAllWorkerCheckInStatuses = () => listWorkerCheckInStatuses();
 
-export const getCheckInEvents = (range: { from: string; to: string }) =>
-  listWorkerCheckInEvents(range.from, range.to);
+export const getCheckInEvents = (range: { from: string; to: string; shopId?: string }) =>
+  listWorkerCheckInEvents(range.from, range.to, range.shopId);
 
-export const getCheckInSummary = (range: { from: string; to: string }) =>
-  getCheckInStats(range.from, range.to);
+export const getCheckInSummary = (range: { from: string; to: string; shopId?: string }) =>
+  getCheckInStats(range.from, range.to, range.shopId);
 
 export const updateOwnCheckInStatus = (
   user: SessionUser,

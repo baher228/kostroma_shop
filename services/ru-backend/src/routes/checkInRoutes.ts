@@ -37,8 +37,9 @@ export const registerCheckInRoutes = (app: Express) => {
       const query = checkInStatsQuerySchema.parse({
         from: toStringParam(req.query.from) ?? defaults.from,
         to: toStringParam(req.query.to) ?? defaults.to,
+        shopId: toStringParam(req.query.shopId),
       });
-      const events = await getCheckInEvents({ from: query.from ?? defaults.from, to: query.to ?? defaults.to });
+      const events = await getCheckInEvents({ from: query.from ?? defaults.from, to: query.to ?? defaults.to, shopId: query.shopId });
       res.json({ events });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -55,8 +56,9 @@ export const registerCheckInRoutes = (app: Express) => {
       const query = checkInStatsQuerySchema.parse({
         from: toStringParam(req.query.from) ?? defaults.from,
         to: toStringParam(req.query.to) ?? defaults.to,
+        shopId: toStringParam(req.query.shopId),
       });
-      const stats = await getCheckInSummary({ from: query.from ?? defaults.from, to: query.to ?? defaults.to });
+      const stats = await getCheckInSummary({ from: query.from ?? defaults.from, to: query.to ?? defaults.to, shopId: query.shopId });
       res.json({ stats });
     } catch (error) {
       if (error instanceof ZodError) {

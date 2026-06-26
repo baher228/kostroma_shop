@@ -99,7 +99,7 @@ export const createUserSchema = z.object({
   firstName: z.string().trim().min(2).max(80),
   lastName: z.string().trim().min(2).max(80),
   password: z.string().min(5).max(200),
-  role: z.enum(['manager', 'worker']).default('worker'),
+  role: z.enum(['manager', 'worker', 'store_tablet']).default('worker'),
   shopId: z.string().trim().min(1).max(100).optional().nullable(),
 });
 
@@ -113,7 +113,7 @@ export const updateUserSchema = z
       .optional(),
     firstName: z.string().trim().min(2).max(80).optional(),
     lastName: z.string().trim().min(2).max(80).optional(),
-    role: z.enum(['manager', 'worker']).optional(),
+    role: z.enum(['manager', 'worker', 'store_tablet']).optional(),
     shopId: z.string().trim().min(1).max(100).optional().nullable(),
   })
   .refine((payload) => Object.keys(payload).length > 0, {
@@ -220,6 +220,11 @@ export const updateCheckInStatusSchema = z.object({
 export const checkInStatsQuerySchema = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  shopId: z.string().trim().min(1).max(100).optional(),
+});
+
+export const fobScanSchema = z.object({
+  payload: z.string().trim().min(8).max(500),
 });
 
 export const orderSheetQuerySchema = z.object({

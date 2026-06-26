@@ -91,7 +91,14 @@ exports.createAuthKit = ({ config, managerScopes = exports.defaultManagerScopes,
         audience: 'stock-app-frontend',
       });
 
-      if (!decoded.sub || !decoded.username || !decoded.firstName || !decoded.lastName || !decoded.fullName || !decoded.role) {
+      if (
+        !decoded.sub ||
+        !decoded.username ||
+        !decoded.firstName ||
+        !decoded.lastName ||
+        !decoded.fullName ||
+        !['manager', 'worker', 'store_tablet'].includes(decoded.role)
+      ) {
         return null;
       }
 

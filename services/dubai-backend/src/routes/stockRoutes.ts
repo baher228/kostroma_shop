@@ -3,8 +3,11 @@ import { ZodError } from 'zod';
 import { AuthorizedOpsRequest, requireOpsRole, requireOpsScope } from '../auth/middleware';
 import {
   createStockProduct,
+  addProductSubcategory,
   getShopOrderValues,
+  getProductSubcategories,
   getVisibleStockTable,
+  removeProductSubcategory,
   removeStockProduct,
   setShopOrderValue,
   setStockValue,
@@ -16,6 +19,7 @@ import {
   createRowSchema,
   idParamSchema,
   listStockTableQuerySchema,
+  subcategorySchema,
   updateProductMetaSchema,
   updateProductSchema,
   upsertOrderSheetValueSchema,
@@ -28,6 +32,7 @@ export const registerStockRoutes = (app: Express) => {
       const viewer = (req as AuthorizedOpsRequest).ops;
       const query = listStockTableQuerySchema.parse({
         shopId: toStringParam(req.query.shopId),
+        businessCategory: toStringParam(req.query.businessCategory),
         from: toStringParam(req.query.from),
         to: toStringParam(req.query.to),
         range: toStringParam(req.query.range),
@@ -63,6 +68,47 @@ export const registerStockRoutes = (app: Express) => {
         return;
       }
       res.status(500).json({ message: 'Failed to create product.' });
+    }
+  });
+
+  app.get('/api/stock/subcategories', requireOpsScope('stock:read'), async (_req: Request, res: Response) => {
+    try {
+      const subcategories = await getProductSubcategories();
+      res.json({ subcategories });
+    } catch {
+      res.status(500).json({ message: 'Failed to load product subcategories.' });
+    }
+  });
+
+  app.post('/api/stock/subcategories', requireOpsRole('manager'), requireOpsScope('products:write'), async (req: Request, res: Response) => {
+    try {
+      const payload = subcategorySchema.parse(req.body);
+      const subcategories = await addProductSubcategory(payload);
+      res.status(201).json({ subcategories });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to create product subcategory.' });
+    }
+  });
+
+  app.delete('/api/stock/subcategories', requireOpsRole('manager'), requireOpsScope('products:write'), async (req: Request, res: Response) => {
+    try {
+      const payload = subcategorySchema.parse(req.body);
+      const removed = await removeProductSubcategory(payload);
+      if (!removed) {
+        res.status(409).json({ message: 'Subcategory is used by products or does not exist.' });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to delete product subcategory.' });
     }
   });
 
@@ -151,11 +197,13 @@ export const registerStockRoutes = (app: Express) => {
       const shopId = toStringParam(req.query.shopId);
       const from = toStringParam(req.query.from);
       const to = toStringParam(req.query.to);
+      const businessCategory = toStringParam(req.query.businessCategory);
       if (!shopId || !from || !to) {
         res.status(400).json({ message: 'shopId, from and to query params required.' });
         return;
       }
-      const orderValues = await getShopOrderValues(shopId, from, to);
+      const query = listStockTableQuerySchema.pick({ businessCategory: true }).parse({ businessCategory });
+      const orderValues = await getShopOrderValues(shopId, from, to, query.businessCategory);
       res.json({ orderValues });
     } catch {
       res.status(500).json({ message: 'Failed to load order values.' });

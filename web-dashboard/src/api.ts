@@ -1,5 +1,6 @@
 import {
   CheckInStats,
+  BusinessCategory,
   ManagedUser,
   OrderSheet,
   OrderValueEntry,
@@ -35,6 +36,7 @@ export class ApiError extends Error {
 }
 
 const opsTokenCache = new Map<string, CachedOpsToken>();
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const parseJwtExp = (token: string): number => {
   try {
@@ -49,8 +51,24 @@ const parseJwtExp = (token: string): number => {
   }
 };
 
+const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('Сервер не ответил. Проверьте интернет и попробуйте снова.', 0);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
 const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOptions, bearerToken?: string): Promise<T> => {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       Accept: 'application/json',
@@ -165,7 +183,7 @@ export const api = {
     },
   },
   stock: {
-    table: async (token: string, params: { shopId?: string; from?: string; to?: string; range?: 'week' | 'year' }) =>
+    table: async (token: string, params: { shopId?: string; businessCategory?: BusinessCategory; from?: string; to?: string; range?: 'week' | 'year' }) =>
       (await dxbRequest<{ table: StockTable }>(`/api/stock${query(params)}`, { token })).table,
     createProduct: async (token: string, payload: ProductPayload) =>
       (await dxbRequest<{ product: unknown }>('/api/stock/products', { method: 'POST', token, body: payload })).product,
@@ -174,12 +192,23 @@ export const api = {
     deleteProduct: async (token: string, productId: string) => {
       await dxbRequest<{}>(`/api/stock/products/${productId}`, { method: 'DELETE', token });
     },
+    listSubcategories: async (token: string) =>
+      (await dxbRequest<{ subcategories: Record<BusinessCategory, string[]> }>('/api/stock/subcategories', { token })).subcategories,
+    createSubcategory: async (token: string, payload: { businessCategory: BusinessCategory; name: string }) =>
+      (await dxbRequest<{ subcategories: Record<BusinessCategory, string[]> }>('/api/stock/subcategories', {
+        method: 'POST',
+        token,
+        body: payload,
+      })).subcategories,
+    deleteSubcategory: async (token: string, payload: { businessCategory: BusinessCategory; name: string }) => {
+      await dxbRequest<{}>('/api/stock/subcategories', { method: 'DELETE', token, body: payload });
+    },
     updateValue: async (token: string, payload: { shopId: string; productId: string; date: string; value: string }) => {
       await dxbRequest<{}>('/api/stock/value', { method: 'PUT', token, body: payload });
     },
-    listShopOrderValues: async (token: string, shopId: string, from: string, to: string) =>
+    listShopOrderValues: async (token: string, shopId: string, from: string, to: string, businessCategory?: BusinessCategory) =>
       (await dxbRequest<{ orderValues: OrderValueEntry[] }>(
-        `/api/stock/order-values${query({ shopId, from, to })}`,
+        `/api/stock/order-values${query({ shopId, from, to, businessCategory })}`,
         { token },
       )).orderValues,
     updateOrderValue: async (
@@ -190,9 +219,10 @@ export const api = {
     },
   },
   orders: {
-    list: async (token: string) => (await dxbRequest<{ orders: SellerOrder[] }>('/api/orders', { token })).orders,
-    sheet: async (token: string, date: string) =>
-      (await dxbRequest<{ sheet: OrderSheet }>(`/api/orders/sheet?date=${date}`, { token })).sheet,
+    list: async (token: string, businessCategory?: BusinessCategory) =>
+      (await dxbRequest<{ orders: SellerOrder[] }>(`/api/orders${query({ businessCategory })}`, { token })).orders,
+    sheet: async (token: string, date: string, businessCategory?: BusinessCategory) =>
+      (await dxbRequest<{ sheet: OrderSheet }>(`/api/orders/sheet${query({ date, businessCategory })}`, { token })).sheet,
     create: async (
       token: string,
       payload: { shopId: string; productId: string; stockOnHand: number | null; requestedPacks: number; requestedUnits: number; autoSuggested: boolean; orderDate?: string },

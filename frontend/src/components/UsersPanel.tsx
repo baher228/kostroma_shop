@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { shopsApi } from '../api/shops';
 import { usersApi } from '../api/users';
+import { MACHINE_NUMBERS } from '../constants/dashboard';
 import { ManagedUser, Role, Session, Shop } from '../types/models';
 
 type UsersPanelProps = {
@@ -25,7 +26,6 @@ const roleLabel = (role: Role) => {
   if (role === 'store_tablet') return 'Планшет магазина';
   return 'Работник';
 };
-const MACHINE_NUMBERS = [1, 2, 3] as const;
 
 export const UsersPanel = ({ session }: UsersPanelProps) => {
   const [users, setUsers] = useState<ManagedUser[]>([]);

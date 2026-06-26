@@ -19,14 +19,15 @@ test('createProduct writes the full product metadata payload', async () => {
             rows: [{
               id: params[0],
               name: params[1],
-              category: params[2],
-              pack_type: params[3],
-              units_in_pack: params[4],
-              pack_weight_kg: params[5],
-              shelf_life_days: params[6],
-              unit_price_rub_vat: params[7],
-              min_stock_units: params[8],
-              max_stock_units: params[9],
+              business_category: params[2],
+              category: params[3],
+              pack_type: params[4],
+              units_in_pack: params[5],
+              pack_weight_kg: params[6],
+              shelf_life_days: params[7],
+              unit_price_rub_vat: params[8],
+              min_stock_units: params[9],
+              max_stock_units: params[10],
             }],
           };
         },
@@ -51,7 +52,7 @@ test('createProduct writes the full product metadata payload', async () => {
 
   assert.match(capturedSql, /pack_type/);
   assert.match(capturedSql, /unit_price_rub_vat/);
-  assert.deepEqual(capturedParams.slice(1), ['Творог 5%', 'Творог', 'стакан', 12, 3, 10, 91.25, 2, 18]);
+  assert.deepEqual(capturedParams.slice(1), ['Творог 5%', 'Молоко', 'Творог', 'стакан', 12, 3, 10, 91.25, 2, 18]);
   assert.equal(product.packType, 'стакан');
   assert.equal(product.unitsInPack, 12);
   assert.equal(product.packWeightKg, 3);

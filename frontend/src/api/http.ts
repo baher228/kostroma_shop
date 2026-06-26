@@ -22,7 +22,24 @@ type CachedOpsToken = {
   expiresAt: number;
 };
 
+const REQUEST_TIMEOUT_MS = 15_000;
 const opsTokenCache = new Map<string, CachedOpsToken>();
+
+const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('Сервер не ответил. Проверьте интернет и попробуйте снова.', 0);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 const isDubaiPath = (path: string): boolean =>
   path.startsWith('/api/shops') || path.startsWith('/api/stock') || path.startsWith('/api/orders');
@@ -47,7 +64,7 @@ const fetchOpsToken = async (ruToken: string): Promise<string> => {
     return cached.token;
   }
 
-  const response = await fetch(`${RU_API_BASE_URL}/api/auth/ops-token`, {
+  const response = await fetchWithTimeout(`${RU_API_BASE_URL}/api/auth/ops-token`, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -71,7 +88,7 @@ const makeRequest = async <T>(
   options: RequestOptions,
   bearerToken?: string,
 ): Promise<T> => {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       Accept: 'application/json',

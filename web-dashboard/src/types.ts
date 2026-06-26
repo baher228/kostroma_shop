@@ -22,11 +22,13 @@ export type Shop = {
   machineNumber: number;
 };
 
-export type ProductCategory = 'Йогурты' | 'Кефир, Ряженка, Снежок' | 'Молоко' | 'Сметана' | 'Творог';
+export type BusinessCategory = 'Хлеб' | 'Молоко' | 'Деликатесы' | 'Сыр';
+export type ProductCategory = string;
 
 export type Product = {
   productId: string;
   name: string;
+  businessCategory: BusinessCategory;
   category: ProductCategory;
   packType: string | null;
   unitsInPack: number | null;
@@ -41,6 +43,8 @@ export type Product = {
 
 export type StockTable = {
   shop: Shop;
+  businessCategory: BusinessCategory;
+  subcategories: ProductCategory[];
   from: string;
   to: string;
   dates: string[];
@@ -62,6 +66,7 @@ export type SellerOrder = {
   shopName: string | null;
   productId: string;
   productName: string;
+  businessCategory: BusinessCategory;
   stockOnHand: number | null;
   requestedPacks: number;
   requestedUnits: number;
@@ -74,6 +79,7 @@ export type SellerOrder = {
 export type OrderSheetRow = {
   productId: string;
   productName: string;
+  businessCategory: BusinessCategory;
   category: string;
   packType: string | null;
   unitsInPack: number | null;
@@ -92,6 +98,7 @@ export type OrderSheet = {
 
 export type ProductPayload = {
   name: string;
+  businessCategory: BusinessCategory;
   category: ProductCategory;
   packType: string;
   unitsInPack: number;

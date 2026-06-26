@@ -9,7 +9,10 @@ import {
 } from '../http/validation';
 import { z } from 'zod';
 
-export const getSellerOrders = (viewer: OpsTokenClaims) => listSellerOrders(viewer);
+export const getSellerOrders = (
+  viewer: OpsTokenClaims,
+  businessCategory: z.infer<typeof createSellerOrderSchema>['businessCategory'],
+) => listSellerOrders(viewer, businessCategory);
 
 export const submitSellerOrder = async (
   viewer: OpsTokenClaims,
@@ -27,7 +30,8 @@ export const changeSellerOrderStatus = (
   payload: z.infer<typeof updateSellerOrderStatusSchema>,
 ) => updateSellerOrderStatus(viewer, orderId, payload.status);
 
-export const getManagerOrderSheet = (date: string) => getOrderSheet(date);
+export const getManagerOrderSheet = (date: string, businessCategory: z.infer<typeof createSellerOrderSchema>['businessCategory']) =>
+  getOrderSheet(date, businessCategory);
 
 export const updateManagerOrderSheetValue = (
   payload: z.infer<typeof upsertOrderSheetValueSchema>,

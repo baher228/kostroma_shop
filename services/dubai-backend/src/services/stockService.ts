@@ -1,16 +1,20 @@
 import { listOrderSheetValues, upsertOrderSheetValue } from '../repositories/orderSheetRepository';
 import {
   createProduct,
+  createProductSubcategory,
   deleteProduct,
+  deleteProductSubcategory,
   getStockTable,
+  listProductSubcategories,
   updateProduct,
   updateProductMeta,
   upsertStockValue,
 } from '../repositories/stockRepository';
-import { OpsTokenClaims } from '../domain/types';
+import type { BusinessCategory, OpsTokenClaims } from '../domain/types';
 import {
   createRowSchema,
   listStockTableQuerySchema,
+  subcategorySchema,
   updateProductMetaSchema,
   updateProductSchema,
   upsertOrderSheetValueSchema,
@@ -37,13 +41,21 @@ export const updateStockProductMeta = (
 
 export const removeStockProduct = (productId: string) => deleteProduct(productId);
 
+export const getProductSubcategories = () => listProductSubcategories();
+
+export const addProductSubcategory = (payload: z.infer<typeof subcategorySchema>) =>
+  createProductSubcategory(payload.businessCategory, payload.name);
+
+export const removeProductSubcategory = (payload: z.infer<typeof subcategorySchema>) =>
+  deleteProductSubcategory(payload.businessCategory, payload.name);
+
 export const setStockValue = (
   viewer: OpsTokenClaims,
   payload: z.infer<typeof upsertStockValueSchema>,
 ) => upsertStockValue(viewer, payload);
 
-export const getShopOrderValues = (shopId: string, from: string, to: string) =>
-  listOrderSheetValues(shopId, from, to);
+export const getShopOrderValues = (shopId: string, from: string, to: string, businessCategory?: BusinessCategory) =>
+  listOrderSheetValues(shopId, from, to, businessCategory);
 
 export const setShopOrderValue = (payload: z.infer<typeof upsertOrderSheetValueSchema>) =>
   upsertOrderSheetValue({

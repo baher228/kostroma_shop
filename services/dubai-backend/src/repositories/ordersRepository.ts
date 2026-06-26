@@ -1,5 +1,6 @@
 import { opsDb } from '../db/opsDb';
-import { OpsTokenClaims, SellerOrder } from '../domain/types';
+import { DEFAULT_BUSINESS_CATEGORY } from '../domain/types';
+import type { BusinessCategory, OpsTokenClaims, SellerOrder } from '../domain/types';
 import type { PoolClient } from 'pg';
 
 type SellerOrderRow = {
@@ -8,6 +9,7 @@ type SellerOrderRow = {
   shop_name: string | null;
   product_id: string;
   product_name: string;
+  business_category: BusinessCategory | null;
   stock_on_hand: number | null;
   requested_packs: number;
   requested_units: number;
@@ -23,6 +25,7 @@ const mapOrder = (row: SellerOrderRow): SellerOrder => ({
   shopName: row.shop_name,
   productId: row.product_id,
   productName: row.product_name,
+  businessCategory: row.business_category ?? DEFAULT_BUSINESS_CATEGORY,
   stockOnHand: row.stock_on_hand,
   requestedPacks: row.requested_packs,
   requestedUnits: row.requested_units,
@@ -39,7 +42,12 @@ const toDateKey = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-export const nearestOrderSheetDate = (from = new Date()): string => {
+export const nearestOrderSheetDate = (from = new Date(), businessCategory: BusinessCategory = DEFAULT_BUSINESS_CATEGORY): string => {
+  if (businessCategory !== 'Молоко') {
+    const tomorrow = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return toDateKey(tomorrow);
+  }
   const allowedDays = new Set([2, 4, 6]);
   const target = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   target.setDate(target.getDate() + 1);
@@ -49,7 +57,10 @@ export const nearestOrderSheetDate = (from = new Date()): string => {
   return toDateKey(target);
 };
 
-export const listSellerOrders = async (viewer: OpsTokenClaims): Promise<SellerOrder[]> => {
+export const listSellerOrders = async (
+  viewer: OpsTokenClaims,
+  businessCategory: BusinessCategory = DEFAULT_BUSINESS_CATEGORY,
+): Promise<SellerOrder[]> => {
   const params: unknown[] = [];
   const conditions: string[] = [];
 
@@ -57,6 +68,9 @@ export const listSellerOrders = async (viewer: OpsTokenClaims): Promise<SellerOr
     params.push(viewer.shopIds);
     conditions.push(`o.shop_id = ANY($${params.length}::text[])`);
   }
+
+  params.push(businessCategory);
+  conditions.push(`sp.business_category = $${params.length}`);
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await opsDb.query<SellerOrderRow>(
@@ -67,6 +81,7 @@ export const listSellerOrders = async (viewer: OpsTokenClaims): Promise<SellerOr
         s.name AS shop_name,
         o.product_id,
         sp.name AS product_name,
+        sp.business_category,
         o.stock_on_hand,
         o.requested_packs,
         o.requested_units,
@@ -89,6 +104,7 @@ export const createSellerOrder = async (
   viewer: OpsTokenClaims,
   input: {
     shopId: string;
+    businessCategory?: BusinessCategory;
     productId: string;
     stockOnHand?: number | null;
     requestedPacks: number;
@@ -101,7 +117,8 @@ export const createSellerOrder = async (
     return null;
   }
 
-  const targetOrderDate = input.orderDate ?? nearestOrderSheetDate();
+  const businessCategory = input.businessCategory ?? DEFAULT_BUSINESS_CATEGORY;
+  const targetOrderDate = input.orderDate ?? nearestOrderSheetDate(new Date(), businessCategory);
 
   const shop = await opsDb.query<{ id: string }>(
     `
@@ -121,9 +138,10 @@ export const createSellerOrder = async (
       SELECT id
       FROM stock_products
       WHERE id = $1
+        AND business_category = $2
       LIMIT 1;
     `,
-    [input.productId],
+    [input.productId, businessCategory],
   );
   if (!product.rows[0]) {
     return null;
@@ -173,6 +191,7 @@ export const createSellerOrder = async (
         s.name AS shop_name,
         i.product_id,
         sp.name AS product_name,
+        sp.business_category,
         i.stock_on_hand,
         i.requested_packs,
         i.requested_units,
@@ -214,6 +233,7 @@ const assertShopAndProducts = async (
   client: Pick<PoolClient, 'query'>,
   shopId: string,
   productIds: string[],
+  businessCategory: BusinessCategory,
 ): Promise<boolean> => {
   const shop = await client.query<{ id: string }>(
     `SELECT id FROM shops WHERE id = $1 LIMIT 1;`,
@@ -226,8 +246,8 @@ const assertShopAndProducts = async (
     return true;
   }
   const products = await client.query<{ id: string }>(
-    `SELECT id FROM stock_products WHERE id = ANY($1::text[]);`,
-    [productIds],
+    `SELECT id FROM stock_products WHERE id = ANY($1::text[]) AND business_category = $2;`,
+    [productIds, businessCategory],
   );
   return new Set(products.rows.map((row) => row.id)).size === new Set(productIds).size;
 };
@@ -236,6 +256,7 @@ export const createSellerOrderBulk = async (
   viewer: OpsTokenClaims,
   input: {
     shopId: string;
+    businessCategory?: BusinessCategory;
     orderDate: string;
     items: SellerOrderBulkItem[];
   },
@@ -247,8 +268,9 @@ export const createSellerOrderBulk = async (
   return opsDb.withClient(async (client) => {
     await client.query('BEGIN');
     try {
+      const businessCategory = input.businessCategory ?? DEFAULT_BUSINESS_CATEGORY;
       const productIds = input.items.map((item) => item.productId);
-      const ok = await assertShopAndProducts(client, input.shopId, productIds);
+      const ok = await assertShopAndProducts(client, input.shopId, productIds, businessCategory);
       if (!ok) {
         await client.query('ROLLBACK');
         return null;
@@ -258,9 +280,15 @@ export const createSellerOrderBulk = async (
         `
           DELETE FROM order_sheet_values
           WHERE shop_id = $1
-            AND order_date = $2::date;
+            AND order_date = $2::date
+            AND EXISTS (
+              SELECT 1
+              FROM stock_products sp
+              WHERE sp.id = order_sheet_values.product_id
+                AND sp.business_category = $3
+            );
         `,
-        [input.shopId, input.orderDate],
+        [input.shopId, input.orderDate, businessCategory],
       );
 
       const created: SellerOrder[] = [];
@@ -309,6 +337,7 @@ export const createSellerOrderBulk = async (
               s.name AS shop_name,
               i.product_id,
               sp.name AS product_name,
+              sp.business_category,
               i.stock_on_hand,
               i.requested_packs,
               i.requested_units,
@@ -370,6 +399,7 @@ export const updateSellerOrderStatus = async (
         NULL::text AS shop_name,
         o.product_id,
         ''::text AS product_name,
+        NULL::text AS business_category,
         o.stock_on_hand,
         o.requested_packs,
         o.requested_units,
@@ -392,6 +422,7 @@ export const updateSellerOrderStatus = async (
         s.name AS shop_name,
         o.product_id,
         sp.name AS product_name,
+        sp.business_category,
         o.stock_on_hand,
         o.requested_packs,
         o.requested_units,

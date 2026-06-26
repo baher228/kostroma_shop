@@ -50,6 +50,14 @@ test('Dubai order schema rejects personal and free-text fields', () => {
     requestedUnits: 6,
     orderDate: '2026-05-01',
   }));
+  assert.equal(createSellerOrderSchema.parse({
+    shopId: 'shop_main',
+    businessCategory: 'Хлеб',
+    productId: 'prod_1',
+    requestedPacks: 1,
+    requestedUnits: 6,
+    orderDate: '2026-05-01',
+  }).orderDate, '2026-05-01');
   assert.throws(() => createSellerOrderSchema.parse({
     shopId: 'shop_main',
     productId: 'prod_1',
@@ -68,6 +76,21 @@ test('Dubai order schema rejects personal and free-text fields', () => {
       autoSuggested: true,
     }],
   }).items.map((item) => item.productId), ['prod_1']);
+  assert.equal(createSellerOrderBulkSchema.parse({
+    shopId: 'shop_main',
+    businessCategory: 'Сыр',
+    orderDate: '2026-05-01',
+    items: [{
+      productId: 'prod_1',
+      requestedPacks: 1,
+      requestedUnits: 6,
+    }],
+  }).businessCategory, 'Сыр');
+  assert.throws(() => createSellerOrderBulkSchema.parse({
+    shopId: 'shop_main',
+    orderDate: '2026-05-02',
+    items: [],
+  }));
   assert.throws(() => createSellerOrderBulkSchema.parse({
     shopId: 'shop_main',
     orderDate: '2026-05-02',

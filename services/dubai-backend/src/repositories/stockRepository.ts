@@ -1,5 +1,6 @@
 import { opsDb } from '../db/opsDb';
-import { OpsTokenClaims, ProductCategory, Shop, StockProduct, StockTable, StockTableRow } from '../domain/types';
+import { DEFAULT_BUSINESS_CATEGORY, DEFAULT_PRODUCT_CATEGORY, BUSINESS_CATEGORIES } from '../domain/types';
+import type { BusinessCategory, OpsTokenClaims, ProductCategory, Shop, StockProduct, StockTable, StockTableRow } from '../domain/types';
 
 type ShopDbRow = {
   id: string;
@@ -10,6 +11,7 @@ type ShopDbRow = {
 type ProductDbRow = {
   id: string;
   name: string;
+  business_category: BusinessCategory | null;
   category: ProductCategory | null;
   pack_type: string | null;
   units_in_pack: number | null;
@@ -33,6 +35,10 @@ type DashboardOverrideDbRow = {
   value: string;
 };
 
+type SubcategoryDbRow = {
+  name: string;
+};
+
 type DateRange = {
   from: string;
   to: string;
@@ -40,6 +46,7 @@ type DateRange = {
 
 type CreateProductInput = {
   name: string;
+  businessCategory?: BusinessCategory;
   category?: ProductCategory;
   packType: string;
   unitsInPack: number;
@@ -49,9 +56,6 @@ type CreateProductInput = {
   minStockUnits: number;
   maxStockUnits: number;
 };
-
-const PRODUCT_CATEGORIES: ProductCategory[] = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'];
-const DEFAULT_PRODUCT_CATEGORY: ProductCategory = 'Йогурты';
 
 const toDateKey = (date: Date): string => {
   const year = date.getFullYear();
@@ -128,7 +132,8 @@ const mapShop = (row: ShopDbRow): Shop => ({
 const mapProduct = (row: ProductDbRow): StockProduct => ({
   id: row.id,
   name: row.name,
-  category: row.category && PRODUCT_CATEGORIES.includes(row.category) ? row.category : DEFAULT_PRODUCT_CATEGORY,
+  businessCategory: row.business_category && BUSINESS_CATEGORIES.includes(row.business_category) ? row.business_category : DEFAULT_BUSINESS_CATEGORY,
+  category: row.category?.trim() || DEFAULT_PRODUCT_CATEGORY,
   packType: row.pack_type,
   unitsInPack: row.units_in_pack,
   packWeightKg: row.pack_weight_kg,
@@ -233,10 +238,71 @@ export const deleteShop = async (shopId: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0;
 };
 
+const ensureSubcategory = async (businessCategory: BusinessCategory, name: string): Promise<void> => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return;
+  }
+  await opsDb.query(
+    `
+      INSERT INTO stock_product_subcategories (business_category, name)
+      VALUES ($1, $2)
+      ON CONFLICT DO NOTHING;
+    `,
+    [businessCategory, trimmed],
+  );
+};
+
+export const listProductSubcategories = async (): Promise<Record<BusinessCategory, ProductCategory[]>> => {
+  const result = await opsDb.query<{ business_category: BusinessCategory; name: string }>(
+    `
+      SELECT business_category, name
+      FROM stock_product_subcategories
+      ORDER BY business_category ASC, created_at ASC, name ASC;
+    `,
+  );
+  return BUSINESS_CATEGORIES.reduce(
+    (acc, businessCategory: BusinessCategory) => {
+      acc[businessCategory] = result.rows
+        .filter((row: { business_category: BusinessCategory; name: string }) => row.business_category === businessCategory)
+        .map((row: { business_category: BusinessCategory; name: string }) => row.name);
+      return acc;
+    },
+    {} as Record<BusinessCategory, ProductCategory[]>,
+  );
+};
+
+export const createProductSubcategory = async (
+  businessCategory: BusinessCategory,
+  name: string,
+): Promise<Record<BusinessCategory, ProductCategory[]>> => {
+  await ensureSubcategory(businessCategory, name);
+  return listProductSubcategories();
+};
+
+export const deleteProductSubcategory = async (businessCategory: BusinessCategory, name: string): Promise<boolean> => {
+  const result = await opsDb.query(
+    `
+      DELETE FROM stock_product_subcategories
+      WHERE business_category = $1
+        AND name = $2
+        AND NOT EXISTS (
+          SELECT 1
+          FROM stock_products
+          WHERE business_category = $1
+            AND category = $2
+          LIMIT 1
+        );
+    `,
+    [businessCategory, name],
+  );
+  return (result.rowCount ?? 0) > 0;
+};
+
 export const listProducts = async (): Promise<StockProduct[]> => {
   const result = await opsDb.query<ProductDbRow>(
     `
-      SELECT id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
+      SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
       FROM stock_products
       ORDER BY created_at ASC, name ASC;
     `,
@@ -246,13 +312,16 @@ export const listProducts = async (): Promise<StockProduct[]> => {
 
 export const createProduct = async (input: CreateProductInput): Promise<StockProduct> => {
   const id = `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const resolvedCategory =
-    input.category && PRODUCT_CATEGORIES.includes(input.category) ? input.category : DEFAULT_PRODUCT_CATEGORY;
+  const resolvedBusinessCategory =
+    input.businessCategory && BUSINESS_CATEGORIES.includes(input.businessCategory) ? input.businessCategory : DEFAULT_BUSINESS_CATEGORY;
+  const resolvedCategory = input.category?.trim() || DEFAULT_PRODUCT_CATEGORY;
+  await ensureSubcategory(resolvedBusinessCategory, resolvedCategory);
   const result = await opsDb.query<ProductDbRow>(
     `
       INSERT INTO stock_products (
         id,
         name,
+        business_category,
         category,
         pack_type,
         units_in_pack,
@@ -263,12 +332,13 @@ export const createProduct = async (input: CreateProductInput): Promise<StockPro
         max_stock_units,
         created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-      RETURNING id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+      RETURNING id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
     `,
     [
       id,
       input.name.trim(),
+      resolvedBusinessCategory,
       resolvedCategory,
       input.packType.trim(),
       input.unitsInPack,
@@ -306,7 +376,7 @@ export const updateProductMeta = async (
   if (!updates.length) {
     const current = await opsDb.query<ProductDbRow>(
       `
-        SELECT id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
+        SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
         FROM stock_products
         WHERE id = $1
         LIMIT 1;
@@ -322,7 +392,7 @@ export const updateProductMeta = async (
       UPDATE stock_products
       SET ${updates.join(', ')}
       WHERE id = $${index}
-      RETURNING id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
+      RETURNING id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
     `,
     params,
   );
@@ -346,8 +416,11 @@ export const updateProduct = async (
   if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
     addUpdate('name', patch.name?.trim());
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'businessCategory')) {
+    addUpdate('business_category', patch.businessCategory);
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'category')) {
-    addUpdate('category', patch.category);
+    addUpdate('category', patch.category?.trim());
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'packType')) {
     addUpdate('pack_type', patch.packType?.trim());
@@ -374,7 +447,7 @@ export const updateProduct = async (
   if (!updates.length) {
     const current = await opsDb.query<ProductDbRow>(
       `
-        SELECT id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
+        SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
         FROM stock_products
         WHERE id = $1
         LIMIT 1;
@@ -384,13 +457,19 @@ export const updateProduct = async (
     return current.rows[0] ? mapProduct(current.rows[0]) : null;
   }
 
+  const nextBusinessCategory = patch.businessCategory ?? null;
+  const nextCategory = patch.category?.trim() ?? null;
+  if (nextBusinessCategory && nextCategory) {
+    await ensureSubcategory(nextBusinessCategory, nextCategory);
+  }
+
   params.push(productId);
   const result = await opsDb.query<ProductDbRow>(
     `
       UPDATE stock_products
       SET ${updates.join(', ')}
       WHERE id = $${index}
-      RETURNING id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
+      RETURNING id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units;
     `,
     params,
   );
@@ -450,22 +529,26 @@ const resolveRequestedShop = async (viewer: OpsTokenClaims, requestedShopId?: st
 
 export const getStockTable = async (
   viewer: OpsTokenClaims,
-  params: { shopId?: string; from?: string; to?: string; range?: 'week' | 'year' },
+  params: { shopId?: string; businessCategory?: BusinessCategory; from?: string; to?: string; range?: 'week' | 'year' },
 ): Promise<StockTable | null> => {
   const range = resolveRequestedRange(viewer, params);
+  const businessCategory =
+    params.businessCategory && BUSINESS_CATEGORIES.includes(params.businessCategory) ? params.businessCategory : DEFAULT_BUSINESS_CATEGORY;
   const shop = await resolveRequestedShop(viewer, params.shopId);
   if (!shop) {
     return null;
   }
 
-  const [productsResult, valuesResult, dashboardOverridesResult] = await Promise.all([
+  const [productsResult, valuesResult, dashboardOverridesResult, subcategoriesResult] = await Promise.all([
     opsDb.query<ProductDbRow>(
       `
-        SELECT id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat
+        SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat
                , min_stock_units, max_stock_units
         FROM stock_products
+        WHERE business_category = $1
         ORDER BY created_at ASC, name ASC;
       `,
+      [businessCategory],
     ),
     opsDb.query<ValueDbRow>(
       `
@@ -489,6 +572,15 @@ export const getStockTable = async (
       `,
       [shop.id, range.from, range.to],
     ),
+    opsDb.query<SubcategoryDbRow>(
+      `
+        SELECT name
+        FROM stock_product_subcategories
+        WHERE business_category = $1
+        ORDER BY created_at ASC, name ASC;
+      `,
+      [businessCategory],
+    ),
   ]);
 
   const dates = buildDateRange(range.from, range.to);
@@ -511,7 +603,8 @@ export const getStockTable = async (
     return {
       productId: product.id,
       name: product.name,
-      category: product.category && PRODUCT_CATEGORIES.includes(product.category) ? product.category : DEFAULT_PRODUCT_CATEGORY,
+      businessCategory: product.business_category && BUSINESS_CATEGORIES.includes(product.business_category) ? product.business_category : businessCategory,
+      category: product.category?.trim() || DEFAULT_PRODUCT_CATEGORY,
       packType: product.pack_type,
       unitsInPack: product.units_in_pack,
       packWeightKg: product.pack_weight_kg,
@@ -526,6 +619,8 @@ export const getStockTable = async (
 
   return {
     shop,
+    businessCategory,
+    subcategories: subcategoriesResult.rows.map((row: SubcategoryDbRow) => row.name),
     from: range.from,
     to: range.to,
     dates,
@@ -605,4 +700,3 @@ export const upsertStockValue = async (
   );
   return true;
 };
-

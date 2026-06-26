@@ -294,6 +294,11 @@ label {
   line-height: 1.45;
 }
 
+.download-list {
+  display: grid;
+  gap: 14px;
+}
+
 .download-card {
   display: flex;
   align-items: center;

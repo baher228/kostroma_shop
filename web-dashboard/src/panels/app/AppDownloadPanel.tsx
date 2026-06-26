@@ -10,8 +10,44 @@ type ApkManifest = {
   updatedAt: string;
 };
 
+type DownloadTarget = {
+  key: 'tablet' | 'worker';
+  title: string;
+  subtitle: string;
+  manifestPath: string;
+  missingText: string;
+};
+
+const downloadTargets: DownloadTarget[] = [
+  {
+    key: 'tablet',
+    title: 'Analitika Tablet',
+    subtitle: 'Store tablet app',
+    manifestPath: '/downloads/analitika-latest.json',
+    missingText: 'Tablet APK is not published yet.',
+  },
+  {
+    key: 'worker',
+    title: 'Analitika FOB',
+    subtitle: 'Worker mobile phone QR app',
+    manifestPath: '/downloads/analitika-worker-latest.json',
+    missingText: 'Worker mobile APK is not published yet.',
+  },
+];
+
+const loadManifest = async (manifestPath: string): Promise<ApkManifest | null> => {
+  const response = await fetch(`${manifestPath}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!response.ok) {
+    return null;
+  }
+  return response.json() as Promise<ApkManifest>;
+};
+
 export const AppDownloadPanel = () => {
-  const [manifest, setManifest] = useState<ApkManifest | null>(null);
+  const [manifests, setManifests] = useState<Record<DownloadTarget['key'], ApkManifest | null>>({
+    tablet: null,
+    worker: null,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -19,14 +55,12 @@ export const AppDownloadPanel = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`/downloads/analitika-latest.json?t=${Date.now()}`, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error('APK еще не опубликован. Запустите сборку Android APK.');
-      }
-      const nextManifest = await response.json() as ApkManifest;
-      setManifest(nextManifest);
+      const loaded = await Promise.all(
+        downloadTargets.map(async (target) => [target.key, await loadManifest(target.manifestPath)] as const),
+      );
+      setManifests(Object.fromEntries(loaded) as Record<DownloadTarget['key'], ApkManifest | null>);
     } catch (err) {
-      setManifest(null);
+      setManifests({ tablet: null, worker: null });
       setError(messageOf(err));
     } finally {
       setLoading(false);
@@ -43,19 +77,30 @@ export const AppDownloadPanel = () => {
 
   return (
     <section className="page-section">
-      <PageHeader title="Приложение" subtitle="Актуальный Android APK для установки на телефоны." action={<RefreshButton onClick={() => load()} />} />
-      {loading ? <p>Проверяем доступную сборку...</p> : <Feedback error={error} />}
-      {manifest && (
-        <article className="download-card">
-          <div>
-            <p className="eyebrow">Android APK</p>
-            <h3>Analitika v{manifest.version}</h3>
-            <p>{manifest.fileName}</p>
-            <small>Обновлено: {formatDateTime(manifest.updatedAt)} · commit {manifest.buildSha}</small>
-          </div>
-          <a className="download-button" href={manifest.url} download={manifest.fileName}>Скачать APK</a>
-        </article>
-      )}
+      <PageHeader title="Приложение" subtitle="Android APK для планшетов магазина и телефонов работников." action={<RefreshButton onClick={() => load()} />} />
+      {loading ? <p>Проверяем доступные сборки...</p> : <Feedback error={error} />}
+      <div className="download-list">
+        {downloadTargets.map((target) => {
+          const manifest = manifests[target.key];
+          return (
+            <article className="download-card" key={target.key}>
+              <div>
+                <p className="eyebrow">{target.subtitle}</p>
+                <h3>{manifest ? `${target.title} v${manifest.version}` : target.title}</h3>
+                {manifest ? (
+                  <>
+                    <p>{manifest.fileName}</p>
+                    <small>Обновлено: {formatDateTime(manifest.updatedAt)} · commit {manifest.buildSha}</small>
+                  </>
+                ) : (
+                  <p>{target.missingText}</p>
+                )}
+              </div>
+              {manifest && <a className="download-button" href={manifest.url} download={manifest.fileName}>Скачать APK</a>}
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 };

@@ -322,6 +322,8 @@ export const api = {
       dxbBlobRequest('/api/promotions/documents/final-table/download', token),
     downloadPriceTagPdf: async (token: string, rowNumber: number) =>
       dxbDownloadBlobRequest(`/api/promotions/rows/by-number/${rowNumber}/price-tag.pdf`, token),
+    downloadPosterPdf: async (token: string, rowNumber: number) =>
+      dxbDownloadBlobRequest(`/api/promotions/rows/by-number/${rowNumber}/poster.pdf`, token),
     downloadDocument: async (token: string, params: { documentType?: PromotionDocumentType; documentId?: string }) =>
       dxbRequest<{ url: string; fileName: string; document: PromotionDocument }>(
         `/api/promotions/documents/download${query({ type: params.documentType, id: params.documentId })}`,

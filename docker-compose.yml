@@ -84,8 +84,12 @@ services:
       OPS_POSTGRES_DB: analitika_ops
       OPS_POSTGRES_SSL: "false"
       R2_SIGNED_URL_TTL_SECONDS: ${R2_SIGNED_URL_TTL_SECONDS:-900}
+      GOOGLE_DRIVE_POSTERS_FOLDER_ID: ${GOOGLE_DRIVE_POSTERS_FOLDER_ID:-1MwQ82MaVQD_SO8cWmSsUtGNl13SWEmkt}
+      GOOGLE_APPLICATION_CREDENTIALS: /workspace/services/dubai-backend/secrets/google-service-account.json
     ports:
       - "4001:4001"
+    volumes:
+      - ./services/dubai-backend/secrets:/workspace/services/dubai-backend/secrets:ro
 
 volumes:
   postgres_ru_data:

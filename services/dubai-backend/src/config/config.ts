@@ -74,4 +74,6 @@ export const config = {
   r2Bucket: trimToUndefined(process.env.R2_BUCKET || process.env.R2_BUCKET_NAME),
   r2PublicBaseUrl: trimToUndefined(process.env.R2_PUBLIC_BASE_URL || process.env.R2_PUBLIC_URL),
   r2SignedUrlTtlSeconds: parsePort(process.env.R2_SIGNED_URL_TTL_SECONDS ?? '900'),
+  googleDrivePostersFolderId: trimToUndefined(process.env.GOOGLE_DRIVE_POSTERS_FOLDER_ID),
+  googleApplicationCredentials: trimToUndefined(process.env.GOOGLE_APPLICATION_CREDENTIALS),
 };

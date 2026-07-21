@@ -34,6 +34,7 @@ expo.log
 # local env files
 .env
 .env*.local
+services/dubai-backend/secrets/
 
 # typescript
 *.tsbuildinfo

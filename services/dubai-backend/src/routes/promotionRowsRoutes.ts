@@ -9,6 +9,7 @@ import {
   listPromotionRows,
   updatePromotionRowByNumber,
 } from '../repositories/promotionRowsRepository';
+import { downloadPosterPdfFile, findPosterPdfForProduct, posterPdfContentDisposition } from '../services/googleDrivePosterService';
 import { createPromotionPriceTagPdf, promotionPriceTagFileName } from '../services/promotionPriceTagPdfService';
 
 const statuses = new Set<PromotionRowStatus>(['past', 'current', 'future']);
@@ -95,6 +96,35 @@ export const registerPromotionRowsRoutes = (app: Express) => {
       res.send(pdf);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось сделать ценник.' });
+    }
+  });
+
+  app.get('/api/promotions/rows/by-number/:rowNumber/poster.pdf', async (req: Request, res: Response) => {
+    try {
+      const rowNumber = parseRowNumber(req.params.rowNumber);
+      const row = await getPromotionRowByNumber(rowNumber);
+      if (!row) {
+        res.status(404).json({ message: 'Строка с таким номером не найдена.' });
+        return;
+      }
+      const match = await findPosterPdfForProduct(row.productName);
+      if (!match.best) {
+        res.status(404).json({
+          message: 'Не удалось найти PDF-постер для этого товара в Google Drive.',
+          candidates: match.candidates.map((candidate) => ({
+            fileName: candidate.file.name,
+            score: candidate.score,
+          })),
+        });
+        return;
+      }
+      const pdf = await downloadPosterPdfFile(match.best.file.id);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      res.setHeader('Content-Disposition', posterPdfContentDisposition(match.best.file.name));
+      res.send(pdf);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось скачать постер.' });
     }
   });
 

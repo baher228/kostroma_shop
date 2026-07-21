@@ -72,27 +72,54 @@ const dateOnly = (value: Date | string | null) => {
 const iso = (value: Date | string) => (value instanceof Date ? value.toISOString() : new Date(value).toISOString());
 const num = (value: string | number | null) => (value === null ? null : Number(value));
 
-const mapRow = (row: PromotionTableRowDb): PromotionTableRow => ({
-  id: row.id,
-  rowNumber: Number(row.row_number),
-  status: row.status,
-  productName: row.product_name,
-  startDate: dateOnly(row.start_date),
-  endDate: dateOnly(row.end_date),
-  promoPrice: num(row.promo_price),
-  regularPrice: num(row.regular_price),
-  priceDifference: num(row.price_difference),
-  realDiscountPercent: num(row.real_discount_percent),
-  advertisingDiscountPercent: num(row.advertising_discount_percent),
-  sourceDocumentId: row.source_document_id,
-  sourceDocumentFileName: row.source_document_file_name,
-  invoiceDocumentId: row.invoice_document_id,
-  invoiceDocumentFileName: row.invoice_document_file_name,
-  planDocumentId: row.plan_document_id,
-  planDocumentFileName: row.plan_document_file_name,
-  createdAt: iso(row.created_at),
-  updatedAt: iso(row.updated_at),
-});
+const todayKey = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
+export const promotionStatusForPeriod = (
+  storedStatus: PromotionRowStatus,
+  startDate: string | null,
+  endDate: string | null,
+): PromotionRowStatus => {
+  if (!startDate && !endDate) return storedStatus;
+  const today = todayKey();
+  if (endDate && endDate < today) return 'past';
+  if (startDate && startDate > today) return 'future';
+  return 'current';
+};
+
+const mapRow = (row: PromotionTableRowDb): PromotionTableRow => {
+  const startDate = dateOnly(row.start_date);
+  const endDate = dateOnly(row.end_date);
+  return {
+    id: row.id,
+    rowNumber: Number(row.row_number),
+    status: promotionStatusForPeriod(row.status, startDate, endDate),
+    productName: row.product_name,
+    startDate,
+    endDate,
+    promoPrice: num(row.promo_price),
+    regularPrice: num(row.regular_price),
+    priceDifference: num(row.price_difference),
+    realDiscountPercent: num(row.real_discount_percent),
+    advertisingDiscountPercent: num(row.advertising_discount_percent),
+    sourceDocumentId: row.source_document_id,
+    sourceDocumentFileName: row.source_document_file_name,
+    invoiceDocumentId: row.invoice_document_id,
+    invoiceDocumentFileName: row.invoice_document_file_name,
+    planDocumentId: row.plan_document_id,
+    planDocumentFileName: row.plan_document_file_name,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+};
 
 const id = () => `promo_row_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 

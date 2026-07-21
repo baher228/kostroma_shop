@@ -123,3 +123,11 @@ test('order service delegates seller order creation and preserves not-found outc
   assert.equal(capturedViewer.role, 'worker');
   assert.equal(capturedPayload.productId, 'missing_product');
 });
+
+test('promotion row status is derived from dates when a period exists', () => {
+  const { promotionStatusForPeriod } = require('../dist/repositories/promotionRowsRepository');
+
+  assert.equal(promotionStatusForPeriod('current', '1900-01-01', '1900-01-31'), 'past');
+  assert.equal(promotionStatusForPeriod('current', '2999-01-01', '2999-01-31'), 'future');
+  assert.equal(promotionStatusForPeriod('future', null, null), 'future');
+});

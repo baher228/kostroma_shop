@@ -27,7 +27,7 @@ export type PosterMatch = {
   score: number;
 };
 
-const pdfMimeType = 'application/pdf';
+const psdMimeTypes = ['image/vnd.adobe.photoshop', 'image/x-photoshop'];
 const tokenScope = 'https://www.googleapis.com/auth/drive.readonly';
 const driveApiBase = 'https://www.googleapis.com/drive/v3';
 
@@ -140,14 +140,14 @@ const driveRequest = async <T>(pathAndQuery: string): Promise<T> => {
   return payload as T;
 };
 
-export const listPosterPdfFiles = async (folderId = config.googleDrivePostersFolderId): Promise<DrivePosterFile[]> => {
+const listPosterFilesByQuery = async (mimeQuery: string, folderId = config.googleDrivePostersFolderId): Promise<DrivePosterFile[]> => {
   if (!folderId) throw new Error('GOOGLE_DRIVE_POSTERS_FOLDER_ID is not configured.');
   const files: DrivePosterFile[] = [];
   let pageToken: string | undefined;
 
   do {
     const params = new URLSearchParams({
-      q: `'${folderId}' in parents and trashed = false and mimeType = '${pdfMimeType}'`,
+      q: `'${folderId}' in parents and trashed = false and (${mimeQuery})`,
       fields: 'nextPageToken,files(id,name,mimeType,size,modifiedTime)',
       pageSize: '100',
       supportsAllDrives: 'true',
@@ -162,8 +162,13 @@ export const listPosterPdfFiles = async (folderId = config.googleDrivePostersFol
   return files.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 };
 
-export const findPosterPdfForProduct = async (productName: string) => {
-  const files = await listPosterPdfFiles();
+export const listPosterPsdFiles = async (folderId = config.googleDrivePostersFolderId): Promise<DrivePosterFile[]> => {
+  const mimeQuery = psdMimeTypes.map((mimeType) => `mimeType = '${mimeType}'`).join(' or ');
+  const files = await listPosterFilesByQuery(mimeQuery, folderId);
+  return files.filter((file) => file.name.toLowerCase().endsWith('.psd') || psdMimeTypes.includes(file.mimeType));
+};
+
+const findPosterFileForProduct = async (productName: string, files: DrivePosterFile[]) => {
   const matches = files
     .map((file) => ({ file, score: scorePosterFileName(productName, file.name) }))
     .filter((match) => match.score > 0)
@@ -176,14 +181,17 @@ export const findPosterPdfForProduct = async (productName: string) => {
   };
 };
 
-export const downloadPosterPdfFile = async (fileId: string) => {
+export const findPosterPsdForProduct = async (productName: string) =>
+  findPosterFileForProduct(productName, await listPosterPsdFiles());
+
+export const downloadPosterDriveFile = async (fileId: string) => {
   const token = await requestAccessToken();
   const response = await fetch(`${driveApiBase}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(payload?.error?.message || 'Failed to download poster PDF from Google Drive.');
+    throw new Error(payload?.error?.message || 'Failed to download poster file from Google Drive.');
   }
   return Buffer.from(await response.arrayBuffer());
 };

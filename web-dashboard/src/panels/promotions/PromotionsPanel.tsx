@@ -350,7 +350,7 @@ const PromotionProductCard = ({
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [downloadingPriceTag, setDownloadingPriceTag] = useState(false);
-  const [downloadingPoster, setDownloadingPoster] = useState(false);
+  const [generatingPoster, setGeneratingPoster] = useState(false);
   const invoiceDocumentId = row.invoiceDocumentId ?? (
     row.sourceDocumentFileName?.toLowerCase().endsWith('.pdf') ? row.sourceDocumentId : null
   );
@@ -403,11 +403,11 @@ const PromotionProductCard = ({
     }
   };
 
-  const downloadPoster = async () => {
-    setDownloadingPoster(true);
+  const generatePoster = async () => {
+    setGeneratingPoster(true);
     setError('');
     try {
-      const result = await api.promotions.downloadPosterPdf(session.token, row.rowNumber);
+      const result = await api.promotions.downloadGeneratedPosterPdf(session.token, row.rowNumber);
       const url = URL.createObjectURL(result.blob);
       const link = document.createElement('a');
       link.href = url;
@@ -419,7 +419,7 @@ const PromotionProductCard = ({
     } catch (err) {
       setError(messageOf(err));
     } finally {
-      setDownloadingPoster(false);
+      setGeneratingPoster(false);
     }
   };
 
@@ -454,8 +454,8 @@ const PromotionProductCard = ({
           <button disabled={downloadingPriceTag || row.promoPrice === null || row.regularPrice === null} onClick={() => void downloadPriceTag()}>
             {downloadingPriceTag ? 'Делаем ценник...' : 'Сделать ценник'}
           </button>
-          <button disabled={downloadingPoster} onClick={() => void downloadPoster()}>
-            {downloadingPoster ? 'Ищем постер...' : 'Скачать постер'}
+          <button disabled={generatingPoster || row.promoPrice === null || row.regularPrice === null} onClick={() => void generatePoster()}>
+            {generatingPoster ? 'Генерируем...' : 'Сгенерировать постер'}
           </button>
         </div>
       </div>

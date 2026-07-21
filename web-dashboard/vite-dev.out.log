@@ -1,33 +1,11 @@
 
-  [32m[1mVITE[22m v7.3.3[39m  [2mready in [0m[1m686[22m[2m[0m ms[22m
+> analitika-web-dashboard@1.0.0 dev
+> vite --host 0.0.0.0 --host 0.0.0.0
+
+
+  [32m[1mVITE[22m v7.3.3[39m  [2mready in [0m[1m573[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://172.24.208.1:[1m5173[22m/[39m
-  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.10.214.31:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.100.165:[1m5173[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://172.26.160.1:[1m5173[22m/[39m
-[2m10:59:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/app/Login.tsx, /src/panels/orders/OrdersPanel.tsx, /src/panels/products/ProductsPanel.tsx, /src/panels/promotions/PromotionsPanel.tsx[22m
-[2m10:59:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m10:59:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
-[2m11:11:45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css[22m
-[2m17:18:23[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/app/Login.tsx, /src/panels/orders/OrdersPanel.tsx, /src/panels/products/ProductsPanel.tsx, /src/panels/promotions/PromotionsPanel.tsx[22m
-[2m17:18:23[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m17:18:23[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
-[2m17:19:28[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/panels/promotions/PromotionsPanel.tsx[22m
-[2m17:29:24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/app/Login.tsx, /src/panels/orders/OrdersPanel.tsx, /src/panels/products/ProductsPanel.tsx, /src/panels/promotions/PromotionsPanel.tsx[22m
-[2m17:29:24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/panels/promotions/PromotionsPanel.tsx[22m
-[2m17:29:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m17:29:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
-[2m18:56:45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/app/Login.tsx, /src/panels/orders/OrdersPanel.tsx, /src/panels/products/ProductsPanel.tsx, /src/panels/promotions/PromotionsPanel.tsx[22m
-[2m18:56:45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m18:56:45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
-[2m18:56:46[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/panels/promotions/PromotionsPanel.tsx[22m
-[2m18:57:18[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/panels/promotions/PromotionsPanel.tsx[22m
-[2m19:09:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/app/Login.tsx, /src/panels/orders/OrdersPanel.tsx, /src/panels/products/ProductsPanel.tsx, /src/panels/promotions/PromotionsPanel.tsx[22m
-[2m19:09:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/panels/promotions/PromotionsPanel.tsx[22m
-[2m19:09:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m19:09:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
-[2m19:35:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/app/Login.tsx, /src/panels/orders/OrdersPanel.tsx, /src/panels/products/ProductsPanel.tsx, /src/panels/promotions/PromotionsPanel.tsx[22m
-[2m19:35:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m19:35:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
-[2m19:36:16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/panels/promotions/PromotionsPanel.tsx[22m
-[2m19:36:55[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/panels/promotions/PromotionsPanel.tsx[22m

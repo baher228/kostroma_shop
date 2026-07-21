@@ -9,7 +9,12 @@ import {
   listPromotionRows,
   updatePromotionRowByNumber,
 } from '../repositories/promotionRowsRepository';
-import { downloadPosterPdfFile, findPosterPdfForProduct, posterPdfContentDisposition } from '../services/googleDrivePosterService';
+import { createGeneratedPosterPdfFromPsd } from '../services/generatedPosterPdfService';
+import {
+  downloadPosterDriveFile,
+  findPosterPsdForProduct,
+  posterPdfContentDisposition,
+} from '../services/googleDrivePosterService';
 import { createPromotionPriceTagPdf, promotionPriceTagFileName } from '../services/promotionPriceTagPdfService';
 
 const statuses = new Set<PromotionRowStatus>(['past', 'current', 'future']);
@@ -99,7 +104,7 @@ export const registerPromotionRowsRoutes = (app: Express) => {
     }
   });
 
-  app.get('/api/promotions/rows/by-number/:rowNumber/poster.pdf', async (req: Request, res: Response) => {
+  app.get('/api/promotions/rows/by-number/:rowNumber/poster-generated.pdf', async (req: Request, res: Response) => {
     try {
       const rowNumber = parseRowNumber(req.params.rowNumber);
       const row = await getPromotionRowByNumber(rowNumber);
@@ -107,10 +112,14 @@ export const registerPromotionRowsRoutes = (app: Express) => {
         res.status(404).json({ message: 'Строка с таким номером не найдена.' });
         return;
       }
-      const match = await findPosterPdfForProduct(row.productName);
+      if (row.promoPrice === null || row.regularPrice === null) {
+        res.status(400).json({ message: 'Для генерации постера нужны старая и новая цена.' });
+        return;
+      }
+      const match = await findPosterPsdForProduct(row.productName);
       if (!match.best) {
         res.status(404).json({
-          message: 'Не удалось найти PDF-постер для этого товара в Google Drive.',
+          message: 'Не удалось найти PSD-постер для этого товара в Google Drive.',
           candidates: match.candidates.map((candidate) => ({
             fileName: candidate.file.name,
             score: candidate.score,
@@ -118,13 +127,14 @@ export const registerPromotionRowsRoutes = (app: Express) => {
         });
         return;
       }
-      const pdf = await downloadPosterPdfFile(match.best.file.id);
+      const psd = await downloadPosterDriveFile(match.best.file.id);
+      const pdf = createGeneratedPosterPdfFromPsd(psd, row);
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Cache-Control', 'private, max-age=300');
-      res.setHeader('Content-Disposition', posterPdfContentDisposition(match.best.file.name));
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Content-Disposition', posterPdfContentDisposition(match.best.file.name.replace(/\.psd$/i, '.pdf')));
       res.send(pdf);
     } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось скачать постер.' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось сгенерировать постер из PSD.' });
     }
   });
 

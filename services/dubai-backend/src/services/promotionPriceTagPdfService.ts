@@ -13,6 +13,7 @@ type TextBox = {
   weight?: 'bold' | 'normal';
   align?: 'left' | 'center' | 'right';
   color?: string;
+  scaleX?: number;
 };
 
 type MultiLineTextBox = TextBox & {
@@ -123,9 +124,8 @@ const splitProductName = (value: string) => {
 
 const font = (size: number, weight: 'bold' | 'normal' = 'bold') => `${weight} ${size}px "${FONT_FAMILY}"`;
 
-const compactDescription = (value: string) =>
-  value
-    .replace(/(^|\s)ВАР\.?(?=\s|$)/giu, ' ')
+const compactDescription = (value: string) => {
+  const compacted = value
     .replace(/\bВАРЕНАЯ\b/giu, ' ')
     .replace(/\bВАРЕНЫЕ\b/giu, ' ')
     .replace(/\bС\s+МОЦАРЕЛЛОЙ\s+И\s+ТРАВАМИ\b/giu, 'С МОЦАРЕЛ. И ТРАВАМИ')
@@ -137,19 +137,33 @@ const compactDescription = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+  return compacted.startsWith('ДЛЯ ГРИЛЯ ')
+    ? compacted.replace(/(^|\s)ВАР\.?(?=\s|$)/giu, ' ').replace(/\s+/g, ' ').trim()
+    : compacted;
+};
+
 const fitText = (ctx: SKRSContext2D, text: string, box: TextBox) => {
   const value = text.trim();
   let size = box.maxSize;
+  const scaleX = box.scaleX ?? 1;
   while (size > box.minSize) {
     ctx.font = font(size, box.weight);
-    if (ctx.measureText(value).width <= box.width) break;
+    if (ctx.measureText(value).width * scaleX <= box.width) break;
     size -= 2;
   }
   ctx.fillStyle = box.color ?? '#000000';
   ctx.textAlign = box.align ?? 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.font = font(size, box.weight);
-  ctx.fillText(value, box.x, box.y);
+  if (scaleX === 1) {
+    ctx.fillText(value, box.x, box.y);
+    return;
+  }
+  ctx.save();
+  ctx.translate(box.x, box.y);
+  ctx.scale(scaleX, 1);
+  ctx.fillText(value, 0, 0);
+  ctx.restore();
 };
 
 const wrapWords = (ctx: SKRSContext2D, text: string, width: number) => {
@@ -294,7 +308,7 @@ export const createPromotionPriceTagPdf = (row: PromotionTableRow): Buffer => {
   ctx.lineTo(WIDTH, 184);
   ctx.stroke();
 
-  fitText(ctx, 'АКЦИЯ', { x: WIDTH / 2, y: 149, width: 900, maxSize: 150, minSize: 88, align: 'center', color: red });
+  fitText(ctx, 'АКЦИЯ', { x: WIDTH / 2, y: 149, width: 980, maxSize: 150, minSize: 88, align: 'center', color: red, scaleX: 1.18 });
   fitText(ctx, title, { x: WIDTH / 2, y: 367, width: 1040, maxSize: 172, minSize: 72, align: 'center', color: black });
   fitText(ctx, displayDescription, {
     x: WIDTH / 2,
@@ -310,8 +324,8 @@ export const createPromotionPriceTagPdf = (row: PromotionTableRow): Buffer => {
   fitText(ctx, oldPrice.rubles, { x: 48, y: 760, width: 310, maxSize: 190, minSize: 120, color: red });
   fitText(ctx, oldPrice.cents, { x: 352, y: 656, width: 95, maxSize: 62, minSize: 38, color: red });
 
-  fitText(ctx, newPrice.rubles, { x: 392, y: 1000, width: 610, maxSize: 455, minSize: 240, color: red });
-  fitText(ctx, newPrice.cents, { x: 1014, y: 743, width: 130, maxSize: 110, minSize: 64, color: red });
+  fitText(ctx, newPrice.rubles, { x: 435, y: 970, width: 610, maxSize: 455, minSize: 240, color: red });
+  fitText(ctx, newPrice.cents, { x: 1035, y: 720, width: 130, maxSize: 110, minSize: 64, color: red });
 
   fitText(ctx, 'ВЫГОДА:', { x: 48, y: 1038, width: 390, maxSize: 88, minSize: 52, color: red });
   if (discount) fitText(ctx, discount, { x: 48, y: 1196, width: 430, maxSize: 180, minSize: 92, color: red });

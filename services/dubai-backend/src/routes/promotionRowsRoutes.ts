@@ -9,6 +9,7 @@ import {
   listPromotionRows,
   updatePromotionRowByNumber,
 } from '../repositories/promotionRowsRepository';
+import { createPromotionPriceTagPdf, promotionPriceTagFileName } from '../services/promotionPriceTagPdfService';
 
 const statuses = new Set<PromotionRowStatus>(['past', 'current', 'future']);
 
@@ -71,6 +72,29 @@ export const registerPromotionRowsRoutes = (app: Express) => {
       res.json({ row });
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось загрузить строку.' });
+    }
+  });
+
+  app.get('/api/promotions/rows/by-number/:rowNumber/price-tag.pdf', async (req: Request, res: Response) => {
+    try {
+      const rowNumber = parseRowNumber(req.params.rowNumber);
+      const row = await getPromotionRowByNumber(rowNumber);
+      if (!row) {
+        res.status(404).json({ message: 'Строка с таким номером не найдена.' });
+        return;
+      }
+      if (row.promoPrice === null || row.regularPrice === null) {
+        res.status(400).json({ message: 'Для ценника нужны новая и старая цена.' });
+        return;
+      }
+      const pdf = createPromotionPriceTagPdf(row);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Content-Disposition', `attachment; filename="${promotionPriceTagFileName(row)}"`);
+      res.send(pdf);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось сделать ценник.' });
     }
   });
 

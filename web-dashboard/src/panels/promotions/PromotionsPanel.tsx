@@ -349,6 +349,7 @@ const PromotionProductCard = ({
 }) => {
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [downloadingPriceTag, setDownloadingPriceTag] = useState(false);
   const invoiceDocumentId = row.invoiceDocumentId ?? (
     row.sourceDocumentFileName?.toLowerCase().endsWith('.pdf') ? row.sourceDocumentId : null
   );
@@ -381,6 +382,26 @@ const PromotionProductCard = ({
     }
   };
 
+  const downloadPriceTag = async () => {
+    setDownloadingPriceTag(true);
+    setError('');
+    try {
+      const result = await api.promotions.downloadPriceTagPdf(session.token, row.rowNumber);
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = result.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setDownloadingPriceTag(false);
+    }
+  };
+
   return (
     <Modal title="Карточка товара" onClose={onClose}>
       <div className="promotion-product-card">
@@ -409,7 +430,9 @@ const PromotionProductCard = ({
           <button className="secondary" disabled={!hasInvoice} onClick={() => void openInvoice()}>
             Посмотреть накладную
           </button>
-          <button disabled title="Генерация ценников будет добавлена позже">Сделать ценник</button>
+          <button disabled={downloadingPriceTag || row.promoPrice === null || row.regularPrice === null} onClick={() => void downloadPriceTag()}>
+            {downloadingPriceTag ? 'Делаем ценник...' : 'Сделать ценник'}
+          </button>
         </div>
       </div>
     </Modal>

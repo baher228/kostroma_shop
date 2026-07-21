@@ -112,6 +112,26 @@ const makeBlobRequest = async (baseUrl: string, path: string, bearerToken: strin
   return response.blob();
 };
 
+const makeDownloadBlobRequest = async (baseUrl: string, path: string, bearerToken: string): Promise<{ blob: Blob; fileName: string }> => {
+  const response = await fetch(`${baseUrl}${path}`, {
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/pdf',
+      Authorization: `Bearer ${bearerToken}`,
+    },
+  });
+  if (!response.ok) {
+    const parsed = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new ApiError(parsed?.message || 'Request failed.', response.status);
+  }
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const fileNameMatch = disposition.match(/filename="([^"]+)"/i);
+  return {
+    blob: await response.blob(),
+    fileName: fileNameMatch?.[1] ?? 'download.pdf',
+  };
+};
+
 const fetchOpsToken = async (ruToken: string): Promise<string> => {
   const cached = opsTokenCache.get(ruToken);
   if (cached && cached.expiresAt - Date.now() > 30_000) {
@@ -164,6 +184,20 @@ const dxbBlobRequest = async (path: string, token: string) => {
       opsTokenCache.delete(token);
       const opsToken = await fetchOpsToken(token);
       return makeBlobRequest(DXB_API_BASE_URL, path, opsToken);
+    }
+    throw error;
+  }
+};
+
+const dxbDownloadBlobRequest = async (path: string, token: string) => {
+  try {
+    const opsToken = await fetchOpsToken(token);
+    return await makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      opsTokenCache.delete(token);
+      const opsToken = await fetchOpsToken(token);
+      return makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken);
     }
     throw error;
   }
@@ -286,6 +320,8 @@ export const api = {
       (await dxbRequest<{ document: PromotionDocument }>('/api/promotions/documents/final-table', { method: 'POST', token })).document,
     downloadFinalTableCsv: async (token: string) =>
       dxbBlobRequest('/api/promotions/documents/final-table/download', token),
+    downloadPriceTagPdf: async (token: string, rowNumber: number) =>
+      dxbDownloadBlobRequest(`/api/promotions/rows/by-number/${rowNumber}/price-tag.pdf`, token),
     downloadDocument: async (token: string, params: { documentType?: PromotionDocumentType; documentId?: string }) =>
       dxbRequest<{ url: string; fileName: string; document: PromotionDocument }>(
         `/api/promotions/documents/download${query({ type: params.documentType, id: params.documentId })}`,

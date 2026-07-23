@@ -23,69 +23,37 @@ import { OrderSheetPanel } from '../components/OrderSheetPanel';
 import { SupportPanel } from '../components/SupportPanel';
 import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
-import { WorkerCheckInCard } from '../components/WorkerCheckInCard';
-import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
+import { FobQrCard } from '../components/FobQrCard';
+import { FobScannerPanel } from '../components/FobScannerPanel';
+import {
+  DASHBOARD_COLUMNS,
+  BUSINESS_CATEGORIES,
+  DEFAULT_BUSINESS_CATEGORY,
+  DEFAULT_PRODUCT_CATEGORY,
+  MAX_ORDER_VALUE_LEN,
+  PRODUCT_CATEGORIES,
+  TWO_WEEKS_DAYS,
+  WEEK_DAYS,
+  type DashboardColumn,
+  type DashboardColumnKey,
+  type DashboardManualOrderKey,
+  type DashboardRowValues,
+  type DashboardTone,
+  type BusinessCategory,
+  type WeekDateMap,
+} from '../constants/dashboard';
 import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
+import {
+  buildDashboardRowValues,
+  dashboardHeaderSubtitle,
+  deriveDashboardWeeks,
+  isManualOrderKey,
+  isManualStockKey,
+  sanitizeOrderValue,
+} from '../../../shared/dashboard-calculations';
+import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
-type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users';
-
-type DashboardManualOrderKey = 'orderPackThu' | 'orderPackSat' | 'orderPackTue';
-type DashboardColumnKey =
-  | 'currentTue'
-  | DashboardManualOrderKey
-  | 'orderUnitsThu'
-  | 'orderUnitsSat'
-  | 'orderUnitsTue'
-  | 'prevWed'
-  | 'soldPrevMonWed'
-  | 'soldMonWed'
-  | 'currentWed'
-  | 'currentThu'
-  | 'prevFri'
-  | 'soldPrevWedFri'
-  | 'soldWedFri'
-  | 'currentFri'
-  | 'currentSun'
-  | 'prevMon'
-  | 'soldPrevFriMon'
-  | 'soldFriMon'
-  | 'currentMon';
-
-type DashboardTone = 'neutral' | 'order' | 'yellow' | 'green' | 'blue';
-type DashboardWeekRef = 'current' | 'previous';
-type WeekSlot = keyof WeekDateMap;
-
-type DashboardColumn = {
-  key: DashboardColumnKey;
-  title: string;
-  subtitle: string;
-  kind: 'stock' | 'order' | 'metric';
-  tone: DashboardTone;
-  dateKind?: 'none' | 'day' | 'range';
-  dateWeek?: DashboardWeekRef;
-  dateDay?: WeekSlot;
-  dateFrom?: WeekSlot;
-  dateTo?: WeekSlot;
-  dateToWeek?: DashboardWeekRef;
-};
-
-type DashboardSheetColumn = {
-  id: string;
-  weekStart: string;
-  key: DashboardOverrideKey;
-  title: string;
-  subtitle: string;
-  kind: 'stock' | 'order' | 'metric';
-  tone: DashboardTone;
-  dateLabel?: string;
-  valueSourceWeekStart?: string;
-  valueSourceKey?: DashboardOverrideKey;
-};
-
-type WeekDateMap = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sun', string>>;
-
-type DashboardRowValues = Record<DashboardColumnKey, string>;
-type DashboardOverrideKey = keyof DashboardRowValues;
+type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob';
 
 type EditingCell = {
   productId: string;
@@ -98,85 +66,7 @@ type StockScreenProps = {
   onLogout: () => Promise<void>;
 };
 
-const PRODUCT_CATEGORIES = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'] as unknown as ProductCategory[];
-const DEFAULT_PRODUCT_CATEGORY: ProductCategory = PRODUCT_CATEGORIES[0];
 const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 12 : 0;
-const WEEK_DAYS = 7;
-const TWO_WEEKS_DAYS = 14;
-const MAX_ORDER_VALUE_LEN = 5;
-// Fixed 2-week window so the rightmost Monday in the dashboard is 11.05.2026.
-const DASHBOARD_WINDOW_START = '2026-04-28';
-
-const DASHBOARD_COLUMNS: DashboardColumn[] = [
-  { key: 'currentTue', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0412\u0442\u043e\u0440\u043d\u0438\u043a', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
-  { key: 'orderPackThu', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0447\u0435\u0442\u0432\u0435\u0440\u0433', subtitle: '\u0412\u0442\u043e\u0440\u043d\u0438\u043a', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'tue' },
-  { key: 'orderUnitsThu', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
-  { key: 'prevWed', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0421\u0440\u0435\u0434\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'wed' },
-  { key: 'soldPrevMonWed', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u043d-\u0421\u0440', kind: 'metric', tone: 'yellow', dateKind: 'range', dateWeek: 'previous', dateFrom: 'mon', dateTo: 'wed' },
-  { key: 'currentWed', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0421\u0440\u0435\u0434\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'wed' },
-  { key: 'soldMonWed', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u043d-\u0421\u0440', kind: 'metric', tone: 'yellow', dateKind: 'range', dateWeek: 'current', dateFrom: 'mon', dateTo: 'wed' },
-  { key: 'currentThu', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0427\u0435\u0442\u0432\u0435\u0440\u0433', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'thu' },
-  { key: 'orderPackSat', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0441\u0443\u0431\u0431\u043e\u0442\u0443', subtitle: '\u0427\u0435\u0442\u0432\u0435\u0440\u0433', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'thu' },
-  { key: 'orderUnitsSat', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
-  { key: 'prevFri', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u044f\u0442\u043d\u0438\u0446\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'fri' },
-  { key: 'soldPrevWedFri', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u0421\u0440-\u041f\u0442', kind: 'metric', tone: 'green', dateKind: 'range', dateWeek: 'previous', dateFrom: 'wed', dateTo: 'fri' },
-  { key: 'currentFri', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u044f\u0442\u043d\u0438\u0446\u0430', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'fri' },
-  { key: 'soldWedFri', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u0421\u0440-\u041f\u0442', kind: 'metric', tone: 'green', dateKind: 'range', dateWeek: 'current', dateFrom: 'wed', dateTo: 'fri' },
-  { key: 'currentSun', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u0412\u043e\u0441\u043a\u0440\u0435\u0441', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
-  { key: 'orderPackTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0443\u043f\u0430\u043a\u043e\u0432\u043e\u043a \u043d\u0430 \u0432\u0442\u043e\u0440\u043d\u0438\u043a', subtitle: '\u0412\u043e\u0441\u043a\u0440\u0435\u0441', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
-  { key: 'orderUnitsTue', title: '\u0417\u0430\u043a\u0430\u0437 \u0448\u0442\u0443\u043a', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
-  { key: 'prevMon', title: '\u041f\u0440\u043e\u0448\u043b\u044b\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon' },
-  { key: 'soldPrevFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0439 \u043d\u0435\u0434\u0435\u043b\u0435', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'previous' },
-  { key: 'currentMon', title: '\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0441\u0442\u0430\u0442\u043e\u043a', subtitle: '\u041f\u043e\u043d\u0435\u0434\u0435\u043b', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon' },
-  { key: 'soldFriMon', title: '\u041f\u0440\u043e\u0434\u0430\u043d\u043e', subtitle: '\u041f\u0442-\u041f\u043d', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
-];
-
-const DASHBOARD_WEEK_STARTS = ['2026-04-28', '2026-05-05'] as const;
-
-const DASHBOARD_SHEET_COLUMNS_BY_WEEK: Record<string, DashboardSheetColumn[]> = {
-  '2026-04-28': [
-    { id: 'w1-currentTue', weekStart: '2026-04-28', key: 'currentTue', title: 'Текущий остаток', subtitle: 'Вторник', kind: 'stock', tone: 'neutral', dateLabel: '28.04' },
-    { id: 'w1-orderPackThu', weekStart: '2026-04-28', key: 'orderPackThu', title: 'Заказ упаковок на четверг', subtitle: 'Вторник', kind: 'order', tone: 'order', dateLabel: '28.04' },
-    { id: 'w1-orderUnitsThu', weekStart: '2026-04-28', key: 'orderUnitsThu', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
-    { id: 'w1-prevWed', weekStart: '2026-04-28', key: 'prevWed', title: 'Прошлый остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateLabel: '29.04' },
-    { id: 'w1-soldPrevMonWed', weekStart: '2026-04-28', key: 'soldPrevMonWed', title: 'Продано на прошлой неделе', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '27.04-29.04' },
-    { id: 'w1-currentWed', weekStart: '2026-04-28', key: 'currentWed', title: 'Текущий остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateLabel: '29.04' },
-    { id: 'w1-soldMonWed', weekStart: '2026-04-28', key: 'soldMonWed', title: 'Продано', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '27.04-29.04' },
-    { id: 'w1-currentThu', weekStart: '2026-04-28', key: 'currentThu', title: 'Текущий остаток', subtitle: 'Четверг', kind: 'stock', tone: 'neutral', dateLabel: '30.04' },
-    { id: 'w1-orderPackSat', weekStart: '2026-04-28', key: 'orderPackSat', title: 'Заказ упаковок на субботу', subtitle: 'Четверг', kind: 'order', tone: 'order', dateLabel: '30.04' },
-    { id: 'w1-orderUnitsSat', weekStart: '2026-04-28', key: 'orderUnitsSat', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
-    { id: 'w1-prevFri', weekStart: '2026-04-28', key: 'prevFri', title: 'Прошлый остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '01.05' },
-    { id: 'w1-soldPrevWedFri', weekStart: '2026-04-28', key: 'soldPrevWedFri', title: 'Продано на прошлой неделе', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '29.04-01.05' },
-    { id: 'w1-currentFri', weekStart: '2026-04-28', key: 'currentFri', title: 'Текущий остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '01.05' },
-    { id: 'w1-soldWedFri', weekStart: '2026-04-28', key: 'soldWedFri', title: 'Продано', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '29.04-01.05' },
-    { id: 'w1-currentSun', weekStart: '2026-04-28', key: 'currentSun', title: 'Текущий остаток', subtitle: 'Воскрес', kind: 'stock', tone: 'neutral', dateLabel: '03.05' },
-    { id: 'w1-orderPackTue', weekStart: '2026-04-28', key: 'orderPackTue', title: 'Заказ упаковок на вторник', subtitle: 'Воскрес', kind: 'order', tone: 'order', dateLabel: '03.05' },
-    { id: 'w1-orderUnitsTue', weekStart: '2026-04-28', key: 'orderUnitsTue', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
-    { id: 'w1-prevMon', weekStart: '2026-04-28', key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '04.05' },
-    { id: 'w1-soldPrevFriMon', weekStart: '2026-04-28', key: 'soldPrevFriMon', title: 'Продано на прошлой неделе', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateLabel: '01.05-04.05' },
-    { id: 'w1-currentMon', weekStart: '2026-04-28', key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '04.05' },
-  ],
-  '2026-05-05': [
-    { id: 'w2-currentTue', weekStart: '2026-05-05', key: 'currentTue', title: 'Текущий остаток', subtitle: 'Вторник', kind: 'stock', tone: 'neutral', dateLabel: '05.05', valueSourceWeekStart: '2026-04-28', valueSourceKey: 'currentMon' },
-    { id: 'w2-soldPrevMonWed', weekStart: '2026-05-05', key: 'soldPrevMonWed', title: 'Продано на прошлой неделе', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '04.05-06.05' },
-    { id: 'w2-currentWed', weekStart: '2026-05-05', key: 'currentWed', title: 'Текущий остаток', subtitle: 'Среда', kind: 'stock', tone: 'neutral', dateLabel: '06.05' },
-    { id: 'w2-soldMonWed', weekStart: '2026-05-05', key: 'soldMonWed', title: 'Продано', subtitle: 'Пн-Ср', kind: 'metric', tone: 'yellow', dateLabel: '04.05-06.05' },
-    { id: 'w2-currentThu', weekStart: '2026-05-05', key: 'currentThu', title: 'Текущий остаток', subtitle: 'Четверг', kind: 'stock', tone: 'neutral', dateLabel: '07.05' },
-    { id: 'w2-orderPackSat', weekStart: '2026-05-05', key: 'orderPackSat', title: 'Заказ упаковок на субботу', subtitle: 'Четверг', kind: 'order', tone: 'order', dateLabel: '07.05' },
-    { id: 'w2-orderUnitsSat', weekStart: '2026-05-05', key: 'orderUnitsSat', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
-    { id: 'w2-prevFri', weekStart: '2026-05-05', key: 'prevFri', title: 'Прошлый остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '08.05' },
-    { id: 'w2-soldPrevWedFri', weekStart: '2026-05-05', key: 'soldPrevWedFri', title: 'Продано на прошлой неделе', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '06.05-08.05' },
-    { id: 'w2-currentFri', weekStart: '2026-05-05', key: 'currentFri', title: 'Текущий остаток', subtitle: 'Пятница', kind: 'stock', tone: 'neutral', dateLabel: '08.05' },
-    { id: 'w2-soldWedFri', weekStart: '2026-05-05', key: 'soldWedFri', title: 'Продано', subtitle: 'Ср-Пт', kind: 'metric', tone: 'green', dateLabel: '06.05-08.05' },
-    { id: 'w2-currentSun', weekStart: '2026-05-05', key: 'currentSun', title: 'Текущий остаток', subtitle: 'Воскрес', kind: 'stock', tone: 'neutral', dateLabel: '10.05' },
-    { id: 'w2-orderPackTue', weekStart: '2026-05-05', key: 'orderPackTue', title: 'Заказ упаковок на вторник', subtitle: 'Воскрес', kind: 'order', tone: 'order', dateLabel: '10.05' },
-    { id: 'w2-orderUnitsTue', weekStart: '2026-05-05', key: 'orderUnitsTue', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral' },
-    { id: 'w2-prevMon', weekStart: '2026-05-05', key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '11.05' },
-    { id: 'w2-soldPrevFriMon', weekStart: '2026-05-05', key: 'soldPrevFriMon', title: 'Продано на прошлой неделе', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateLabel: '08.05-11.05' },
-    { id: 'w2-currentMon', weekStart: '2026-05-05', key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateLabel: '11.05' },
-    { id: 'w2-soldFriMon', weekStart: '2026-05-05', key: 'soldFriMon', title: 'Продано', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateLabel: '08.05-11.05' },
-  ],
-};
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
 
@@ -245,58 +135,6 @@ const shiftDateKey = (dateKey: string, deltaDays: number): string => {
 
 const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
 
-const sanitizeOrderValue = (raw: string): string => raw.replace(/[^0-9]/g, '').slice(0, MAX_ORDER_VALUE_LEN);
-const orderUnitsFromPacks = (packsRaw: string, unitsInPack: number | null): string => {
-  if (!packsRaw) {
-    return '';
-  }
-  if (unitsInPack === null || unitsInPack <= 0) {
-    return '';
-  }
-  const packs = Number.parseInt(packsRaw, 10);
-  return Number.isNaN(packs) ? '' : String(packs * unitsInPack);
-};
-const isManualOrderKey = (key: DashboardColumnKey): key is DashboardManualOrderKey =>
-  key === 'orderPackThu' || key === 'orderPackSat' || key === 'orderPackTue';
-const isManualStockKey = (
-  key: DashboardColumnKey,
-): key is 'currentTue' | 'currentWed' | 'currentThu' | 'currentFri' | 'currentSun' | 'currentMon' =>
-  key === 'currentTue' ||
-  key === 'currentWed' ||
-  key === 'currentThu' ||
-  key === 'currentFri' ||
-  key === 'currentSun' ||
-  key === 'currentMon';
-
-const parseStockNumber = (raw?: string): number | null => {
-  if (!raw) {
-    return null;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isNaN(parsed) ? null : parsed;
-};
-
-const diffStocks = (startRaw?: string, endRaw?: string): string => {
-  const start = parseStockNumber(startRaw);
-  const end = parseStockNumber(endRaw);
-  if (start === null || end === null) {
-    return '';
-  }
-  return String(start - end);
-};
-
-const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
-  const start = parseStockNumber(startRaw);
-  const end = parseStockNumber(endRaw);
-  if (start === null || end === null) {
-    return '';
-  }
-  const delivery = parseStockNumber(deliveryRaw) ?? 0;
-  return String(start + delivery - end);
-};
-
-const hasValue = (value?: string): value is string => typeof value === 'string' && value.trim() !== '';
-
 const formatOptionalPrice = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
     return '';
@@ -308,80 +146,11 @@ const formatOptionalPrice = (value: unknown): string => {
   return `${parsed.toFixed(2)} руб`;
 };
 
-const weekdaySlot = (dateKey: string): keyof WeekDateMap | null => {
-  const day = parseDateKey(dateKey).getDay();
-  if (day === 1) {
-    return 'mon';
-  }
-  if (day === 2) {
-    return 'tue';
-  }
-  if (day === 3) {
-    return 'wed';
-  }
-  if (day === 4) {
-    return 'thu';
-  }
-  if (day === 5) {
-    return 'fri';
-  }
-  if (day === 0) {
-    return 'sun';
-  }
-  return null;
-};
-
-const splitWeeks = (dates: string[]): string[][] => {
-  const chunks: string[][] = [];
-  for (let i = 0; i < dates.length; i += 7) {
-    const chunk = dates.slice(i, i + 7);
-    if (chunk.length === 7) {
-      chunks.push(chunk);
-    }
-  }
-  return chunks;
-};
-
-const mapWeekDates = (weekDates: string[]): WeekDateMap => {
-  const mapped: WeekDateMap = {};
-  for (const date of weekDates) {
-    const slot = weekdaySlot(date);
-    if (slot) {
-      mapped[slot] = date;
-    }
-  }
-  return mapped;
-};
-
 const csvEscape = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 
 const buildCsv = (rows: string[][]): string => rows.map((row) => row.map((item) => csvEscape(item)).join(';')).join('\n');
 
 const safeFileName = (raw: string): string => raw.replace(/[\\/:*?"<>|]/g, '_');
-
-const applyDashboardOverrides = (
-  base: DashboardRowValues,
-  row: StockTableRow,
-  weekStart?: string,
-): DashboardRowValues => {
-  if (!weekStart || !row.dashboardOverrides) {
-    return base;
-  }
-  const next = { ...base };
-  (Object.keys(base) as DashboardOverrideKey[]).forEach((key) => {
-    const override = row.dashboardOverrides?.[`${weekStart}:${key}`];
-    if (override !== undefined) {
-      next[key] = override;
-    }
-  });
-  return next;
-};
-
-const dashboardSheetValue = (row: StockTableRow, column: DashboardSheetColumn): string => {
-  const sourceWeekStart = column.valueSourceWeekStart ?? column.weekStart;
-  const sourceKey = column.valueSourceKey ?? column.key;
-  return row.dashboardOverrides?.[`${sourceWeekStart}:${sourceKey}`] ?? '';
-};
 
 const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
   PRODUCT_CATEGORIES.reduce(
@@ -394,12 +163,15 @@ const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
 
 export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const canManage = session.user.role === 'manager';
+  const isWorker = session.user.role === 'worker';
+  const isStoreTablet = session.user.role === 'store_tablet';
 
-  const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
+  const [activeTab, setActiveTab] = useState<ScreenTab>(isStoreTablet ? 'fob' : 'stock');
+  const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
-  const [managerWindowStart, setManagerWindowStart] = useState<string>(DASHBOARD_WINDOW_START);
+  const [managerWindowStart, setManagerWindowStart] = useState<string>(currentWeekStart());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -429,6 +201,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       setActiveTab('stock');
     }
   }, [activeTab, canManage]);
+
+  useEffect(() => {
+    if (isStoreTablet && activeTab !== 'fob') {
+      setActiveTab('fob');
+    }
+  }, [activeTab, isStoreTablet]);
 
   useEffect(() => {
     if (canManage && activeTab === 'orders') {
@@ -467,6 +245,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const loadShops = async () => {
+    if (isStoreTablet) {
+      return;
+    }
     try {
       const nextShops = await shopsApi.list(session.token);
       setShops(nextShops);
@@ -479,6 +260,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const loadTable = async () => {
+    if (isStoreTablet) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError('');
@@ -488,6 +273,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       const to = canManage ? dashboardTo : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
+        businessCategory: activeBusinessCategory,
         from,
         to,
         range: canManage ? undefined : 'week',
@@ -500,7 +286,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         const targetShopId = selectedShopId ?? nextTable.shop.id;
         if (targetShopId) {
           try {
-            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, to);
+            const orderValuesTo = shiftDateKey(to, 2);
+            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, orderValuesTo, activeBusinessCategory);
             const loaded: Record<string, string> = {};
             for (const entry of orderValues) {
               loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
@@ -523,11 +310,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   }, [session.token]);
 
   useEffect(() => {
+    if (isStoreTablet) {
+      setLoading(false);
+      return;
+    }
     if (canManage && !selectedShopId && shops.length > 0) {
       return;
     }
     void loadTable();
-  }, [session.token, canManage, selectedShopId, managerWindowStart]);
+  }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory]);
 
   const visibleRows = useMemo(() => {
     if (!table) {
@@ -543,20 +334,37 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   }, [table, query]);
 
   const rowsByCategory = useMemo(() => {
-    const grouped = createCategoryMap();
+    const categories = table?.subcategories?.length ? table.subcategories : [...PRODUCT_CATEGORIES];
+    const grouped = categories.reduce(
+      (acc, category) => {
+        acc[category] = [];
+        return acc;
+      },
+      {} as Record<ProductCategory, StockTableRow[]>,
+    );
     for (const row of visibleRows) {
-      const category = PRODUCT_CATEGORIES.includes(row.category) ? row.category : DEFAULT_PRODUCT_CATEGORY;
+      const category = categories.includes(row.category) ? row.category : categories[0] ?? DEFAULT_PRODUCT_CATEGORY;
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
       grouped[category].push(row);
     }
-    for (const category of PRODUCT_CATEGORIES) {
+    for (const category of categories) {
       grouped[category] = sortStockTableRowsLikeImage(grouped[category]);
     }
     return grouped;
-  }, [visibleRows]);
+  }, [table?.subcategories, visibleRows]);
+
+  const activeSubcategories = useMemo(
+    () => (table?.subcategories?.length ? table.subcategories : [...PRODUCT_CATEGORIES]),
+    [table?.subcategories],
+  );
+
+  const isMilkTable = activeBusinessCategory === 'Молоко';
 
   const orderedRows = useMemo(
-    () => PRODUCT_CATEGORIES.flatMap((category) => rowsByCategory[category]),
-    [rowsByCategory],
+    () => activeSubcategories.flatMap((category) => rowsByCategory[category] ?? []),
+    [activeSubcategories, rowsByCategory],
   );
 
   const dashboardWeeks = useMemo(() => {
@@ -568,63 +376,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         previousStart: undefined as string | undefined,
       };
     }
-    const weeks = splitWeeks(table.dates);
-    if (weeks.length === 0) {
-      return {
-        current: mapWeekDates(table.dates),
-        previous: null,
-        currentStart: table.dates[0],
-        previousStart: undefined,
-      };
-    }
-    const currentWeek = weeks[weeks.length - 1];
-    const previousWeek = weeks.length > 1 ? weeks[weeks.length - 2] : null;
-    return {
-      current: mapWeekDates(currentWeek),
-      previous: previousWeek ? mapWeekDates(previousWeek) : null,
-      currentStart: currentWeek[0],
-      previousStart: previousWeek?.[0],
-    };
+    return deriveDashboardWeeks(table.dates);
   }, [table]);
-
-  const dashboardDateFor = (week: DashboardWeekRef, slot: WeekSlot): string | undefined => {
-    if (week === 'previous') {
-      return dashboardWeeks.previous?.[slot];
-    }
-    return dashboardWeeks.current[slot];
-  };
-
-  const dashboardRangeLabel = (
-    week: DashboardWeekRef,
-    from: WeekSlot,
-    to: WeekSlot,
-    toWeek?: DashboardWeekRef,
-  ): string => {
-    const fromDate = dashboardDateFor(week, from);
-    const toDate = dashboardDateFor(toWeek ?? week, to);
-    if (!fromDate || !toDate) {
-      return '';
-    }
-    return `${formatDate(fromDate)}-${formatDate(toDate)}`;
-  };
-
-  const dashboardHeaderSubtitle = (column: DashboardColumn): string => {
-    if (!column.subtitle) {
-      return '';
-    }
-
-    if (column.dateKind === 'day' && column.dateDay && column.dateWeek) {
-      const date = dashboardDateFor(column.dateWeek, column.dateDay);
-      return date ? `${column.subtitle}\n${formatDate(date)}` : column.subtitle;
-    }
-
-    if (column.dateKind === 'range' && column.dateWeek && column.dateFrom && column.dateTo) {
-      const range = dashboardRangeLabel(column.dateWeek, column.dateFrom, column.dateTo, column.dateToWeek);
-      return range ? `${column.subtitle}\n${range}` : column.subtitle;
-    }
-
-    return column.subtitle;
-  };
 
   const productReferenceLabel = (row: StockTableRow): string => {
     const parts: string[] = [];
@@ -698,6 +451,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (!date || !shopId) return;
     const nextValue = sanitizeOrderValue(value);
     const fieldKey = `${productId}:${date}`;
+    const previousValue = dashboardOrderValues[fieldKey] ?? '';
     setDashboardOrderValues((current) => ({
       ...current,
       [fieldKey]: nextValue,
@@ -708,6 +462,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       productId,
       orderDate: date,
       packs: Number.isNaN(packs) ? 0 : packs,
+    }).catch((saveError) => {
+      setDashboardOrderValues((current) => ({
+        ...current,
+        [fieldKey]: previousValue,
+      }));
+      setError(errorMessage(saveError));
     });
   };
 
@@ -717,81 +477,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const dashboardRowValues = (row: StockTableRow): DashboardRowValues => {
-    const current = dashboardWeeks.current;
-    const previous = dashboardWeeks.previous;
-    const previousStart = dashboardWeeks.previousStart;
-    const stock = (date?: string) => (date ? row.values[date] ?? '' : '');
-    const units = row.unitsInPack;
-    const previousWeekSoldValue = (key: 'soldMonWed' | 'soldWedFri' | 'soldFriMon'): string => {
-      const value = previousStart ? row.dashboardOverrides?.[`${previousStart}:${key}`] : undefined;
-      return hasValue(value) ? value : '';
-    };
-
-    // Excel formula: ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾ = start_stock + delivery_units - end_stock
-    // soldMonWed: period Monâ†’Wed, start=Sun, delivery=orderTue (placed prev Sun)
-    const prevOrderTueUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.tue), units);
-    const soldMonWedCurrent = computeSold(stock(previous?.sun), prevOrderTueUnits, stock(current.wed));
-    // soldWedFri: period Wedâ†’Fri, start=Tue, delivery=orderThu (placed current Tue)
-    const curOrderThuUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, current.thu), units);
-    const soldWedFriCurrent = computeSold(stock(current.tue), curOrderThuUnits, stock(current.fri));
-    // soldFriMon: period Friâ†’Mon, start=Thu, delivery=orderSat (placed prev Thu)
-    const prevOrderSatUnits = previous?.thu
-      ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
-      : '';
-    const soldFriMonCurrent = computeSold(stock(previous?.thu), prevOrderSatUnits, stock(current.mon));
-
-    // Previous week sold: same formula structure but some start dates unavailable (before 14-day window)
-    // soldPrevMonWed: start=Sun before prev.mon (unavailable), fallback to simple diff
-    const soldMonWedPrevious = previous ? diffStocks(stock(previous.mon), stock(previous.wed)) : '';
-    // soldPrevWedFri: start=prev.tue, delivery=orderThu placed on prev.tue
-    const prevOrderThuUnits = previous?.thu
-      ? orderUnitsFromPacks(orderPacksForDate(row.productId, previous.thu), units)
-      : '';
-    const soldWedFriPrevious = previous ? computeSold(stock(previous.tue), prevOrderThuUnits, stock(previous.fri)) : '';
-    // soldPrevFriMon: period prev.friâ†’current.mon, start=prev.thu, delivery=orderSat placed prev.thu
-    const prevPrevOrderSatUnits = previous?.thu
-      ? orderUnitsFromPacks(orderPacksForDate(row.productId, shiftDateKey(previous.thu, 2)), units)
-      : '';
-    const soldFriMonPrevious = previous ? computeSold(stock(previous.thu), prevPrevOrderSatUnits, stock(previous.mon)) : '';
-    const copiedSoldMonWedPrevious = previousWeekSoldValue('soldMonWed');
-    const copiedSoldWedFriPrevious = previousWeekSoldValue('soldWedFri');
-    const copiedSoldFriMonPrevious = previousWeekSoldValue('soldFriMon');
-
-    const orderPackThu = orderCellValue(row.productId, 'orderPackThu');
-    const orderPackSat = orderCellValue(row.productId, 'orderPackSat');
-    const orderPackTue = orderCellValue(row.productId, 'orderPackTue');
-
-    const base: DashboardRowValues = {
-      currentTue: stock(current.tue),
-      orderPackThu,
-      orderUnitsThu: orderUnitsFromPacks(orderPackThu, units),
-      prevWed: previous ? stock(previous.wed) : '',
-      soldPrevMonWed: copiedSoldMonWedPrevious || soldMonWedPrevious,
-      soldMonWed: soldMonWedCurrent,
-      currentWed: stock(current.wed),
-      currentThu: stock(current.thu),
-      orderPackSat,
-      orderUnitsSat: orderUnitsFromPacks(orderPackSat, units),
-      prevFri: previous ? stock(previous.fri) : '',
-      soldPrevWedFri: copiedSoldWedFriPrevious || soldWedFriPrevious,
-      soldWedFri: soldWedFriCurrent,
-      currentFri: stock(current.fri),
-      currentSun: stock(current.sun),
-      orderPackTue,
-      orderUnitsTue: orderUnitsFromPacks(orderPackTue, units),
-      prevMon: previous ? stock(previous.mon) : '',
-      soldPrevFriMon: copiedSoldFriMonPrevious || soldFriMonPrevious,
-      soldFriMon: soldFriMonCurrent,
-      currentMon: stock(current.mon),
-    };
-    const withOverrides = applyDashboardOverrides(base, row, dashboardWeeks.currentStart);
-    return {
-      ...withOverrides,
-      soldPrevMonWed: copiedSoldMonWedPrevious || withOverrides.soldPrevMonWed,
-      soldPrevWedFri: copiedSoldWedFriPrevious || withOverrides.soldPrevWedFri,
-      soldPrevFriMon: copiedSoldFriMonPrevious || withOverrides.soldPrevFriMon,
-    };
+    return buildDashboardRowValues({ row, weeks: dashboardWeeks, orderPacks: orderPacksForDate });
   };
+
+  const dashboardColumnSubtitle = (column: DashboardColumn): string =>
+    dashboardHeaderSubtitle(dashboardWeeks, column);
 
   const exportDashboard = async () => {
     if (!table) {
@@ -807,7 +497,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       'Срок годности, сут',
       'Цена в руб, с НДС',
       ...DASHBOARD_COLUMNS.map((column) => {
-        const subtitle = dashboardHeaderSubtitle(column).replace('\n', ' ');
+        const subtitle = dashboardColumnSubtitle(column).replace('\n', ' ');
         return subtitle ? `${column.title} (${subtitle})` : column.title;
       }),
     ];
@@ -988,9 +678,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (!normalizedName) {
       throw new Error('Введите название товара.');
     }
-    if (!newProductCategory) {
-      throw new Error('Выберите категорию товара.');
-    }
+    const productCategory = newProductCategory ?? activeSubcategories[0] ?? DEFAULT_PRODUCT_CATEGORY;
     if (!packType) {
       throw new Error('Введите тип упаковки.');
     }
@@ -1003,7 +691,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
     return {
       name: normalizedName,
-      category: newProductCategory,
+      businessCategory: activeBusinessCategory,
+      category: productCategory,
       packType,
       unitsInPack: parseRequiredInteger('Штук в упаковке', newProductUnitsInPack),
       packWeightKg: parseRequiredDecimal('Вес упаковки, кг', newProductPackWeightKg),
@@ -1071,20 +760,20 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const renderCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
     <View key={category} style={styles.categoryBlock}>
       <View style={styles.categoryTitleRow}>
-        <Text style={styles.categoryTitle}>{category}</Text>
+        <Text style={[styles.categoryTitle, styles.workerCategoryTitle]}>{category}</Text>
       </View>
       <View style={styles.categoryTable}>
-        <View style={styles.stickyColumn}>
+        <View style={[styles.stickyColumn, styles.workerStickyColumn]}>
           <View style={styles.headerRow}>
-            <View style={[styles.headerCell, styles.nameColumn]}>
-              <Text style={styles.headerText}>Товар</Text>
+            <View style={[styles.headerCell, styles.nameColumn, styles.workerNameColumn, styles.workerHeaderCell]}>
+              <Text style={[styles.headerText, styles.workerHeaderText]}>Товар</Text>
             </View>
           </View>
           {rows.map((row) => (
             <View key={row.productId} style={styles.row}>
-              <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+              <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.workerNameColumn, styles.workerCell]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
-                  <Text numberOfLines={1} style={styles.nameText}>
+                  <Text numberOfLines={1} style={[styles.nameText, styles.workerNameText]}>
                     {row.name}
                   </Text>
                 </ScrollView>
@@ -1092,31 +781,32 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           ))}
         </View>
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
-          <View>
-            <View style={styles.headerRow}>
-              {table?.dates.map((date) => (
-                <View
-                  key={date}
-                  style={[
-                    styles.headerCell,
-                    styles.dateColumn,
-                    columnToneHeader(date),
-                    secondWeekBoundaryStyle(date),
-                  ]}
-                >
-                  <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
-                  <Text style={styles.dateDayText}>{formatDate(date)}</Text>
-                </View>
-              ))}
-            </View>
-
-            {rows.length === 0 ? (
-              <View style={[styles.emptyRow, styles.emptyScrollableRow]}>
-                <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+        <View style={styles.workerDataColumns}>
+          <View style={styles.headerRow}>
+            {table?.dates.map((date) => (
+              <View
+                key={date}
+                style={[
+                  styles.headerCell,
+                  styles.dateColumn,
+                  styles.workerDateColumn,
+                  styles.workerHeaderCell,
+                  columnToneHeader(date),
+                  secondWeekBoundaryStyle(date),
+                ]}
+              >
+                <Text style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>{formatWeekday(date)}</Text>
+                <Text style={[styles.dateDayText, styles.workerDateDayText]}>{formatDate(date)}</Text>
               </View>
-            ) : (
-              rows.map((row) => (
+            ))}
+          </View>
+
+          {rows.length === 0 ? (
+            <View style={[styles.emptyRow, styles.workerEmptyRow]}>
+              <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+            </View>
+          ) : (
+            rows.map((row) => (
               <View key={row.productId} style={styles.row}>
                 {table?.dates.map((date) => {
                   const key = `${row.productId}:${date}`;
@@ -1129,6 +819,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       style={[
                         styles.cell,
                         styles.dateColumn,
+                        styles.workerDateColumn,
+                        styles.workerCell,
                         styles.valueCell,
                         columnToneValue(date),
                         secondWeekBoundaryStyle(date),
@@ -1136,11 +828,125 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       ]}
                       onPress={() => openEditCell(row, date)}
                     >
-                      <Text style={styles.valueText}>{value || '-'}</Text>
+                      <Text style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
                     </Pressable>
                   );
                 })}
               </View>
+            ))
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
+  const stockNumberFor = (row: StockTableRow, date: string): number | null => {
+    const raw = row.values[date];
+    if (!raw) {
+      return null;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const soldForDate = (row: StockTableRow, date: string): string => {
+    const previous = stockNumberFor(row, shiftDateKey(date, -1));
+    const current = stockNumberFor(row, date);
+    if (previous === null || current === null) {
+      return '';
+    }
+    return String(Math.max(0, previous - current));
+  };
+
+  const setDailyOrderValue = (productId: string, orderDate: string, value: string) => {
+    const shopId = selectedShopId;
+    if (!shopId) return;
+    const nextValue = sanitizeOrderValue(value);
+    const fieldKey = `${productId}:${orderDate}`;
+    const previousValue = dashboardOrderValues[fieldKey] ?? '';
+    setDashboardOrderValues((current) => ({ ...current, [fieldKey]: nextValue }));
+    const packs = nextValue ? Number.parseInt(nextValue, 10) : 0;
+    void stockApi.updateOrderValue(session.token, {
+      shopId,
+      productId,
+      orderDate,
+      packs: Number.isNaN(packs) ? 0 : packs,
+    }).catch((saveError) => {
+      setDashboardOrderValues((current) => ({ ...current, [fieldKey]: previousValue }));
+      setError(errorMessage(saveError));
+    });
+  };
+
+  const renderDailyManagerCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
+    <View key={category} style={styles.categoryBlock}>
+      <View style={styles.categoryTitleRow}>
+        <Text style={styles.categoryTitle}>{category}</Text>
+      </View>
+      <View style={styles.categoryTable}>
+        <View style={styles.stickyColumn}>
+          <View style={styles.headerRow}>
+            <View style={[styles.headerCell, styles.nameColumn, styles.dashboardNameHeader]}>
+              <Text style={styles.headerText}>Товар</Text>
+            </View>
+          </View>
+          {rows.map((row) => (
+            <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
+              <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
+                <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
+                  {row.name}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
+          <View>
+            <View style={styles.headerRow}>
+              {table?.dates.map((date) => (
+                <View key={date} style={styles.dailyHeaderGroup}>
+                  <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
+                  <Text style={styles.dateDayText}>{formatDate(date)}</Text>
+                  <View style={styles.dailySubHeaderRow}>
+                    <Text style={styles.dailySubHeaderText}>Ост</Text>
+                    <Text style={styles.dailySubHeaderText}>Зак</Text>
+                    <Text style={styles.dailySubHeaderText}>Прод</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {rows.length === 0 ? (
+              <View style={[styles.emptyRow, styles.emptyScrollableRow]}>
+                <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+              </View>
+            ) : (
+              rows.map((row) => (
+                <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
+                  {table?.dates.map((date) => {
+                    const orderDate = shiftDateKey(date, 1);
+                    return (
+                      <View key={`${row.productId}:${date}`} style={styles.dailyValueGroup}>
+                        <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
+                          <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
+                        </Pressable>
+                        <View style={[styles.cell, styles.dailyValueCell]}>
+                          <TextInput
+                            value={orderPacksForDate(row.productId, orderDate)}
+                            onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
+                            keyboardType="number-pad"
+                            style={styles.dashboardOrderInput}
+                            maxLength={MAX_ORDER_VALUE_LEN}
+                            placeholder="-"
+                            placeholderTextColor="#6d7d72"
+                          />
+                        </View>
+                        <View style={[styles.cell, styles.dailyValueCell]}>
+                          <Text style={styles.valueText}>{soldForDate(row, date) || '-'}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
               ))
             )}
           </View>
@@ -1194,13 +1000,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const dashboardHeaderTitleStyle = (column: DashboardColumn) => [
     styles.dashboardHeaderTitle,
     column.kind === 'stock' && styles.dashboardHeaderTitleStock,
-    column.kind === 'order' && !dashboardHeaderSubtitle(column) && styles.dashboardHeaderTitleExpanded,
+    column.kind === 'order' && !dashboardColumnSubtitle(column) && styles.dashboardHeaderTitleExpanded,
   ];
 
   const dashboardHeaderSubtitleStyle = (column: DashboardColumn) => [
     styles.dashboardHeaderSubtitle,
     column.kind === 'stock' && styles.dashboardHeaderSubtitleStock,
-    !dashboardHeaderSubtitle(column) && styles.dashboardHeaderSubtitleHidden,
+    !dashboardColumnSubtitle(column) && styles.dashboardHeaderSubtitleHidden,
   ];
 
   const dashboardValueTextStyle = (column: DashboardColumn) => [
@@ -1224,19 +1030,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           {rows.map((row) => {
             const reference = productReferenceLabel(row);
             return (
-              <View key={row.productId} style={styles.row}>
-                <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
-                    <Text numberOfLines={1} style={styles.nameText}>
-                      {row.name}
-                    </Text>
-                  </ScrollView>
+              <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
+                <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
+                  <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
+                    {row.name}
+                  </Text>
                   {!!reference && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
-                      <Text numberOfLines={1} style={styles.referenceText}>
-                        {reference}
-                      </Text>
-                    </ScrollView>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.referenceText}>
+                      {reference}
+                    </Text>
                   )}
                 </View>
               </View>
@@ -1257,7 +1059,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   ]}
                 >
                   <Text style={dashboardHeaderTitleStyle(column)}>{column.title}</Text>
-                  <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardHeaderSubtitle(column)}</Text>
+                  <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardColumnSubtitle(column)}</Text>
                 </View>
               ))}
             </View>
@@ -1270,7 +1072,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               rows.map((row) => {
               const values = dashboardRowValues(row);
               return (
-                <View key={row.productId} style={styles.row}>
+                <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
                   {DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
@@ -1349,8 +1151,24 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const renderStockTab = () => (
     <>
-      {!canManage && <WorkerCheckInCard token={session.token} />}
       <View style={styles.controls}>
+        <View style={styles.businessTabs}>
+          {BUSINESS_CATEGORIES.map((category) => {
+            const active = activeBusinessCategory === category;
+            return (
+              <Pressable
+                key={category}
+                style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
+                onPress={() => {
+                  setActiveBusinessCategory(category);
+                  setNewProductCategory(null);
+                }}
+              >
+                <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <View style={styles.controlButtons}>
           {canManage && (
             <>
@@ -1361,7 +1179,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 >
                   <Text style={styles.calendarNavButtonText}>-1 нед.</Text>
                 </Pressable>
-                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(DASHBOARD_WINDOW_START)}>
+                <Pressable style={styles.calendarNavButton} onPress={() => setManagerWindowStart(currentWeekStart())}>
                   <Text style={styles.calendarNavButtonText}>Текущая нед.</Text>
                 </Pressable>
                 <Pressable
@@ -1386,10 +1204,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
       <View style={styles.tableWrap}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
-          {PRODUCT_CATEGORIES.map((category) =>
-            canManage
-              ? renderDashboardCategoryTable(category, rowsByCategory[category])
-              : renderCategoryTable(category, rowsByCategory[category]),
+          {activeSubcategories.map((category) =>
+            canManage && isMilkTable
+              ? renderDashboardCategoryTable(category, rowsByCategory[category] ?? [])
+              : canManage
+                ? renderDailyManagerCategoryTable(category, rowsByCategory[category] ?? [])
+              : renderCategoryTable(category, rowsByCategory[category] ?? []),
           )}
         </ScrollView>
       </View>
@@ -1397,6 +1217,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const renderContent = () => {
+    if (activeTab === 'fob') {
+      return (
+        <View style={styles.tabContentWrap}>
+          {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
+        </View>
+      );
+    }
     if (activeTab === 'tasks') {
       return (
         <View style={styles.tabContentWrap}>
@@ -1452,7 +1279,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         { key: 'support', label: 'Поддержка' },
         { key: 'users', label: 'Пользователи' },
       ]
+    : isStoreTablet
+      ? [{ key: 'fob', label: 'FOB' }]
     : [
+        ...(isWorker ? [{ key: 'fob' as ScreenTab, label: 'FOB' }] : []),
         { key: 'stock', label: 'Остатки' },
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
@@ -1467,7 +1297,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         <View>
           <Text style={styles.title}>Учет остатков</Text>
           <Text style={styles.subtitle}>
-            {session.user.fullName} · {canManage ? 'Менеджер' : 'Сотрудник'}
+            {session.user.fullName} · {canManage ? 'Менеджер' : isStoreTablet ? 'Планшет магазина' : 'Сотрудник'}
           </Text>
         </View>
         <View style={styles.headerActions}>
@@ -1521,9 +1351,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 autoFocus
                 maxLength={140}
               />
-              <Text style={styles.formLabel}>Категория *</Text>
+              <Text style={styles.formLabel}>Подкатегория *</Text>
               <View style={styles.categoryPicker}>
-                {PRODUCT_CATEGORIES.map((category) => {
+                {activeSubcategories.map((category) => {
                   const active = newProductCategory === category;
                   return (
                     <Pressable
@@ -1789,6 +1619,31 @@ const styles = StyleSheet.create({
   controls: {
     gap: 10,
   },
+  businessTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  businessTabButton: {
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    borderRadius: 10,
+    backgroundColor: '#f3f6f4',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  businessTabButtonActive: {
+    backgroundColor: '#1f4f37',
+    borderColor: '#1f4f37',
+  },
+  businessTabText: {
+    color: '#2f4437',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  businessTabTextActive: {
+    color: '#ffffff',
+  },
   searchInput: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -1893,6 +1748,7 @@ const styles = StyleSheet.create({
   },
   tableWrap: {
     flex: 1,
+    marginTop: 10,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#b7c5b8',
@@ -1910,7 +1766,7 @@ const styles = StyleSheet.create({
   },
   categoryTitleRow: {
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 7,
     backgroundColor: '#d6dfd6',
     borderBottomWidth: 1,
     borderBottomColor: '#9eb09f',
@@ -1918,6 +1774,9 @@ const styles = StyleSheet.create({
   categoryTitle: {
     color: '#24382d',
     fontWeight: '800',
+    fontSize: 15,
+  },
+  workerCategoryTitle: {
     fontSize: 16,
   },
   categoryTable: {
@@ -1926,12 +1785,20 @@ const styles = StyleSheet.create({
   },
   stickyColumn: {
     zIndex: 2,
-    borderRightWidth: 2,
-    borderRightColor: '#657667',
+    borderRightWidth: 1,
+    borderRightColor: '#8fa091',
     backgroundColor: '#f7f7f7',
+  },
+  workerStickyColumn: {
+    width: '31%',
+    minWidth: 140,
   },
   scrollableColumns: {
     flex: 1,
+  },
+  workerDataColumns: {
+    flex: 1,
+    minWidth: 0,
   },
   headerRow: {
     flexDirection: 'row',
@@ -1943,15 +1810,19 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
-    minHeight: 54,
-    paddingHorizontal: 4,
-    paddingVertical: 5,
+    minHeight: 50,
+    paddingHorizontal: 5,
+    paddingVertical: 4,
+    overflow: 'hidden',
   },
   headerText: {
     fontSize: 14,
     color: '#2e312f',
     fontWeight: '800',
     textAlign: 'center',
+  },
+  workerHeaderText: {
+    fontSize: 15,
   },
   dateWeekdayText: {
     fontSize: 12,
@@ -1960,11 +1831,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textTransform: 'uppercase',
   },
+  workerDateWeekdayText: {
+    fontSize: 13,
+  },
   dateDayText: {
     marginTop: 1,
     fontSize: 11,
     color: '#3a4b3e',
     fontWeight: '700',
+  },
+  workerDateDayText: {
+    fontSize: 12,
   },
   headerToneA: {
     backgroundColor: '#ffffff',
@@ -2002,25 +1879,43 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
     minHeight: 46,
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
+    overflow: 'hidden',
   },
   nameColumn: {
-    width: 156,
+    width: 224,
     alignItems: 'flex-start',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     backgroundColor: '#f7f7f7',
+  },
+  workerNameColumn: {
+    width: '100%',
   },
   dateColumn: {
     width: 62,
   },
+  workerDateColumn: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
+  workerHeaderCell: {
+    minHeight: 54,
+  },
+  workerCell: {
+    minHeight: 52,
+  },
+  workerEmptyRow: {
+    flex: 1,
+  },
   dashboardStockColumn: {
-    width: 124,
+    width: 118,
   },
   dashboardOrderColumn: {
-    width: 128,
+    width: 122,
   },
   dashboardMetricColumn: {
-    width: 76,
+    width: 106,
   },
   actionColumn: {
     width: 74,
@@ -2033,13 +1928,19 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   nameText: {
-    fontSize: 16,
+    fontSize: 14,
+    lineHeight: 17,
     color: '#222222',
-    fontWeight: '600',
+    fontWeight: '800',
+  },
+  workerNameText: {
+    fontSize: 16,
+    lineHeight: 20,
   },
   referenceText: {
-    marginTop: 2,
-    fontSize: 13,
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 14,
     color: '#4e5d53',
     fontWeight: '600',
   },
@@ -2053,39 +1954,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f8f1',
   },
   dashboardHeaderCell: {
-    minHeight: 86,
+    minHeight: 82,
     gap: 2,
   },
   dashboardNameHeader: {
-    minHeight: 86,
+    minHeight: 82,
   },
   dashboardHeaderTitle: {
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 13,
     color: '#1f2a21',
     fontWeight: '800',
     textAlign: 'center',
   },
   dashboardHeaderTitleStock: {
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '800',
   },
   dashboardHeaderTitleExpanded: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 13,
+    lineHeight: 15,
+    fontWeight: '800',
     textAlignVertical: 'center',
   },
   dashboardHeaderSubtitle: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#1f2a21',
     fontWeight: '700',
     textAlign: 'center',
     lineHeight: 11,
   },
   dashboardHeaderSubtitleStock: {
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 16,
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 11,
   },
   dashboardHeaderSubtitleHidden: {
     display: 'none',
@@ -2105,7 +2009,45 @@ const styles = StyleSheet.create({
   dashboardHeaderBlue: {
     backgroundColor: '#90c7da',
   },
+  dashboardDataRow: {
+    height: 58,
+  },
+  dashboardNameCell: {
+    height: 58,
+  },
   dashboardValueCell: {
+    height: 58,
+    backgroundColor: '#f4f6f4',
+  },
+  dailyHeaderGroup: {
+    width: 168,
+    minHeight: 82,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#7f8d81',
+    backgroundColor: '#ecf1ec',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  dailySubHeaderRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+  },
+  dailySubHeaderText: {
+    width: 56,
+    textAlign: 'center',
+    color: '#2e312f',
+    fontWeight: '800',
+    fontSize: 10,
+  },
+  dailyValueGroup: {
+    width: 168,
+    flexDirection: 'row',
+  },
+  dailyValueCell: {
+    width: 56,
+    height: 58,
     backgroundColor: '#f4f6f4',
   },
   dashboardValueNeutral: {
@@ -2128,28 +2070,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#223528',
     fontSize: 16,
-    fontWeight: '700',
+    lineHeight: 18,
+    fontWeight: '600',
     paddingVertical: 0,
   },
   dashboardOrderInputExpanded: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 17,
+    lineHeight: 19,
+    fontWeight: '700',
   },
   pendingCell: {
     opacity: 0.6,
   },
   valueText: {
     color: '#223528',
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  workerValueText: {
+    fontSize: 17,
   },
   valueTextStock: {
-    fontSize: 24,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '700',
   },
   valueTextOrder: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
   },
   deleteButton: {
     backgroundColor: '#9f4038',
@@ -2169,20 +2116,20 @@ const styles = StyleSheet.create({
   },
   bottomTabs: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 6,
     borderWidth: 1,
     borderColor: '#c8d4cb',
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: '#f3f7f3',
-    padding: 6,
+    padding: 5,
   },
   bottomTabButton: {
-    minHeight: 56,
+    minHeight: 50,
     flex: 1,
-    borderRadius: 10,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 11,
+    paddingVertical: 9,
     paddingHorizontal: 6,
   },
   bottomTabButtonActive: {
@@ -2191,7 +2138,7 @@ const styles = StyleSheet.create({
   bottomTabButtonText: {
     color: '#2f4437',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
   },
   bottomTabButtonTextActive: {
@@ -2343,7 +2290,3 @@ const styles = StyleSheet.create({
     color: '#1f4f37',
   },
 });
-
-
-
-

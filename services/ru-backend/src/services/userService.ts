@@ -29,7 +29,7 @@ export const createManagedUser = async (payload: z.infer<typeof createUserSchema
     lastName: payload.lastName,
     role: payload.role,
     passwordHash,
-    shopId: payload.shopId ?? null,
+    shopId: payload.role === 'manager' ? null : payload.shopId ?? null,
   });
 };
 

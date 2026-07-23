@@ -52,7 +52,7 @@ test('shop service limits worker-visible shops to assigned shop ids', async () =
   assert.deepEqual(managerShops.map((shop) => shop.id), ['shop_a', 'shop_b']);
 });
 
-test('stock service normalizes zero order values before repository write', async () => {
+test('stock service delegates order values to repository without route-specific normalization', async () => {
   let capturedPayload = null;
   const { setShopOrderValue } = loadWithMock('../dist/services/stockService', {
     '../dist/repositories/orderSheetRepository': {
@@ -84,7 +84,7 @@ test('stock service normalizes zero order values before repository write', async
     shopId: 'shop_a',
     productId: 'prod_a',
     date: '2026-05-12',
-    value: '',
+    value: '0',
   });
 });
 
@@ -102,6 +102,7 @@ test('order service delegates seller order creation and preserves not-found outc
         capturedPayload = payload;
         return null;
       },
+      createSellerOrderBulk: async () => null,
       listSellerOrders: async () => [],
       updateSellerOrderStatus: async () => null,
     },
@@ -116,12 +117,14 @@ test('order service delegates seller order creation and preserves not-found outc
       requestedPacks: 2,
       requestedUnits: 12,
       autoSuggested: false,
+      orderDate: '2026-05-02',
     },
   );
 
   assert.equal(result, null);
   assert.equal(capturedViewer.role, 'worker');
   assert.equal(capturedPayload.productId, 'missing_product');
+  assert.equal(capturedPayload.orderDate, '2026-05-02');
 });
 
 test('promotion row status is derived from dates when a period exists', () => {

@@ -1,10 +1,12 @@
 import { opsDb } from '../db/opsDb';
-import { Shop } from '../domain/types';
+import { DEFAULT_BUSINESS_CATEGORY } from '../domain/types';
+import type { BusinessCategory, Shop } from '../domain/types';
 
 export type OrderSheetRow = {
   productId: string;
   productName: string;
   category: string;
+  businessCategory: BusinessCategory;
   packType: string | null;
   unitsInPack: number | null;
   packWeightKg: number | null;
@@ -37,6 +39,7 @@ type ProductRow = {
   id: string;
   name: string;
   category: string | null;
+  business_category: BusinessCategory | null;
   pack_type: string | null;
   units_in_pack: number | null;
   pack_weight_kg: number | null;
@@ -44,15 +47,17 @@ type ProductRow = {
   unit_price_rub_vat: number | null;
 };
 
-export const getOrderSheet = async (date: string): Promise<OrderSheet> => {
+export const getOrderSheet = async (date: string, businessCategory: BusinessCategory = DEFAULT_BUSINESS_CATEGORY): Promise<OrderSheet> => {
   const [shopsResult, productsResult, ordersResult] = await Promise.all([
     opsDb.query<{ id: string; name: string; machine_number: number }>(
       `SELECT id, name, machine_number FROM shops ORDER BY machine_number ASC, created_at ASC, name ASC;`,
     ),
     opsDb.query<ProductRow>(
-      `SELECT id, name, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat
+      `SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat
        FROM stock_products
+       WHERE business_category = $1
        ORDER BY created_at ASC, name ASC;`,
+      [businessCategory],
     ),
     opsDb.query<AggRow>(
       `SELECT product_id, shop_id, packs
@@ -87,6 +92,7 @@ export const getOrderSheet = async (date: string): Promise<OrderSheet> => {
       productId: product.id,
       productName: product.name,
       category: product.category ?? 'Йогурты',
+      businessCategory: product.business_category ?? businessCategory,
       packType: product.pack_type,
       unitsInPack: product.units_in_pack,
       packWeightKg: product.pack_weight_kg,
@@ -100,7 +106,23 @@ export const getOrderSheet = async (date: string): Promise<OrderSheet> => {
   return { date, shops, rows };
 };
 
-export const listOrderSheetValues = async (shopId: string, from: string, to: string): Promise<OrderSheetValueEntry[]> => {
+export const listOrderSheetValues = async (
+  shopId: string,
+  from: string,
+  to: string,
+  businessCategory?: BusinessCategory,
+): Promise<OrderSheetValueEntry[]> => {
+  const params: unknown[] = [shopId, from, to];
+  const businessFilter = businessCategory
+    ? `AND EXISTS (
+        SELECT 1 FROM stock_products sp
+        WHERE sp.id = order_sheet_values.product_id
+          AND sp.business_category = $4
+      )`
+    : '';
+  if (businessCategory) {
+    params.push(businessCategory);
+  }
   const result = await opsDb.query<{ shop_id: string; product_id: string; order_date: string; packs: number }>(
     `
       SELECT shop_id, product_id, order_date::text AS order_date, packs
@@ -108,9 +130,10 @@ export const listOrderSheetValues = async (shopId: string, from: string, to: str
       WHERE shop_id = $1
         AND order_date >= $2::date
         AND order_date <= $3::date
+        ${businessFilter}
       ORDER BY order_date ASC;
     `,
-    [shopId, from, to],
+    params,
   );
 
   return result.rows.map((row: { shop_id: string; product_id: string; order_date: string; packs: number }) => ({
@@ -140,7 +163,8 @@ export const upsertOrderSheetValue = async (
     return false;
   }
 
-  if (!params.value) {
+  const packs = Number.parseInt(params.value, 10);
+  if (!params.value || Number.isNaN(packs) || packs <= 0) {
     await opsDb.query(
       `
         DELETE FROM order_sheet_values
@@ -151,11 +175,6 @@ export const upsertOrderSheetValue = async (
       [params.shopId, params.productId, params.date],
     );
     return true;
-  }
-
-  const packs = Number.parseInt(params.value, 10);
-  if (Number.isNaN(packs) || packs < 0) {
-    return false;
   }
 
   await opsDb.query(

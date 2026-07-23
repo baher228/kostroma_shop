@@ -5,6 +5,7 @@ const { signOpsToken, signSessionToken, verifyOpsToken } = require('../dist/auth
 const { createDubaiApp } = require('../dist/app/dubaiApp');
 const {
   createRowSchema,
+  createSellerOrderBulkSchema,
   createSellerOrderSchema,
   updateProductMetaSchema,
   updateProductSchema,
@@ -38,8 +39,66 @@ test('Dubai order schema rejects personal and free-text fields', () => {
     requestedPacks: 1,
     requestedUnits: 6,
     autoSuggested: true,
+    orderDate: '2026-05-02',
   });
   assert.equal(parsed.shopId, 'shop_main');
+  assert.equal(parsed.orderDate, '2026-05-02');
+  assert.throws(() => createSellerOrderSchema.parse({
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    requestedPacks: 1,
+    requestedUnits: 6,
+    orderDate: '2026-05-01',
+  }));
+  assert.equal(createSellerOrderSchema.parse({
+    shopId: 'shop_main',
+    businessCategory: 'Хлеб',
+    productId: 'prod_1',
+    requestedPacks: 1,
+    requestedUnits: 6,
+    orderDate: '2026-05-01',
+  }).orderDate, '2026-05-01');
+  assert.throws(() => createSellerOrderSchema.parse({
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    requestedPacks: 1,
+    requestedUnits: 6,
+    orderDate: '2026-02-31',
+  }));
+  assert.deepEqual(createSellerOrderBulkSchema.parse({
+    shopId: 'shop_main',
+    orderDate: '2026-05-02',
+    items: [{
+      productId: 'prod_1',
+      stockOnHand: 2,
+      requestedPacks: 1,
+      requestedUnits: 6,
+      autoSuggested: true,
+    }],
+  }).items.map((item) => item.productId), ['prod_1']);
+  assert.equal(createSellerOrderBulkSchema.parse({
+    shopId: 'shop_main',
+    businessCategory: 'Сыр',
+    orderDate: '2026-05-01',
+    items: [{
+      productId: 'prod_1',
+      requestedPacks: 1,
+      requestedUnits: 6,
+    }],
+  }).businessCategory, 'Сыр');
+  assert.throws(() => createSellerOrderBulkSchema.parse({
+    shopId: 'shop_main',
+    orderDate: '2026-05-02',
+    items: [],
+  }));
+  assert.throws(() => createSellerOrderBulkSchema.parse({
+    shopId: 'shop_main',
+    orderDate: '2026-05-02',
+    items: [
+      { productId: 'prod_1', requestedPacks: 1, requestedUnits: 6 },
+      { productId: 'prod_1', requestedPacks: 2, requestedUnits: 12 },
+    ],
+  }));
   assert.throws(() => createSellerOrderSchema.parse({
     shopId: 'shop_main',
     productId: 'prod_1',
@@ -108,6 +167,12 @@ test('Dubai stock schemas validate operational fields', () => {
     date: '2026-05-06',
     value: '12',
   }).value, '12');
+  assert.throws(() => upsertStockValueSchema.parse({
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    date: '2026-02-31',
+    value: '12',
+  }));
   assert.equal(updateProductMetaSchema.parse({ unitsInPack: 6 }).unitsInPack, 6);
   assert.equal(updateProductSchema.parse({
     name: 'Updated apples',

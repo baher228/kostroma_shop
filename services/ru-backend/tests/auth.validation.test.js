@@ -8,6 +8,7 @@ const {
   createTaskSchema,
   updateTaskStatusSchema,
   createUserSchema,
+  checkInStatsQuerySchema,
   updateUserPasswordSchema,
   updateUserSchema,
   createSupportThreadSchema,
@@ -77,6 +78,8 @@ test('personal workflow schemas validate expected fields', () => {
     body: ' Terminal stopped printing receipts ',
   }).body, 'Terminal stopped printing receipts');
   assert.equal(createSupportMessageSchema.parse({ body: ' Need manager help ' }).body, 'Need manager help');
+  assert.equal(checkInStatsQuerySchema.parse({ from: '2026-05-01', to: '2026-05-31' }).from, '2026-05-01');
+  assert.throws(() => checkInStatsQuerySchema.parse({ from: '2026-02-31', to: '2026-05-31' }));
 });
 
 test('Russia app does not expose stock/order/shop routes', async (t) => {

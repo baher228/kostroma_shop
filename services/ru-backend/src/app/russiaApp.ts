@@ -2,6 +2,7 @@ import express from 'express';
 import { applyAppMiddleware } from './appMiddleware';
 import { registerAuthRoutes } from '../routes/authRoutes';
 import { registerCheckInRoutes } from '../routes/checkInRoutes';
+import { registerFobRoutes } from '../routes/fobRoutes';
 import { registerSupportRoutes } from '../routes/supportRoutes';
 import { registerTaskRoutes } from '../routes/taskRoutes';
 import { registerUserRoutes } from '../routes/userRoutes';
@@ -18,6 +19,7 @@ export const createRussiaApp = () => {
   registerAuthRoutes(app);
   registerUserRoutes(app);
   registerCheckInRoutes(app);
+  registerFobRoutes(app);
   registerTaskRoutes(app);
   registerSupportRoutes(app);
 

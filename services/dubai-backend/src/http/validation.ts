@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ColumnKey } from '../domain/types';
+import { BUSINESS_CATEGORIES, DEFAULT_BUSINESS_CATEGORY, type BusinessCategory, ColumnKey } from '../domain/types';
 
 const numericValue = z
   .string()
@@ -13,6 +13,34 @@ const stockValue = z
   });
 
 const dateTimeString = z.string().datetime().optional().nullable();
+
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const isRealDateKey = (dateKey: string): boolean => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  return toDateKey(date) === dateKey;
+};
+
+const dateKeySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isRealDateKey, { message: 'Invalid calendar date.' });
+
+const isAllowedOrderDate = (dateKey: string): boolean => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  return new Set([2, 4, 6]).has(date.getDay());
+};
+
+const businessCategorySchema = z.enum(BUSINESS_CATEGORIES);
+const productCategorySchema = z.string().trim().min(1).max(80);
+const resolveBusinessCategory = (value?: BusinessCategory): BusinessCategory => value ?? DEFAULT_BUSINESS_CATEGORY;
 
 const columnKeys: [ColumnKey, ...ColumnKey[]] = [
   'packCount',
@@ -51,13 +79,8 @@ export const loginSchema = z.object({
 
 export const createRowSchema = z.object({
   name: z.string().trim().min(2).max(140),
-  category: z.enum([
-    '\u0419\u043e\u0433\u0443\u0440\u0442\u044b',
-    '\u041a\u0435\u0444\u0438\u0440, \u0420\u044f\u0436\u0435\u043d\u043a\u0430, \u0421\u043d\u0435\u0436\u043e\u043a',
-    '\u041c\u043e\u043b\u043e\u043a\u043e',
-    '\u0421\u043c\u0435\u0442\u0430\u043d\u0430',
-    '\u0422\u0432\u043e\u0440\u043e\u0433',
-  ]),
+  businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
+  category: productCategorySchema,
   packType: z.string().trim().min(1).max(40),
   unitsInPack: z.number().int().positive().max(9999),
   packWeightKg: z.number().positive().max(99999),
@@ -73,13 +96,6 @@ export const createRowSchema = z.object({
 
 const nullablePositiveInt = z.union([z.number().int().positive(), z.null()]);
 const machineNumberSchema = z.number().int().min(1).max(3);
-const productCategorySchema = z.enum([
-  '\u0419\u043e\u0433\u0443\u0440\u0442\u044b',
-  '\u041a\u0435\u0444\u0438\u0440, \u0420\u044f\u0436\u0435\u043d\u043a\u0430, \u0421\u043d\u0435\u0436\u043e\u043a',
-  '\u041c\u043e\u043b\u043e\u043a\u043e',
-  '\u0421\u043c\u0435\u0442\u0430\u043d\u0430',
-  '\u0422\u0432\u043e\u0440\u043e\u0433',
-]);
 
 export const updateRowSchema = z
   .object({
@@ -144,15 +160,16 @@ export const updateShopMachineSchema = z.object({
 
 export const listStockTableQuerySchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
+  from: dateKeySchema.optional(),
+  to: dateKeySchema.optional(),
   range: z.enum(['week', 'year']).optional(),
 });
 
 export const upsertStockValueSchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
   productId: z.string().trim().min(1).max(100),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: dateKeySchema,
   value: z
     .string()
     .regex(/^\d{0,2}$/)
@@ -191,6 +208,7 @@ export const updateProductMetaSchema = z
 export const updateProductSchema = z
   .object({
     name: z.string().trim().min(2).max(140).optional(),
+    businessCategory: businessCategorySchema.optional(),
     category: productCategorySchema.optional(),
     packType: z.string().trim().min(1).max(40).optional(),
     unitsInPack: z.number().int().positive().max(9999).optional(),
@@ -237,12 +255,38 @@ export const createSupportMessageSchema = z.object({
 
 export const createSellerOrderSchema = z.object({
   shopId: z.string().trim().min(1).max(100),
+  businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
+  productId: z.string().trim().min(1).max(100),
+  stockOnHand: z.number().int().min(0).max(9999).optional().nullable(),
+  requestedPacks: z.number().int().min(1).max(9999),
+  requestedUnits: z.number().int().min(1).max(99999),
+  autoSuggested: z.boolean().optional().default(false),
+  orderDate: dateKeySchema.optional(),
+}).strict()
+  .refine((payload) => resolveBusinessCategory(payload.businessCategory) !== 'Молоко' || !payload.orderDate || isAllowedOrderDate(payload.orderDate), {
+    message: 'Milk order date must be Tuesday, Thursday or Saturday.',
+  });
+
+const sellerOrderItemSchema = z.object({
   productId: z.string().trim().min(1).max(100),
   stockOnHand: z.number().int().min(0).max(9999).optional().nullable(),
   requestedPacks: z.number().int().min(1).max(9999),
   requestedUnits: z.number().int().min(1).max(99999),
   autoSuggested: z.boolean().optional().default(false),
 }).strict();
+
+export const createSellerOrderBulkSchema = z.object({
+  shopId: z.string().trim().min(1).max(100),
+  businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
+  orderDate: dateKeySchema,
+  items: z.array(sellerOrderItemSchema).min(1).max(1000),
+}).strict()
+  .refine((payload) => resolveBusinessCategory(payload.businessCategory) !== 'Молоко' || isAllowedOrderDate(payload.orderDate), {
+    message: 'Milk order date must be Tuesday, Thursday or Saturday.',
+  })
+  .refine((payload) => new Set(payload.items.map((item) => item.productId)).size === payload.items.length, {
+    message: 'Order items must have unique products.',
+  });
 
 export const updateSellerOrderStatusSchema = z.object({
   status: z.enum(['new', 'processed']),
@@ -253,12 +297,18 @@ export const updateCheckInStatusSchema = z.object({
 });
 
 export const orderSheetQuerySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: dateKeySchema,
+  businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
 });
 
 export const upsertOrderSheetValueSchema = z.object({
   shopId: z.string().trim().min(1).max(100),
   productId: z.string().trim().min(1).max(100),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: dateKeySchema,
   value: z.string().regex(/^\d{0,5}$/),
 });
+
+export const subcategorySchema = z.object({
+  businessCategory: businessCategorySchema,
+  name: productCategorySchema,
+}).strict();

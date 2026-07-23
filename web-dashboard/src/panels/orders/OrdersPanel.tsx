@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, PageHeader, RefreshButton } from '../../components/ui';
-import { MACHINE_NUMBERS, PRODUCT_CATEGORIES, type MachineGroup } from '../../dashboardConfig';
+import { BUSINESS_CATEGORIES, DEFAULT_BUSINESS_CATEGORY, MACHINE_NUMBERS, PRODUCT_CATEGORIES, type MachineGroup } from '../../dashboardConfig';
 import {
   formatDateLabel,
   formatWeekdayLabel,
+  addDays,
   isAllowedOrderDate,
   nearestAllowedOrderDate,
   shiftToAllowedOrderDate,
@@ -14,9 +15,10 @@ import { safeFileName } from '../../export/csv';
 import { makeXlsxBlob, xlsxColumnName, type XlsxCell } from '../../export/xlsx';
 import { sortProductsLikeImage } from '../../productOrdering';
 import { formatWeight, messageOf } from '../../shared/format';
-import type { OrderSheet, OrderSheetRow, ProductCategory, Session, Shop } from '../../types';
+import type { BusinessCategory, OrderSheet, OrderSheetRow, ProductCategory, Session, Shop } from '../../types';
 export const OrdersPanel = ({ session }: { session: Session }) => {
   const initialDate = nearestAllowedOrderDate(todayDateKey());
+  const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [date, setDate] = useState(initialDate);
   const [inputDate, setInputDate] = useState(initialDate);
   const [sheet, setSheet] = useState<OrderSheet | null>(null);
@@ -28,7 +30,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     setLoading(true);
     setError('');
     try {
-      const nextSheet = await api.orders.sheet(session.token, targetDate);
+      const nextSheet = await api.orders.sheet(session.token, targetDate, activeBusinessCategory);
       setSheet(nextSheet);
       setDate(targetDate);
       setInputDate(targetDate);
@@ -43,14 +45,14 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
 
   useEffect(() => {
     void load(initialDate);
-  }, [session.token]);
+  }, [session.token, activeBusinessCategory]);
 
   const handleLoadDate = () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
       setError('Формат даты: YYYY-MM-DD');
       return;
     }
-    if (!isAllowedOrderDate(inputDate)) {
+    if (activeBusinessCategory === 'Молоко' && !isAllowedOrderDate(inputDate)) {
       setError('Лист заказа доступен только во вторник, четверг и субботу.');
       return;
     }
@@ -58,12 +60,17 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
   };
 
   const shiftDate = (direction: 1 | -1) => {
-    const next = shiftToAllowedOrderDate(date, direction);
+    const next = activeBusinessCategory === 'Молоко'
+      ? shiftToAllowedOrderDate(date, direction)
+      : addDays(date, direction);
     void load(next);
   };
 
   const groupRowsByCategory = (targetSheet: OrderSheet | null) => {
-    const grouped = PRODUCT_CATEGORIES.reduce((acc, category) => {
+    const categories = activeBusinessCategory === 'Молоко'
+      ? [...PRODUCT_CATEGORIES]
+      : Array.from(new Set((targetSheet?.rows ?? []).map((row) => row.category))).filter(Boolean);
+    const grouped = categories.reduce((acc, category) => {
       acc[category] = [];
       return acc;
     }, {} as Record<ProductCategory, OrderSheetRow[]>);
@@ -77,12 +84,13 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       if (normalizedQuery && !row.productName.toLowerCase().includes(normalizedQuery)) {
         continue;
       }
-      const category = PRODUCT_CATEGORIES.includes(row.category as ProductCategory)
-        ? row.category as ProductCategory
-        : PRODUCT_CATEGORIES[0];
+      const category = categories.includes(row.category) ? row.category : categories[0];
+      if (!category) {
+        continue;
+      }
       grouped[category].push(row);
     }
-    for (const category of PRODUCT_CATEGORIES) {
+    for (const category of categories) {
       grouped[category] = sortProductsLikeImage(
         grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category as ProductCategory })),
       ).map(({ name: _name, ...row }) => row as OrderSheetRow);
@@ -102,7 +110,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
 
   const rowsByCategory = useMemo(() => {
     return groupRowsByCategory(sheet);
-  }, [query, sheet]);
+  }, [activeBusinessCategory, query, sheet]);
 
   const machineGroups = useMemo<MachineGroup[]>(() => {
     return groupShopsByMachine(sheet);
@@ -117,7 +125,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       setError('Формат даты: YYYY-MM-DD');
       return;
     }
-    if (!isAllowedOrderDate(inputDate)) {
+    if (activeBusinessCategory === 'Молоко' && !isAllowedOrderDate(inputDate)) {
       setError('Лист заказа доступен только во вторник, четверг и субботу.');
       return;
     }
@@ -154,7 +162,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       currentColumn = endColumn + 1;
     }
 
-    for (const category of PRODUCT_CATEGORIES) {
+    for (const category of Object.keys(targetRowsByCategory)) {
       const categoryRows = targetRowsByCategory[category];
       if (!categoryRows.length) {
         continue;
@@ -203,6 +211,18 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       />
       <Feedback error={error} />
       <div className="toolbar hero-toolbar">
+        {BUSINESS_CATEGORIES.map((category) => (
+          <button
+            key={category}
+            className={activeBusinessCategory === category ? '' : 'secondary'}
+            onClick={() => {
+              setActiveBusinessCategory(category);
+              void load(date);
+            }}
+          >
+            {category}
+          </button>
+        ))}
         <button className="secondary date-step" onClick={() => shiftDate(-1)} aria-label="Предыдущая дата заказа">‹</button>
         <input type="date" value={inputDate} onChange={(event) => setInputDate(event.target.value)} />
         <button className="secondary date-step" onClick={() => shiftDate(1)} aria-label="Следующая дата заказа">›</button>
@@ -245,7 +265,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                 </tr>
               </thead>
               <tbody>
-                {PRODUCT_CATEGORIES.map((category) => {
+                {Object.keys(rowsByCategory).map((category) => {
                   const rows = rowsByCategory[category];
                   if (!rows.length) {
                     return null;

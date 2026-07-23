@@ -1,4 +1,4 @@
-export type Role = 'manager' | 'worker';
+export type Role = 'manager' | 'worker' | 'store_tablet';
 
 export type SessionUser = {
   id: string;
@@ -42,11 +42,13 @@ export type Shop = {
   machineNumber: number;
 };
 
-export type ProductCategory = 'Йогурты' | 'Кефир, Ряженка, Снежок' | 'Молоко' | 'Сметана' | 'Творог';
+export type BusinessCategory = 'Хлеб' | 'Молоко' | 'Деликатесы' | 'Сыр';
+export type ProductCategory = string;
 
 export type StockTableRow = {
   productId: string;
   name: string;
+  businessCategory: BusinessCategory;
   category: ProductCategory;
   packType: string | null;
   unitsInPack: number | null;
@@ -61,6 +63,8 @@ export type StockTableRow = {
 
 export type StockTable = {
   shop: Shop;
+  businessCategory: BusinessCategory;
+  subcategories: ProductCategory[];
   from: string;
   to: string;
   dates: string[];
@@ -144,10 +148,12 @@ export type SellerOrder = {
   shopName: string | null;
   productId: string;
   productName: string;
+  businessCategory: BusinessCategory;
   stockOnHand: number | null;
   requestedPacks: number;
   requestedUnits: number;
   autoSuggested: boolean;
+  orderDate: string | null;
   status: 'new' | 'processed';
   createdAt: string;
 };
@@ -157,6 +163,11 @@ export type WorkerCheckInStatus = {
   workerDisplayName: string;
   status: 'in' | 'out';
   lastChangedAt: string;
+  shopId: string | null;
+  shopName: string | null;
+  source: 'manual' | 'tablet_qr';
+  scannedByTabletId: string | null;
+  scannedByTabletDisplayName: string | null;
 };
 
 export type WorkerCheckInEvent = {
@@ -165,6 +176,17 @@ export type WorkerCheckInEvent = {
   workerDisplayName: string;
   status: 'in' | 'out';
   eventAt: string;
+  shopId: string | null;
+  shopName: string | null;
+  source: 'manual' | 'tablet_qr';
+  scannedByTabletId: string | null;
+  scannedByTabletDisplayName: string | null;
+};
+
+export type FobChallenge = {
+  payload: string;
+  expiresAt: string;
+  refreshAfterSeconds: number;
 };
 
 export type OrderValueEntry = {
@@ -177,6 +199,7 @@ export type OrderValueEntry = {
 export type OrderSheetRow = {
   productId: string;
   productName: string;
+  businessCategory: BusinessCategory;
   category: string;
   packType: string | null;
   unitsInPack: number | null;

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "strict": true
   },
-  "include": ["App.tsx", "index.ts", "frontend/**/*.ts", "frontend/**/*.tsx", "*.ts"],
+  "include": ["App.tsx", "index.ts", "frontend/**/*.ts", "frontend/**/*.tsx", "shared/**/*.ts", "*.ts"],
   "exclude": [
     "node_modules",
     "web-dashboard",

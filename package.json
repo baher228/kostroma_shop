@@ -7,6 +7,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "worker:start": "npm --prefix worker-app run start",
+    "worker:typecheck": "npx tsc -p worker-app/tsconfig.json --noEmit",
     "dashboard:dev": "npm --prefix web-dashboard run dev",
     "dashboard:build": "npm --prefix web-dashboard run build",
     "dashboard:preview": "npm --prefix web-dashboard run preview",
@@ -49,10 +51,13 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.33",
+    "expo-camera": "~17.0.10",
     "expo-status-bar": "~3.0.9",
     "expo-updates": "~29.0.18",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-qrcode-svg": "^6.3.21",
+    "react-native-svg": "15.12.1"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

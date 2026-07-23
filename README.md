@@ -88,6 +88,12 @@ VITE_RU_API_URL=http://localhost:4000
 VITE_DXB_API_URL=http://localhost:4001
 ```
 
+Tablet APK download:
+
+- Put the real tablet APK at `web-dashboard/public/tablet.apk`.
+- The dashboard exposes it publicly at `/tablet.apk`.
+- Replace that file and rebuild/redeploy the dashboard to update the download.
+
 ## Default Login
 
 ```text
@@ -128,8 +134,8 @@ GitHub Actions workflows are included for deployment and application updates:
 - `CI` — runs on push / pull request to `main` or `master`, installs dependencies, typechecks frontend + backends, runs backend tests, validates Docker Compose, and builds both backend Docker images.
 - `Deploy backend` — deploys RU and/or Dubai backend over SSH with `rsync`, then runs the matching Docker Compose file and smoke-tests the health endpoint.
 - `Deploy dashboard` — builds `web-dashboard`, rsyncs `dist/` to the web root, reloads nginx, and optionally smoke-tests the public dashboard URL.
-- `Update Expo app` — publishes EAS OTA updates to the `preview` or `production` channel.
-- `Build Android app` — manual EAS workflow for `preview` APK or `production` AAB builds.
+- `Update Expo app` — publishes EAS OTA updates; automatic pushes default to the `preview` channel so dashboard APK installs can update in-app. Manual runs can target `preview` or `production`.
+- `Build Android app` — builds and publishes a dashboard-downloadable `preview` APK.
 
 ### GitHub Environments
 
@@ -181,8 +187,8 @@ Recommended environment variable:
 
 EAS Update is enabled through `expo-updates`, `runtimeVersion.policy = appVersion`, and EAS channels in `eas.json`.
 
-- `preview` builds receive OTA updates from the `preview` channel.
-- `production` builds receive OTA updates from the `production` channel.
+- Dashboard APK downloads are `preview` builds, so automatic OTA updates publish to the `preview` branch and keep the `preview` channel pointed at that branch.
+- `production` builds receive OTA updates from the `production` channel when the workflow is run manually with `channel=production`.
 - Native/runtime changes still require a new EAS build; JS/asset-only changes can ship through `Update Expo app`.
 
 ### Example `ENV_FILE` Secret

@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "Analitika FOB",
+    "slug": "analitika-worker-fob",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["android"],
+    "scheme": "analitika-fob"
+  }
+}

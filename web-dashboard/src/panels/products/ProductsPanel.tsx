@@ -2,15 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, Modal, NumberInput, PageHeader, RefreshButton } from '../../components/ui';
 import {
+  BUSINESS_CATEGORIES,
   DASHBOARD_COLUMNS,
-  DASHBOARD_WINDOW_START,
+  DEFAULT_BUSINESS_CATEGORY,
+  DEFAULT_PRODUCT_CATEGORY,
   MAX_ORDER_VALUE_LEN,
   PRODUCT_CATEGORIES,
   WEEK_DAYS,
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, getTwoWeeksEnd } from '../../dateUtils';
+import { addDays, formatDateLabel, getTwoWeeksEnd, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
@@ -26,15 +28,25 @@ import {
 } from '../../domain/inventory/dashboard';
 import { intOrZero, messageOf, normalizeText, numberOrZero } from '../../shared/format';
 import type { Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
+import type { BusinessCategory } from '../../types';
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
+  const currentWeekStart = startOfWeek();
+  const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [shops, setShops] = useState<Shop[]>([]);
   const [table, setTable] = useState<StockTable | null>(null);
   const [selectedShopId, setSelectedShopId] = useState('');
   const [query, setQuery] = useState('');
-  const [windowStart, setWindowStart] = useState(DASHBOARD_WINDOW_START);
+  const [windowStart, setWindowStart] = useState(currentWeekStart);
   const [orderValues, setOrderValues] = useState<Record<string, string>>({});
   const [form, setForm] = useState<ProductPayload>(productToForm());
+  const [subcategories, setSubcategories] = useState<Record<BusinessCategory, string[]>>({
+    Хлеб: [],
+    Молоко: [...PRODUCT_CATEGORIES],
+    Деликатесы: [],
+    Сыр: [],
+  });
+  const [newSubcategoryName, setNewSubcategoryName] = useState('');
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [editingCell, setEditingCell] = useState<{ productId: string; date: string; productName: string } | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -57,12 +69,15 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       const dashboardFrom = addDays(nextWindowStart, -WEEK_DAYS);
       const from = dashboardFrom;
       const to = getTwoWeeksEnd(dashboardFrom);
-      const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, from, to });
+      const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, businessCategory: activeBusinessCategory, from, to });
       setTable(nextTable);
+      const nextSubcategories = await api.stock.listSubcategories(session.token);
+      setSubcategories(nextSubcategories);
 
       try {
         const loaded: Record<string, string> = {};
-        const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, to);
+        const orderValuesTo = addDays(to, 2);
+        const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, orderValuesTo, activeBusinessCategory);
         for (const entry of nextOrderValues) {
           loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
         }
@@ -79,7 +94,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   useEffect(() => {
     void load();
-  }, [session.token, selectedShopId, windowStart]);
+  }, [session.token, selectedShopId, windowStart, activeBusinessCategory]);
 
   const visibleRows = useMemo(() => {
     const normalized = normalizeText(query);
@@ -87,16 +102,27 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   }, [query, table]);
 
   const rowsByCategory = useMemo(() => {
-    const grouped = PRODUCT_CATEGORIES.reduce((acc, category) => {
+    const categories = table?.subcategories?.length ? table.subcategories : subcategories[activeBusinessCategory] ?? [DEFAULT_PRODUCT_CATEGORY];
+    const grouped = categories.reduce((acc, category) => {
       acc[category] = [] as Product[];
       return acc;
     }, {} as Record<ProductCategory, Product[]>);
     for (const row of visibleRows) {
-      const category = PRODUCT_CATEGORIES.includes(row.category) ? row.category : PRODUCT_CATEGORIES[0];
+      const category = categories.includes(row.category) ? row.category : categories[0] ?? DEFAULT_PRODUCT_CATEGORY;
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
       grouped[category].push(row);
     }
     return grouped;
-  }, [visibleRows]);
+  }, [activeBusinessCategory, subcategories, table?.subcategories, visibleRows]);
+
+  const activeSubcategories = useMemo(
+    () => table?.subcategories?.length ? table.subcategories : subcategories[activeBusinessCategory] ?? [DEFAULT_PRODUCT_CATEGORY],
+    [activeBusinessCategory, subcategories, table?.subcategories],
+  );
+
+  const isMilkTable = activeBusinessCategory === 'Молоко';
 
   const dashboardWeeks: DashboardWeeks = useMemo(
     () => (table ? deriveDashboardWeeks(table.dates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
@@ -173,8 +199,14 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const createProduct = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      await api.stock.createProduct(session.token, { ...form, name: form.name.trim(), packType: form.packType.trim() });
-      setForm(productToForm());
+      await api.stock.createProduct(session.token, {
+        ...form,
+        businessCategory: activeBusinessCategory,
+        category: form.category || activeSubcategories[0] || DEFAULT_PRODUCT_CATEGORY,
+        name: form.name.trim(),
+        packType: form.packType.trim(),
+      });
+      setForm({ ...productToForm(), businessCategory: activeBusinessCategory, category: activeSubcategories[0] || DEFAULT_PRODUCT_CATEGORY });
       setIsAddProductOpen(false);
       await load();
     } catch (err) {
@@ -211,7 +243,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         return subtitle ? `${column.title} (${subtitle})` : column.title;
       }),
     ];
-    const rows = PRODUCT_CATEGORIES.flatMap((category) => rowsByCategory[category]).map((row) => {
+    const rows = activeSubcategories.flatMap((category) => rowsByCategory[category] ?? []).map((row) => {
       const values = rowValuesFor(row);
       return [
         row.category,
@@ -233,6 +265,34 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const addSubcategory = async () => {
+    const name = newSubcategoryName.trim();
+    if (!name) {
+      return;
+    }
+    try {
+      const next = await api.stock.createSubcategory(session.token, { businessCategory: activeBusinessCategory, name });
+      setSubcategories(next);
+      setNewSubcategoryName('');
+      if (!form.category) {
+        setForm((current) => ({ ...current, category: name }));
+      }
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  };
+
+  const removeSubcategory = async (name: string) => {
+    try {
+      await api.stock.deleteSubcategory(session.token, { businessCategory: activeBusinessCategory, name });
+      const next = await api.stock.listSubcategories(session.token);
+      setSubcategories(next);
+      setForm((current) => current.category === name ? { ...current, category: next[activeBusinessCategory]?.[0] ?? DEFAULT_PRODUCT_CATEGORY } : current);
+    } catch (err) {
+      setError(messageOf(err));
+    }
   };
 
   const renderDashboardCategory = (category: ProductCategory, rows: Product[]) => (
@@ -312,19 +372,110 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     </section>
   );
 
+  const stockFor = (row: Product, date: string): number | null => {
+    const raw = row.values[date];
+    if (!raw) return null;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const soldFor = (row: Product, date: string): string => {
+    const previous = stockFor(row, addDays(date, -1));
+    const current = stockFor(row, date);
+    if (previous === null || current === null) return '';
+    return String(Math.max(0, previous - current));
+  };
+
+  const renderDailyCategory = (category: ProductCategory, rows: Product[]) => (
+    <section key={category} className="manager-category-block">
+      <div className="manager-category-title">{category}</div>
+      <div className="manager-table-scroll">
+        <table className="manager-stock-table manager-dashboard-table">
+          <thead>
+            <tr>
+              <th className="manager-name-col dashboard-name-header">Товар</th>
+              {(table?.dates ?? []).map((date) => (
+                <React.Fragment key={date}>
+                  <th>{formatDateLabel(date)}<small>Остаток</small></th>
+                  <th>{formatDateLabel(addDays(date, 1))}<small>Заказ</small></th>
+                  <th>{formatDateLabel(date)}<small>Продано</small></th>
+                </React.Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={(table?.dates.length ?? 0) * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+            ) : rows.map((row) => (
+              <tr key={row.productId}>
+                <td className="manager-name-col"><strong>{row.name}</strong><small>{productReferenceLabel(row)}</small></td>
+                {(table?.dates ?? []).map((date) => {
+                  const orderDate = addDays(date, 1);
+                  return (
+                    <React.Fragment key={`${row.productId}:${date}`}>
+                      <td>
+                        <button className="stock-cell-button" onClick={() => openEditCell(row, date)}>
+                          {row.values[date] || '-'}
+                        </button>
+                      </td>
+                      <td>
+                        <input
+                          className="dashboard-order-input"
+                          value={orderPacksForDate(row.productId, orderDate)}
+                          maxLength={MAX_ORDER_VALUE_LEN}
+                          placeholder="-"
+                          onChange={(event) => {
+                            const nextValue = sanitizeOrderValue(event.target.value);
+                            setOrderValues((current) => ({ ...current, [`${row.productId}:${orderDate}`]: nextValue }));
+                            const packs = nextValue ? Number.parseInt(nextValue, 10) : 0;
+                            void api.stock.updateOrderValue(session.token, {
+                              shopId: selectedShopId,
+                              productId: row.productId,
+                              orderDate,
+                              packs: Number.isNaN(packs) ? 0 : packs,
+                            }).catch((err) => setError(messageOf(err)));
+                          }}
+                        />
+                      </td>
+                      <td>{soldFor(row, date) || '-'}</td>
+                    </React.Fragment>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
   return (
     <section className="page-section stock-page-section">
       <PageHeader title="Остатки" subtitle="Менеджерская таблица остатков, заказов и продаж по магазину." action={<RefreshButton onClick={() => load()} />} />
       <Feedback error={error} />
 
       <div className="manager-controls">
+        <div className="manager-button-row">
+          {BUSINESS_CATEGORIES.map((category) => (
+            <button
+              key={category}
+              className={activeBusinessCategory === category ? '' : 'secondary'}
+              onClick={() => {
+                setActiveBusinessCategory(category);
+                setForm({ ...productToForm(), businessCategory: category, category: subcategories[category]?.[0] ?? DEFAULT_PRODUCT_CATEGORY });
+              }}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
         <input className="manager-search" placeholder="Поиск товара" value={query} onChange={(event) => setQuery(event.target.value)} />
         <div className="manager-button-row">
           <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
             {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
           </select>
           <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, -WEEK_DAYS))}>-1 нед.</button>
-          <button className="secondary" onClick={() => setWindowStart(DASHBOARD_WINDOW_START)}>Текущая нед.</button>
+          <button className="secondary" onClick={() => setWindowStart(startOfWeek())}>Текущая нед.</button>
           <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, WEEK_DAYS))}>+1 нед.</button>
           <button onClick={() => setIsAddProductOpen(true)}>Добавить товар</button>
           <button className="secondary" onClick={exportDashboard}>Экспорт в Excel</button>
@@ -333,12 +484,14 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       <div className="manager-meta-row">
         <strong>Позиций: {visibleRows.length}</strong>
-        <strong>{table ? `${windowStart} - ${addDays(windowStart, WEEK_DAYS - 1)}` : ''}</strong>
+        <strong>{table ? `${activeBusinessCategory}: ${windowStart} - ${addDays(windowStart, WEEK_DAYS - 1)}` : ''}</strong>
       </div>
 
       <div className="manager-table-wrap">
-        {loading ? <p className="manager-loading">Загружаем остатки...</p> : PRODUCT_CATEGORIES.map((category) =>
-          renderDashboardCategory(category, rowsByCategory[category]),
+        {loading ? <p className="manager-loading">Загружаем остатки...</p> : activeSubcategories.map((category) =>
+          isMilkTable
+            ? renderDashboardCategory(category, rowsByCategory[category] ?? [])
+            : renderDailyCategory(category, rowsByCategory[category] ?? []),
         )}
       </div>
 
@@ -347,8 +500,19 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           <form className="modal-form product-modal-form" onSubmit={createProduct}>
             <input placeholder="Название товара" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
             <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value as ProductCategory })}>
-              {PRODUCT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+              {activeSubcategories.map((category) => <option key={category} value={category}>{category}</option>)}
             </select>
+            <div className="manager-button-row">
+              <input placeholder="Новая подкатегория" value={newSubcategoryName} onChange={(event) => setNewSubcategoryName(event.target.value)} />
+              <button type="button" className="secondary" onClick={() => void addSubcategory()}>Добавить подкатегорию</button>
+            </div>
+            <div className="manager-button-row">
+              {activeSubcategories.map((category) => (
+                <button key={category} type="button" className="secondary" onClick={() => void removeSubcategory(category)}>
+                  Удалить {category}
+                </button>
+              ))}
+            </div>
             <input placeholder="Тип упаковки" value={form.packType} onChange={(event) => setForm({ ...form, packType: event.target.value })} />
             <NumberInput label="Штук в упаковке" value={form.unitsInPack} onChange={(value) => setForm({ ...form, unitsInPack: intOrZero(value) })} />
             <NumberInput label="Вес упаковки, кг" value={form.packWeightKg} onChange={(value) => setForm({ ...form, packWeightKg: numberOrZero(value) })} />

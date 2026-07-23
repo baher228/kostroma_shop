@@ -14,6 +14,24 @@ const stockValue = z
 
 const dateTimeString = z.string().datetime().optional().nullable();
 
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const isRealDateKey = (dateKey: string): boolean => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  return toDateKey(date) === dateKey;
+};
+
+const dateKeySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isRealDateKey, { message: 'Invalid calendar date.' });
+
 const columnKeys: [ColumnKey, ...ColumnKey[]] = [
   'packCount',
   'stockTue',
@@ -99,7 +117,7 @@ export const createUserSchema = z.object({
   firstName: z.string().trim().min(2).max(80),
   lastName: z.string().trim().min(2).max(80),
   password: z.string().min(5).max(200),
-  role: z.enum(['manager', 'worker']).default('worker'),
+  role: z.enum(['manager', 'worker', 'store_tablet']).default('worker'),
   shopId: z.string().trim().min(1).max(100).optional().nullable(),
 });
 
@@ -113,7 +131,7 @@ export const updateUserSchema = z
       .optional(),
     firstName: z.string().trim().min(2).max(80).optional(),
     lastName: z.string().trim().min(2).max(80).optional(),
-    role: z.enum(['manager', 'worker']).optional(),
+    role: z.enum(['manager', 'worker', 'store_tablet']).optional(),
     shopId: z.string().trim().min(1).max(100).optional().nullable(),
   })
   .refine((payload) => Object.keys(payload).length > 0, {
@@ -218,8 +236,13 @@ export const updateCheckInStatusSchema = z.object({
 });
 
 export const checkInStatsQuerySchema = z.object({
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: dateKeySchema.optional(),
+  to: dateKeySchema.optional(),
+  shopId: z.string().trim().min(1).max(100).optional(),
+});
+
+export const fobScanSchema = z.object({
+  payload: z.string().trim().min(8).max(500),
 });
 
 export const orderSheetQuerySchema = z.object({

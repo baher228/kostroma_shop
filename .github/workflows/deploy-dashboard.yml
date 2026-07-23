@@ -19,6 +19,7 @@ jobs:
       SSH_PORT: ${{ secrets.SSH_PORT }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
       DASHBOARD_PATH: ${{ secrets.DASHBOARD_PATH }}
       DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
       VITE_RU_API_URL: ${{ vars.VITE_RU_API_URL }}
@@ -59,18 +60,39 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            for attempt in {1..6}; do
+              if ssh-keyscan -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts; then
+                break
+              fi
+              echo "ssh-keyscan failed; retrying in 5s ($attempt/6)"
+              sleep 5
+            done
+            test -s ~/.ssh/known_hosts
+          fi
 
       - name: Sync dashboard files
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$DASHBOARD_PATH'"
-          rsync -az --delete -e "ssh -p $PORT" web-dashboard/dist/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/"
+          SSH_OPTS="-p $PORT -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
+          for attempt in {1..6}; do
+            if ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" "mkdir -p '$DASHBOARD_PATH'" \
+              && rsync -az --delete --exclude 'downloads/' -e "ssh $SSH_OPTS" web-dashboard/dist/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/"; then
+              exit 0
+            fi
+            echo "Dashboard sync failed; retrying in 15s ($attempt/6)"
+            sleep 15
+          done
+          echo "Dashboard sync failed after 6 attempts" >&2
+          exit 1
 
       - name: Reload nginx
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "nginx -t && systemctl reload nginx"
+          SSH_OPTS="-p $PORT -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" "nginx -t && systemctl reload nginx"
 
       - name: Smoke test dashboard
         if: ${{ vars.DASHBOARD_URL != '' }}

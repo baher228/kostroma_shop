@@ -83,7 +83,14 @@ const credentialsPath = () => {
 };
 
 const readServiceAccount = async (): Promise<GoogleServiceAccount> => {
-  const raw = await fs.readFile(credentialsPath(), 'utf8');
+  let raw: string;
+  if (config.googleServiceAccountJsonBase64) {
+    raw = Buffer.from(config.googleServiceAccountJsonBase64, 'base64').toString('utf8');
+  } else if (config.googleServiceAccountJson) {
+    raw = config.googleServiceAccountJson;
+  } else {
+    raw = await fs.readFile(credentialsPath(), 'utf8');
+  }
   const parsed = JSON.parse(raw) as GoogleServiceAccount;
   if (!parsed.client_email || !parsed.private_key) {
     throw new Error('Google service account JSON is missing client_email or private_key.');

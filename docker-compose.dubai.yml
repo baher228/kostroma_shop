@@ -25,8 +25,6 @@ services:
       dockerfile: services/dubai-backend/Dockerfile
     container_name: analitika-backend-dubai
     restart: unless-stopped
-    env_file:
-      - ./services/dubai-backend/.env
     depends_on:
       postgres-dubai:
         condition: service_healthy
@@ -44,6 +42,10 @@ services:
       OPS_POSTGRES_DB: ${OPS_POSTGRES_DB:-analitika_ops}
       OPS_POSTGRES_SSL: "false"
       R2_SIGNED_URL_TTL_SECONDS: ${R2_SIGNED_URL_TTL_SECONDS:-900}
+      GOOGLE_DRIVE_POSTERS_FOLDER_ID: ${GOOGLE_DRIVE_POSTERS_FOLDER_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      GOOGLE_SERVICE_ACCOUNT_JSON_BASE64: ${GOOGLE_SERVICE_ACCOUNT_JSON_BASE64:-}
     ports:
       - "${DXB_BACKEND_PUBLIC_PORT:-4001}:4001"
 

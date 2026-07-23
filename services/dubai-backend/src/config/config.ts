@@ -76,4 +76,6 @@ export const config = {
   r2SignedUrlTtlSeconds: parsePort(process.env.R2_SIGNED_URL_TTL_SECONDS ?? '900'),
   googleDrivePostersFolderId: trimToUndefined(process.env.GOOGLE_DRIVE_POSTERS_FOLDER_ID),
   googleApplicationCredentials: trimToUndefined(process.env.GOOGLE_APPLICATION_CREDENTIALS),
+  googleServiceAccountJson: trimToUndefined(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
+  googleServiceAccountJsonBase64: trimToUndefined(process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64),
 };

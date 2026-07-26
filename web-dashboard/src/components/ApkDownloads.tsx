@@ -75,6 +75,10 @@ const loadBuild = async (target: DownloadTarget): Promise<DownloadBuild> => {
     if (!response.ok) {
       throw new Error(`Сервер вернул ошибку ${response.status}.`);
     }
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      return { manifest: null, error: '' };
+    }
     const manifest: unknown = await response.json();
     if (!isManifest(manifest)) {
       throw new Error('Манифест APK поврежден.');

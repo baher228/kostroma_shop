@@ -26,11 +26,15 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
+            worker-app/package-lock.json
             services/ru-backend/package-lock.json
             services/dubai-backend/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Install FOB app dependencies
+        run: npm --prefix worker-app ci
 
       - name: Install RU backend dependencies
         run: npm --prefix services/ru-backend ci
@@ -43,6 +47,23 @@ jobs:
 
       - name: Run backend/mobile CI checks
         run: npm run ci
+
+      - name: Bundle both Android apps
+        env:
+          EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
+          EXPO_PUBLIC_DXB_API_URL: https://affera.co.uk/dxb
+          EXPO_WORKER_EAS_PROJECT_ID: ${{ vars.EXPO_WORKER_EAS_PROJECT_ID }}
+        shell: bash
+        run: |
+          npx expo export --platform android --output-dir "$RUNNER_TEMP/tablet-export"
+          WORKER_PROJECT_ID="${EXPO_WORKER_EAS_PROJECT_ID:-11111111-1111-4111-8111-111111111111}"
+          (
+            cd worker-app
+            EXPO_WORKER_EAS_PROJECT_ID="$WORKER_PROJECT_ID" \
+              npx expo export --platform android --output-dir "$RUNNER_TEMP/fob-export"
+          )
+          test -f "$RUNNER_TEMP/tablet-export/metadata.json"
+          test -f "$RUNNER_TEMP/fob-export/metadata.json"
 
       - name: Build web dashboard
         run: npm run dashboard:build

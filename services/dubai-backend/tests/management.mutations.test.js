@@ -336,3 +336,32 @@ test('bulk seller order creation rolls back before writes when products are inva
   assert.equal(calls.at(-1).sql, 'ROLLBACK');
   assert.equal(calls.some((call) => call.sql.includes('DELETE FROM order_sheet_values')), false);
 });
+
+test('worker cannot write stock for a different shop id', async () => {
+  const opsDbPath = require.resolve('../dist/db/opsDb');
+  let queryCount = 0;
+
+  require.cache[opsDbPath] = {
+    id: opsDbPath,
+    filename: opsDbPath,
+    loaded: true,
+    exports: {
+      opsDb: {
+        query: async () => {
+          queryCount += 1;
+          throw new Error('Cross-shop writes must be rejected before querying.');
+        },
+      },
+    },
+  };
+
+  delete require.cache[require.resolve('../dist/repositories/stockRepository')];
+  const { upsertStockValue } = require('../dist/repositories/stockRepository');
+  const updated = await upsertStockValue(
+    { role: 'worker', shopIds: ['shop_a'], scopes: ['stock:write'], jti: 'jti_worker' },
+    { shopId: 'shop_b', productId: 'prod_1', date: '2026-05-12', value: '4' },
+  );
+
+  assert.equal(updated, false);
+  assert.equal(queryCount, 0);
+});

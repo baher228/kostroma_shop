@@ -85,7 +85,7 @@ label {
 }
 
 .login-stack {
-  width: min(460px, 100%);
+  width: min(520px, 100%);
   display: grid;
   gap: 18px;
 }
@@ -101,30 +101,28 @@ label {
 }
 
 .login-card h2,
-.login-download-card h2 {
+.login-downloads h2 {
   margin: 0;
   font-size: 28px;
 }
 
-.login-download-card {
+.login-downloads {
   display: grid;
   gap: 14px;
-  border: 1px solid #d2ddd5;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 42px rgba(27, 48, 35, 0.08);
-  padding: 24px;
 }
 
-.login-download-card p {
-  margin: 6px 0 0;
+.login-downloads > p {
+  margin: -6px 0 0;
   color: #40534a;
 }
 
-.login-download-card small {
-  display: block;
-  margin-top: 8px;
-  color: #6a7a70;
+.download-list-compact .download-card {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.download-list-compact .download-button {
+  width: 100%;
 }
 
 .site-shell {
@@ -307,7 +305,7 @@ label {
   border: 1px solid #d8e0da;
   border-radius: 12px;
   background: #fff;
-  box-shadow: 0 12px 34px rgba(27, 48, 35, 0.08);
+  box-shadow: none;
   padding: 22px;
 }
 
@@ -329,7 +327,25 @@ label {
 .download-card small {
   display: block;
   margin-top: 8px;
-  color: #6a7a70;
+  color: #52645a;
+}
+
+.download-card .download-kind {
+  margin: 0 0 4px;
+  color: #52645a;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.download-card .download-status {
+  color: #52645a;
+  font-weight: 650;
+}
+
+.download-card .download-warning {
+  color: #84302a;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .download-button {
@@ -1752,6 +1768,7 @@ select:focus {
 
 .download-card {
   border-radius: 8px;
+  box-shadow: none;
 }
 
 .download-button {

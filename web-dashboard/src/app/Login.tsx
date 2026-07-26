@@ -1,37 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../api';
+import { ApkDownloadList, useApkDownloads } from '../components/ApkDownloads';
 import { Session } from '../types';
-import { formatDateTime } from '../shared/format';
-
-type ApkManifest = {
-  version: string;
-  fileName: string;
-  url: string;
-  buildSha: string;
-  updatedAt: string;
-};
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'Не удалось выполнить запрос.');
 
 export const Login = ({ onLogin }: { onLogin: (session: Session) => void }) => {
+  const { builds, loading: downloadsLoading } = useApkDownloads();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [manifest, setManifest] = useState<ApkManifest | null>(null);
-
-  useEffect(() => {
-    const loadManifest = () => {
-      fetch(`/downloads/analitika-latest.json?t=${Date.now()}`, { cache: 'no-store' })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((nextManifest: ApkManifest | null) => setManifest(nextManifest))
-        .catch(() => setManifest(null));
-    };
-
-    loadManifest();
-    const interval = window.setInterval(loadManifest, 30_000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -49,7 +28,7 @@ export const Login = ({ onLogin }: { onLogin: (session: Session) => void }) => {
   return (
     <main className="login-page">
       <div className="login-stack">
-        <form className="login-card" onSubmit={submit} autoComplete="off">
+        <form className="login-card" onSubmit={submit} autoComplete="off" aria-busy={loading}>
           <h2>Вход</h2>
           <label>
             Логин
@@ -59,6 +38,8 @@ export const Login = ({ onLogin }: { onLogin: (session: Session) => void }) => {
               autoCapitalize="none"
               autoComplete="username"
               name="username"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'login-error' : undefined}
             />
           </label>
           <label>
@@ -69,26 +50,18 @@ export const Login = ({ onLogin }: { onLogin: (session: Session) => void }) => {
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
               name="password"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'login-error' : undefined}
             />
           </label>
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error" role="alert" id="login-error">{error}</p>}
           <button type="submit" disabled={loading}>{loading ? 'Входим...' : 'Войти'}</button>
         </form>
 
-        <section className="login-download-card" aria-label="Скачать Android APK">
-          <div>
-            <p className="eyebrow">Android APK</p>
-            <h2>Приложение Analitika</h2>
-            {manifest ? (
-              <>
-                <p>{manifest.fileName}</p>
-                <small>Версия {manifest.version} · обновлено {formatDateTime(manifest.updatedAt)}</small>
-              </>
-            ) : (
-              <p>APK скоро будет доступен для скачивания.</p>
-            )}
-          </div>
-          {manifest && <a className="download-button" href={manifest.url} download={manifest.fileName}>Скачать APK</a>}
+        <section className="login-downloads" aria-labelledby="login-downloads-title">
+          <h2 id="login-downloads-title">Скачать приложения</h2>
+          <p>Выберите приложение для устройства и роли.</p>
+          <ApkDownloadList builds={builds} loading={downloadsLoading} compact />
         </section>
       </div>
     </main>

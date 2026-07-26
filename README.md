@@ -1,9 +1,11 @@
 # Аналитика
 
-Expo mobile frontend plus a split Node.js backend.
+Two Expo Android apps, a web dashboard, and a split Node.js backend.
 
 This is one repo for development, but it builds into **separate deployable services**:
 
+- **Analitika Tablet**: stock operations plus the store-tablet FOB QR scanner.
+- **Analitika FOB**: worker-only mobile app that presents rotating check-in QR codes.
 - **Russia backend**: personal data, auth, users, tasks, support, check-in.
 - **Dubai backend**: shops, stock, products, prices, orders.
 - **Russia PostgreSQL**: personal database.
@@ -23,6 +25,8 @@ Install frontend and backend dependencies:
 
 ```bash
 npm install
+npm --prefix worker-app install
+npm --prefix web-dashboard install
 npm --prefix services/ru-backend install
 npm --prefix services/dubai-backend install
 ```
@@ -59,7 +63,7 @@ Check logs if needed:
 npm run backend:docker:logs
 ```
 
-Start the Expo app:
+Start the tablet app:
 
 ```bash
 npm start
@@ -72,6 +76,17 @@ npm run android
 npm run ios
 npm run web
 ```
+
+Start the worker FOB app in a second terminal:
+
+```bash
+npm run worker:start
+```
+
+The apps have separate Android application IDs and can be installed together:
+
+- Tablet: `com.gringobochka.analitika`
+- FOB mobile: `com.gringobochka.analitika.fob`
 
 ### Web Admin Dashboard
 
@@ -88,11 +103,12 @@ VITE_RU_API_URL=http://localhost:4000
 VITE_DXB_API_URL=http://localhost:4001
 ```
 
-Tablet APK download:
+The public login page and authenticated **Приложения** section read the latest builds from:
 
-- Put the real tablet APK at `web-dashboard/public/tablet.apk`.
-- The dashboard exposes it publicly at `/tablet.apk`.
-- Replace that file and rebuild/redeploy the dashboard to update the download.
+- `/downloads/analitika-latest.json`
+- `/downloads/analitika-worker-latest.json`
+
+The Android build workflow publishes both manifests and both versioned APKs together. Dashboard deployment excludes `downloads/`, so redeploying the website does not remove application builds.
 
 ## Default Login
 
@@ -131,11 +147,11 @@ The Russia backend also has `observability/` for audit-related helpers.
 
 GitHub Actions workflows are included for deployment and application updates:
 
-- `CI` — runs on push / pull request to `main` or `master`, installs dependencies, typechecks frontend + backends, runs backend tests, validates Docker Compose, and builds both backend Docker images.
+- `CI` — runs on push / pull request to `main` or `master`, installs dependencies, typechecks both Expo apps and the backends, runs backend tests, validates Docker Compose, and builds both backend Docker images.
 - `Deploy backend` — deploys RU and/or Dubai backend over SSH with `rsync`, then runs the matching Docker Compose file and smoke-tests the health endpoint.
 - `Deploy dashboard` — builds `web-dashboard`, rsyncs `dist/` to the web root, reloads nginx, and optionally smoke-tests the public dashboard URL.
-- `Update Expo app` — publishes EAS OTA updates; automatic pushes default to the `preview` channel so dashboard APK installs can update in-app. Manual runs can target `preview` or `production`.
-- `Build Android app` — builds and publishes a dashboard-downloadable `preview` APK.
+- `Update Expo apps` — publishes EAS OTA updates for both Expo projects; automatic pushes default to the `preview` channel. Manual runs can target `preview` or `production`.
+- `Build Android apps` — builds both dashboard-downloadable `preview` APKs, publishes them in one sync, and smoke-tests both downloads.
 
 ### GitHub Environments
 
@@ -183,11 +199,17 @@ Recommended environment variable:
 
 - `EXPO_TOKEN`
 
+Required environment variable:
+
+- `EXPO_WORKER_EAS_PROJECT_ID` — UUID of the separate `analitika-worker-fob` EAS project.
+
+Create the worker project once in the same Expo account, copy its project ID, then set `EXPO_WORKER_EAS_PROJECT_ID` in the `expo-production` GitHub Environment. The worker app reads this value into `extra.eas.projectId` and its EAS Update URL; no project ID is guessed or committed.
+
 ### Expo updates
 
-EAS Update is enabled through `expo-updates`, `runtimeVersion.policy = appVersion`, and EAS channels in `eas.json`.
+EAS Update is enabled in both apps through `expo-updates`, `runtimeVersion.policy = appVersion`, and per-app EAS channels.
 
-- Dashboard APK downloads are `preview` builds, so automatic OTA updates publish to the `preview` branch and keep the `preview` channel pointed at that branch.
+- Dashboard APK downloads are `preview` builds, so automatic OTA updates publish to each project's `preview` branch and keep its `preview` channel pointed at that branch.
 - `production` builds receive OTA updates from the `production` channel when the workflow is run manually with `channel=production`.
 - Native/runtime changes still require a new EAS build; JS/asset-only changes can ship through `Update Expo app`.
 
@@ -339,20 +361,20 @@ npm run backend:dubai:db:migrate
 - For stronger production auth, use `OPS_TOKEN_PRIVATE_KEY` on Russia and `OPS_TOKEN_PUBLIC_KEY` on Dubai instead of shared `OPS_JWT_SECRET`.
 
 
-## Build APK with EAS (no Android Studio needed)
+## Build APKs with EAS (no Android Studio needed)
 
-From the project root:
+Build the tablet APK from the project root:
 
 ```bash
 npx eas-cli login
 npx eas-cli build -p android --profile preview
 ```
 
-This repository is preconfigured so the `preview` APK uses the current split backend over HTTP:
+Build the worker FOB APK from its app directory after setting the linked project ID:
 
-```env
-EXPO_PUBLIC_RU_API_URL=http://31.97.115.242:4000
-EXPO_PUBLIC_DXB_API_URL=http://31.97.115.242:4001
+```bash
+cd worker-app
+EXPO_WORKER_EAS_PROJECT_ID=<worker-project-uuid> npx eas-cli build -p android --profile preview
 ```
 
-Because the backends are still plain HTTP, Android cleartext traffic is enabled in app config for now. After HTTPS is added, switch these URLs to `https://...` and you can remove cleartext access later.
+Both `preview` profiles use the HTTPS production APIs at `https://affera.co.uk/ru` and `https://affera.co.uk/dxb` as applicable. Cleartext access remains enabled only for local emulator/LAN development.

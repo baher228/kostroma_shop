@@ -42,10 +42,13 @@ type ProductRow = {
   business_category: BusinessCategory | null;
   pack_type: string | null;
   units_in_pack: number | null;
-  pack_weight_kg: number | null;
+  pack_weight_kg: number | string | null;
   shelf_life_days: number | null;
-  unit_price_rub_vat: number | null;
+  unit_price_rub_vat: number | string | null;
 };
+
+const toNullableNumber = (value: number | string | null): number | null =>
+  value === null ? null : Number(value);
 
 export const getOrderSheet = async (date: string, businessCategory: BusinessCategory = DEFAULT_BUSINESS_CATEGORY): Promise<OrderSheet> => {
   const [shopsResult, productsResult, ordersResult] = await Promise.all([
@@ -95,9 +98,9 @@ export const getOrderSheet = async (date: string, businessCategory: BusinessCate
       businessCategory: product.business_category ?? businessCategory,
       packType: product.pack_type,
       unitsInPack: product.units_in_pack,
-      packWeightKg: product.pack_weight_kg,
+      packWeightKg: toNullableNumber(product.pack_weight_kg),
       shelfLifeDays: product.shelf_life_days,
-      unitPriceRubVat: product.unit_price_rub_vat,
+      unitPriceRubVat: toNullableNumber(product.unit_price_rub_vat),
       shopValues,
       total,
     };

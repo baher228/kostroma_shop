@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "аналитика",
+    "name": "Analitika Tablet",
     "slug": "analitika",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -29,14 +29,24 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true
+      "predictiveBackGestureEnabled": false
     },
     "web": {
-      "name": "Аналитика",
+      "name": "Analitika Tablet",
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-updates", "./withCleartextTraffic"],
+    "plugins": [
+      "expo-updates",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Разрешите Analitika Tablet использовать камеру для сканирования FOB QR-кодов.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "./withCleartextTraffic"
+    ],
     "extra": {
       "eas": {
         "projectId": "cf59a444-8fe3-408b-93ad-76c692c0b1d2"

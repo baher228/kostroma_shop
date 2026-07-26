@@ -15,9 +15,9 @@ type ProductDbRow = {
   category: ProductCategory | null;
   pack_type: string | null;
   units_in_pack: number | null;
-  pack_weight_kg: number | null;
+  pack_weight_kg: number | string | null;
   shelf_life_days: number | null;
-  unit_price_rub_vat: number | null;
+  unit_price_rub_vat: number | string | null;
   min_stock_units: number | null;
   max_stock_units: number | null;
 };
@@ -129,6 +129,9 @@ const mapShop = (row: ShopDbRow): Shop => ({
   machineNumber: row.machine_number,
 });
 
+const toNullableNumber = (value: number | string | null): number | null =>
+  value === null ? null : Number(value);
+
 const mapProduct = (row: ProductDbRow): StockProduct => ({
   id: row.id,
   name: row.name,
@@ -136,9 +139,9 @@ const mapProduct = (row: ProductDbRow): StockProduct => ({
   category: row.category?.trim() || DEFAULT_PRODUCT_CATEGORY,
   packType: row.pack_type,
   unitsInPack: row.units_in_pack,
-  packWeightKg: row.pack_weight_kg,
+  packWeightKg: toNullableNumber(row.pack_weight_kg),
   shelfLifeDays: row.shelf_life_days,
-  unitPriceRubVat: row.unit_price_rub_vat,
+  unitPriceRubVat: toNullableNumber(row.unit_price_rub_vat),
   minStockUnits: row.min_stock_units,
   maxStockUnits: row.max_stock_units,
 });
@@ -607,9 +610,9 @@ export const getStockTable = async (
       category: product.category?.trim() || DEFAULT_PRODUCT_CATEGORY,
       packType: product.pack_type,
       unitsInPack: product.units_in_pack,
-      packWeightKg: product.pack_weight_kg,
+      packWeightKg: toNullableNumber(product.pack_weight_kg),
       shelfLifeDays: product.shelf_life_days,
-      unitPriceRubVat: product.unit_price_rub_vat,
+      unitPriceRubVat: toNullableNumber(product.unit_price_rub_vat),
       minStockUnits: product.min_stock_units,
       maxStockUnits: product.max_stock_units,
       values,
@@ -646,6 +649,10 @@ export const upsertStockValue = async (
   viewer: OpsTokenClaims,
   params: { shopId?: string; productId: string; date: string; value: string },
 ): Promise<boolean> => {
+  if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
+    return false;
+  }
+
   const targetShop = await resolveRequestedShop(viewer, params.shopId);
   if (!targetShop) {
     return false;

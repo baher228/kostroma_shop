@@ -30,5 +30,7 @@ export const updateOwnCheckInStatus = (
     workerId: user.id,
     workerDisplayName: user.fullName,
     status: payload.status,
+    shopId: user.shopId,
+    shopName: user.shopName,
   });
 };

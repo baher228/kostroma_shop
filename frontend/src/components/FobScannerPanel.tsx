@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { fobApi } from '../api/fob';
 import { Session, WorkerCheckInEvent, WorkerCheckInStatus } from '../types/models';
@@ -17,7 +17,22 @@ const formatDateTime = (iso: string) =>
     minute: '2-digit',
   });
 
+const scanMessages: Record<string, string> = {
+  'Invalid FOB QR code.': 'Это не QR-код Analitika FOB.',
+  'FOB QR code expired or was already used.': 'QR-код истек или уже был использован.',
+  'Worker is not assigned to this store.': 'Сотрудник назначен в другой магазин.',
+  'This tablet is not assigned to a store.': 'Этот планшет не назначен магазину.',
+  'Only store tablets can scan FOB QR codes.': 'Сканирование доступно только планшету магазина.',
+  'Failed to scan FOB QR code.': 'Не удалось сохранить отметку. Попробуйте снова.',
+};
+
+const scanErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : '';
+  return scanMessages[message] ?? (message || 'Не удалось отсканировать QR-код.');
+};
+
 export const FobScannerPanel = ({ session }: { session: Session }) => {
+  const scanLocked = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -25,23 +40,43 @@ export const FobScannerPanel = ({ session }: { session: Session }) => {
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
 
   const handleBarcodeScanned = async (result: BarcodeScanningResult) => {
-    if (!scanning || saving || !result.data) return;
+    if (!scanning || scanLocked.current || !result.data) return;
+    scanLocked.current = true;
     try {
       setSaving(true);
       setScanning(false);
       setError('');
       setLastResult(await fobApi.scan(session.token, result.data));
     } catch (scanError) {
-      setError(scanError instanceof Error ? scanError.message : 'Не удалось отсканировать QR.');
+      setError(scanErrorMessage(scanError));
     } finally {
+      scanLocked.current = false;
       setSaving(false);
     }
   };
 
+  const startScanning = () => {
+    setScanning(true);
+    setError('');
+    setLastResult(null);
+  };
+
+  if (!session.user.shopId) {
+    return (
+      <View style={[styles.panel, styles.centeredPanel]}>
+        <Text style={styles.title}>FOB сканер</Text>
+        <Text style={styles.error} accessibilityLiveRegion="assertive">
+          Этот планшет не назначен магазину. Назначьте магазин в панели управления и войдите снова.
+        </Text>
+      </View>
+    );
+  }
+
   if (!permission) {
     return (
-      <View style={styles.panel}>
+      <View style={[styles.panel, styles.centeredPanel]} accessibilityLiveRegion="polite">
         <ActivityIndicator color="#2f6f4f" />
+        <Text style={styles.subtitle}>Проверяем доступ к камере...</Text>
       </View>
     );
   }
@@ -50,9 +85,18 @@ export const FobScannerPanel = ({ session }: { session: Session }) => {
     return (
       <View style={styles.panel}>
         <Text style={styles.title}>FOB сканер</Text>
-        <Text style={styles.subtitle}>Камера нужна, чтобы сканировать QR работников.</Text>
-        <Pressable style={styles.primaryButton} onPress={() => void requestPermission()}>
-          <Text style={styles.primaryButtonText}>Разрешить камеру</Text>
+        <Text style={styles.permissionText}>
+          {permission.canAskAgain
+            ? 'Камера нужна, чтобы сканировать QR-коды сотрудников.'
+            : 'Доступ к камере отключен. Разрешите его в настройках устройства.'}
+        </Text>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={() => void (permission.canAskAgain ? requestPermission() : Linking.openSettings())}
+          accessibilityRole="button"
+          accessibilityLabel={permission.canAskAgain ? 'Разрешить доступ к камере' : 'Открыть настройки камеры'}
+        >
+          <Text style={styles.primaryButtonText}>{permission.canAskAgain ? 'Разрешить камеру' : 'Открыть настройки'}</Text>
         </Pressable>
       </View>
     );
@@ -67,12 +111,13 @@ export const FobScannerPanel = ({ session }: { session: Session }) => {
         </View>
         <Pressable
           style={styles.secondaryButton}
-          onPress={() => {
-            setScanning(true);
-            setError('');
-          }}
+          onPress={startScanning}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Сканировать следующий FOB QR-код"
+          accessibilityState={{ disabled: saving }}
         >
-          <Text style={styles.secondaryButtonText}>Сканировать</Text>
+          <Text style={styles.secondaryButtonText}>{lastResult || error ? 'Следующий QR' : 'Сканировать'}</Text>
         </Pressable>
       </View>
 
@@ -91,9 +136,10 @@ export const FobScannerPanel = ({ session }: { session: Session }) => {
         )}
       </View>
 
-      {!!error && <Text style={styles.error}>{error}</Text>}
+      {!!error && <Text style={styles.error} accessibilityLiveRegion="assertive">{error}</Text>}
       {lastResult && (
-        <View style={styles.resultCard}>
+        <View style={styles.resultCard} accessibilityLiveRegion="polite">
+          <Text style={styles.resultState}>Отметка сохранена</Text>
           <Text style={styles.resultName}>{lastResult.status.workerDisplayName}</Text>
           <Text style={styles.resultMeta}>
             {lastResult.status.status === 'in' ? 'Пришел' : 'Ушел'} · {formatDateTime(lastResult.event.eventAt)}
@@ -116,6 +162,10 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 12,
   },
+  centeredPanel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -132,6 +182,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#496055',
     fontWeight: '700',
+  },
+  permissionText: {
+    maxWidth: 520,
+    color: '#405548',
+    fontSize: 15,
+    lineHeight: 21,
   },
   cameraWrap: {
     flex: 1,
@@ -177,8 +233,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   error: {
-    color: '#af4234',
+    color: '#9d3028',
     fontWeight: '700',
+    lineHeight: 20,
   },
   resultCard: {
     borderRadius: 12,
@@ -187,6 +244,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 12,
     gap: 3,
+  },
+  resultState: {
+    color: '#1f6342',
+    fontSize: 13,
+    fontWeight: '800',
   },
   resultName: {
     color: '#1f2f26',

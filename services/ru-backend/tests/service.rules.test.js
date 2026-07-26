@@ -133,3 +133,24 @@ test('support service blocks worker messages on another worker thread', async ()
   assert.equal(result, 'forbidden');
   assert.equal(addMessageCalled, false);
 });
+
+test('manual check-in preserves the worker shop in attendance records', async () => {
+  let recordedInput = null;
+  const { updateOwnCheckInStatus } = loadWithMock('../dist/services/checkInService', {
+    '../dist/repositories/checkInRepository': {
+      getCheckInStats: async () => null,
+      getWorkerCheckInStatus: async () => null,
+      listWorkerCheckInEvents: async () => [],
+      listWorkerCheckInStatuses: async () => [],
+      recordWorkerCheckIn: async (input) => {
+        recordedInput = input;
+        return { status: { status: input.status }, event: { status: input.status } };
+      },
+    },
+  });
+
+  await updateOwnCheckInStatus(worker, { status: 'in' });
+
+  assert.equal(recordedInput.shopId, worker.shopId);
+  assert.equal(recordedInput.shopName, worker.shopName);
+});

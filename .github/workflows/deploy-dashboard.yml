@@ -76,10 +76,12 @@ jobs:
       - name: Sync dashboard files
         run: |
           PORT="${SSH_PORT:-22}"
-          SSH_OPTS="-p $PORT -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
+          SSH_OPTS=(-p "$PORT" -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+          printf -v REMOTE_DASHBOARD '%q' "$DASHBOARD_PATH"
           for attempt in {1..6}; do
-            if ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" "mkdir -p '$DASHBOARD_PATH'" \
-              && rsync -az --delete --exclude 'downloads/' -e "ssh $SSH_OPTS" web-dashboard/dist/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/"; then
+            # shellcheck disable=SC2029
+            if ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "mkdir -p -- $REMOTE_DASHBOARD" \
+              && rsync -az --delete --exclude 'downloads/' -e "ssh ${SSH_OPTS[*]}" web-dashboard/dist/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/"; then
               exit 0
             fi
             echo "Dashboard sync failed; retrying in 15s ($attempt/6)"
@@ -91,8 +93,8 @@ jobs:
       - name: Reload nginx
         run: |
           PORT="${SSH_PORT:-22}"
-          SSH_OPTS="-p $PORT -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
-          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" "nginx -t && systemctl reload nginx"
+          SSH_OPTS=(-p "$PORT" -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+          ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "nginx -t && systemctl reload nginx"
 
       - name: Smoke test dashboard
         if: ${{ vars.DASHBOARD_URL != '' }}

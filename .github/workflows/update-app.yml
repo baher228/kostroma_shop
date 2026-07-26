@@ -1,4 +1,4 @@
-name: Update Expo app
+name: Update Expo apps
 
 on:
   workflow_dispatch:
@@ -26,6 +26,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'frontend/**'
+      - 'worker-app/**'
       - 'assets/**'
       - 'withCleartextTraffic.js'
 
@@ -33,8 +34,19 @@ jobs:
   update:
     runs-on: ubuntu-latest
     environment: expo-production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: tablet
+            directory: .
+            lockfile: package-lock.json
+          - key: worker
+            directory: worker-app
+            lockfile: worker-app/package-lock.json
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_WORKER_EAS_PROJECT_ID: ${{ vars.EXPO_WORKER_EAS_PROJECT_ID }}
       UPDATE_CHANNEL: ${{ inputs.channel || 'preview' }}
       UPDATE_MESSAGE: ${{ inputs.message }}
       EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
@@ -44,41 +56,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check Expo token
-        id: expo-token
+      - name: Check Expo configuration
+        id: expo-config
+        shell: bash
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               echo "::error::EXPO_TOKEN is not configured for the expo-production environment"
               exit 1
             fi
-            echo "::warning::EXPO_TOKEN is not configured; skipping automatic EAS update for this push"
-            echo "token_present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::EXPO_TOKEN is not configured; skipping automatic EAS update"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "token_present=true" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.key }}" = "worker" ] && [ -z "$EXPO_WORKER_EAS_PROJECT_ID" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::EXPO_WORKER_EAS_PROJECT_ID is not configured for the expo-production environment"
+              exit 1
+            fi
+            echo "::warning::EXPO_WORKER_EAS_PROJECT_ID is not configured; skipping the FOB app update"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        if: steps.expo-token.outputs.token_present == 'true'
+        if: steps.expo-config.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: ${{ matrix.lockfile }}
 
       - name: Setup Expo and EAS
-        if: steps.expo-token.outputs.token_present == 'true'
+        if: steps.expo-config.outputs.ready == 'true'
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
-        if: steps.expo-token.outputs.token_present == 'true'
+        if: steps.expo-config.outputs.ready == 'true'
+        working-directory: ${{ matrix.directory }}
         run: npm ci
 
+      - name: Typecheck app
+        if: steps.expo-config.outputs.ready == 'true'
+        working-directory: ${{ matrix.directory }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.key }}" = "worker" ]; then
+            npm run typecheck
+          else
+            npm run frontend:typecheck
+          fi
+
       - name: Publish OTA update
-        if: steps.expo-token.outputs.token_present == 'true'
+        if: steps.expo-config.outputs.ready == 'true'
+        working-directory: ${{ matrix.directory }}
+        shell: bash
         run: |
           MESSAGE="$UPDATE_MESSAGE"
           if [ -z "$MESSAGE" ]; then

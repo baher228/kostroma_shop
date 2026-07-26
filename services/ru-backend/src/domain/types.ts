@@ -1,5 +1,7 @@
 export type Role = 'manager' | 'worker' | 'store_tablet';
 
+export type AudioQcRecordingMode = 'manual' | 'admin_remote' | 'vad_auto';
+
 export type ColumnKey =
   | 'packCount'
   | 'stockTue'
@@ -37,6 +39,36 @@ export type SessionUser = {
   role: Role;
   shopId: string | null;
   shopName: string | null;
+};
+
+export type AudioQcPolicy = {
+  enabled: boolean;
+  mode: AudioQcRecordingMode;
+  shopId: string;
+  targetRole: 'store_tablet';
+  maxSegmentDurationSec: number;
+  silenceToStopSec: number;
+  preRollSec: number;
+  uploadImmediately: boolean;
+  updatedAt: string;
+};
+
+export type AudioQcDeviceHeartbeat = {
+  deviceId: string;
+  shopId: string;
+  userId: string | null;
+  appVersion: string | null;
+  currentMode: AudioQcRecordingMode | null;
+  queueSize: number;
+  isRecording: boolean;
+  lastError: string | null;
+  lastUploadAt: string | null;
+  lastSeenAt: string;
+  online: boolean;
+};
+
+export type AudioQcPolicyWithHeartbeat = AudioQcPolicy & {
+  heartbeat: AudioQcDeviceHeartbeat | null;
 };
 
 export type OpsScope =

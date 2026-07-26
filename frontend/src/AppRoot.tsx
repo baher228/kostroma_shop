@@ -1,5 +1,6 @@
 import { ActivityIndicator, Platform, SafeAreaView, StatusBar as NativeStatusBar, StyleSheet, Text } from 'react-native';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
+import { AudioQcProvider } from './features/audioQc/AudioQcProvider';
 import { LoginScreen } from './screens/LoginScreen';
 import { StockScreen } from './screens/StockScreen';
 
@@ -21,7 +22,11 @@ const AppContent = () => {
     return <LoginScreen onSubmit={login} />;
   }
 
-  return <StockScreen session={session} onLogout={logout} />;
+  return (
+    <AudioQcProvider session={session}>
+      <StockScreen session={session} onLogout={logout} />
+    </AudioQcProvider>
+  );
 };
 
 export const AppRoot = () => (

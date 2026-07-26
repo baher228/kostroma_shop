@@ -258,6 +258,30 @@ export const fobScanSchema = z.object({
   payload: z.string().trim().min(8).max(500),
 });
 
+export const shopIdParamSchema = z.object({
+  shopId: z.string().trim().min(1).max(100),
+});
+
+export const audioQcPolicySchema = z.object({
+  enabled: z.boolean(),
+  mode: z.enum(['manual', 'admin_remote', 'vad_auto']),
+  maxSegmentDurationSec: z.number().int().min(30).max(1800).default(300),
+  silenceToStopSec: z.number().int().min(1).max(30).default(3),
+  preRollSec: z.number().int().min(0).max(30).default(5),
+  uploadImmediately: z.boolean().default(true),
+}).strict();
+
+export const audioQcHeartbeatSchema = z.object({
+  deviceId: z.string().trim().min(3).max(160),
+  shopId: z.string().trim().min(1).max(100).optional(),
+  appVersion: z.string().trim().max(80).optional().nullable(),
+  currentMode: z.enum(['manual', 'admin_remote', 'vad_auto']).optional().nullable(),
+  queueSize: z.number().int().min(0).max(10000),
+  isRecording: z.boolean(),
+  lastError: z.string().trim().max(1000).optional().nullable(),
+  lastUploadAt: z.string().datetime().optional().nullable(),
+}).strict();
+
 export const orderSheetQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });

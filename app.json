@@ -29,7 +29,16 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "name": "Analitika Tablet",
@@ -46,7 +55,8 @@
           "recordAudioAndroid": false
         }
       ],
-      "./withCleartextTraffic"
+      "./withCleartextTraffic",
+      "expo-audio"
     ],
     "extra": {
       "eas": {

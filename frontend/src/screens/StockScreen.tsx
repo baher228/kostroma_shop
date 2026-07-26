@@ -26,6 +26,9 @@ import { FobQrCard } from '../components/FobQrCard';
 import { FobScannerPanel } from '../components/FobScannerPanel';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import { useTaskNotifications } from '../hooks/useTaskNotifications';
+import { AudioQcAdminPanel } from '../features/audioQc/AudioQcAdminPanel';
+import { AudioQcControls } from '../features/audioQc/AudioQcControls';
+import { AudioQcStatusBadge } from '../features/audioQc/AudioQcStatusBadge';
 import {
   DASHBOARD_COLUMNS,
   BUSINESS_CATEGORIES,
@@ -57,7 +60,7 @@ import {
 import { managerProductName } from '../../../shared/product-display';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
-type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob';
+type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
 type EditingCell = {
   productId: string;
@@ -1173,7 +1176,22 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (activeTab === 'fob') {
       return (
         <View style={styles.tabContentWrap}>
-          {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
+          {isStoreTablet && (
+            <View style={styles.audioQcStack}>
+              <AudioQcStatusBadge />
+              <AudioQcControls />
+            </View>
+          )}
+          <View style={styles.fobPanelWrap}>
+            {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
+          </View>
+        </View>
+      );
+    }
+    if (activeTab === 'audioQc') {
+      return (
+        <View style={styles.tabContentWrap}>
+          <AudioQcAdminPanel shops={shops} selectedShopId={selectedShopId} />
         </View>
       );
     }
@@ -1238,6 +1256,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     ? [
         { key: 'stock', label: 'Остатки' },
         { key: 'orderSheet', label: 'Заказ' },
+        { key: 'audioQc', label: 'AI QC' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
         { key: 'users', label: 'Пользователи' },
@@ -1579,6 +1598,14 @@ const styles = StyleSheet.create({
   tabContentWrap: {
     flex: 1,
     paddingBottom: 8,
+  },
+  audioQcStack: {
+    gap: 8,
+    marginBottom: 8,
+  },
+  fobPanelWrap: {
+    flex: 1,
+    minHeight: 0,
   },
   controls: {
     gap: 10,

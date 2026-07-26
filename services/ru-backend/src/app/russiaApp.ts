@@ -1,6 +1,7 @@
 import express from 'express';
 import { applyAppMiddleware } from './appMiddleware';
 import { registerAuthRoutes } from '../routes/authRoutes';
+import { registerAudioQcRoutes } from '../routes/audioQcRoutes';
 import { registerCheckInRoutes } from '../routes/checkInRoutes';
 import { registerFobRoutes } from '../routes/fobRoutes';
 import { registerNotificationRoutes } from '../routes/notificationRoutes';
@@ -18,6 +19,7 @@ export const createRussiaApp = () => {
   });
 
   registerAuthRoutes(app);
+  registerAudioQcRoutes(app);
   registerUserRoutes(app);
   registerCheckInRoutes(app);
   registerFobRoutes(app);

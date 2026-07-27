@@ -43,7 +43,7 @@ jobs:
         working-directory: worker-app
         shell: bash
         run: |
-          eas project:init --json --non-interactive > "$RUNNER_TEMP/eas-init.json"
+          eas project:init --force --json --non-interactive > "$RUNNER_TEMP/eas-init.json"
           cat "$RUNNER_TEMP/eas-init.json"
           PROJECT_ID="$(node - "$RUNNER_TEMP/eas-init.json" <<'NODE'
           const fs = require('fs');

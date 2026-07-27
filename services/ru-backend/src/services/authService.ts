@@ -33,4 +33,5 @@ export const loginUser = async (
   return { token: signSessionToken(sessionUser), user: sessionUser };
 };
 
-export const createOpsTokenForUser = (user: SessionUser): string => signOpsToken(user);
+export const createOpsTokenForUser = (user: SessionUser): string =>
+  signOpsToken(user.role === 'store_tablet' ? { ...user, role: 'worker' } : user);

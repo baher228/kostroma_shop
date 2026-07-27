@@ -37,6 +37,14 @@ const worker = {
   shopName: 'Shop A',
 };
 
+const tablet = {
+  ...worker,
+  id: 'tablet_1',
+  username: 'tablet',
+  fullName: 'Shop Tablet',
+  role: 'store_tablet',
+};
+
 test('task service enforces worker ownership and photo confirmation rules', async () => {
   const baseTask = {
     id: 'task_1',
@@ -68,6 +76,10 @@ test('task service enforces worker ownership and photo confirmation rules', asyn
 
   assert.deepEqual(
     await changeTaskStatus(worker, 'task_1', { status: 'done' }),
+    { status: 'forbidden' },
+  );
+  assert.deepEqual(
+    await changeTaskStatus(tablet, 'task_1', { status: 'done' }),
     { status: 'forbidden' },
   );
   assert.deepEqual(

@@ -166,7 +166,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const isWorker = session.user.role === 'worker';
   const isStoreTablet = session.user.role === 'store_tablet';
 
-  const [activeTab, setActiveTab] = useState<ScreenTab>(isStoreTablet ? 'fob' : 'stock');
+  const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -201,12 +201,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       setActiveTab('stock');
     }
   }, [activeTab, canManage]);
-
-  useEffect(() => {
-    if (isStoreTablet && activeTab !== 'fob') {
-      setActiveTab('fob');
-    }
-  }, [activeTab, isStoreTablet]);
 
   useEffect(() => {
     if (canManage && activeTab === 'orders') {
@@ -245,9 +239,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const loadShops = async () => {
-    if (isStoreTablet) {
-      return;
-    }
     try {
       const nextShops = await shopsApi.list(session.token);
       setShops(nextShops);
@@ -260,10 +251,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const loadTable = async () => {
-    if (isStoreTablet) {
-      setLoading(false);
-      return;
-    }
     try {
       setLoading(true);
       setError('');
@@ -310,10 +297,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   }, [session.token]);
 
   useEffect(() => {
-    if (isStoreTablet) {
-      setLoading(false);
-      return;
-    }
     if (canManage && !selectedShopId && shops.length > 0) {
       return;
     }
@@ -1279,14 +1262,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         { key: 'support', label: 'Поддержка' },
         { key: 'users', label: 'Пользователи' },
       ]
-    : isStoreTablet
-      ? [{ key: 'fob', label: 'FOB' }]
     : [
-        ...(isWorker ? [{ key: 'fob' as ScreenTab, label: 'FOB' }] : []),
         { key: 'stock', label: 'Остатки' },
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
+        ...((isWorker || isStoreTablet)
+          ? [{ key: 'fob' as ScreenTab, label: isStoreTablet ? 'FOB-сканер' : 'FOB' }]
+          : []),
       ];
 
   return (

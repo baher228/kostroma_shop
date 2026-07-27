@@ -41,10 +41,10 @@ export const changeTaskStatus = async (
   if (!target) {
     return { status: 'not_found' };
   }
-  if (user.role === 'worker' && target.assigneeId !== user.id) {
+  if (user.role !== 'manager' && target.assigneeId !== user.id) {
     return { status: 'forbidden' };
   }
-  if (user.role === 'worker' && payload.status === 'open') {
+  if (user.role !== 'manager' && payload.status === 'open') {
     return { status: 'forbidden' };
   }
   if (payload.status === 'done' && target.requiresPhotoConfirmation && !payload.photoConfirmationUrl && !target.photoConfirmationUrl) {

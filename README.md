@@ -4,7 +4,7 @@ Two Expo Android apps, a web dashboard, and a split Node.js backend.
 
 This is one repo for development, but it builds into **separate deployable services**:
 
-- **Analitika Tablet**: stock operations plus the store-tablet FOB QR scanner.
+- **Analitika Tablet**: the full shop workflow (stock, orders, tasks, and support) plus a front-camera FOB QR scanner.
 - **Analitika FOB**: worker-only mobile app that presents rotating check-in QR codes.
 - **Russia backend**: personal data, auth, users, tasks, support, check-in.
 - **Dubai backend**: shops, stock, products, prices, orders.

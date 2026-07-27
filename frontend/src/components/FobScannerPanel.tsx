@@ -125,7 +125,7 @@ export const FobScannerPanel = ({ session }: { session: Session }) => {
         {scanning ? (
           <CameraView
             style={styles.camera}
-            facing="back"
+            facing="front"
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={(result) => void handleBarcodeScanned(result)}
           />

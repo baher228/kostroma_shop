@@ -103,6 +103,17 @@ const payloadFromForm = (form: RowForm): PromotionRowPayload => ({
   regularPrice: parseNullableNumber(form.regularPrice),
 });
 
+const saveBlob = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
 const compareValues = (left: string | number | null, right: string | number | null) => {
   if (left === null && right === null) return 0;
   if (left === null) return 1;
@@ -364,7 +375,7 @@ const PromotionProductCard = ({
     setError('');
     try {
       const result = await api.promotions.downloadDocument(session.token, { documentId: invoiceDocumentId });
-      window.open(result.url, '_blank', 'noopener,noreferrer');
+      saveBlob(result.blob, result.fileName);
     } catch (err) {
       setError(messageOf(err));
     }
@@ -388,14 +399,7 @@ const PromotionProductCard = ({
     setError('');
     try {
       const result = await api.promotions.downloadPriceTagPdf(session.token, row.rowNumber);
-      const url = URL.createObjectURL(result.blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = result.fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(result.blob, result.fileName);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -408,14 +412,7 @@ const PromotionProductCard = ({
     setError('');
     try {
       const result = await api.promotions.downloadGeneratedPosterPdf(session.token, row.rowNumber);
-      const url = URL.createObjectURL(result.blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = result.fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(result.blob, result.fileName);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -573,6 +570,7 @@ const DocumentsModal = ({
   const [priceListId, setPriceListId] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -588,9 +586,15 @@ const DocumentsModal = ({
     try {
       const nextDocuments = await api.promotions.documents(session.token);
       setDocuments(nextDocuments);
-      setInvoiceId((current) => current || nextDocuments.find((document) => document.documentType === 'invoice')?.id || '');
-      setPlanId((current) => current || nextDocuments.find((document) => document.documentType === 'two_month_plan')?.id || '');
-      setPriceListId((current) => current || nextDocuments.find((document) => document.documentType === 'retail_price_list')?.id || '');
+      setInvoiceId((current) => nextDocuments.some((document) => document.id === current && document.documentType === 'invoice')
+        ? current
+        : nextDocuments.find((document) => document.documentType === 'invoice')?.id || '');
+      setPlanId((current) => nextDocuments.some((document) => document.id === current && document.documentType === 'two_month_plan')
+        ? current
+        : nextDocuments.find((document) => document.documentType === 'two_month_plan')?.id || '');
+      setPriceListId((current) => nextDocuments.some((document) => document.id === current && document.documentType === 'retail_price_list')
+        ? current
+        : nextDocuments.find((document) => document.documentType === 'retail_price_list')?.id || '');
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -603,6 +607,7 @@ const DocumentsModal = ({
   }, [session.token]);
 
   const selectedOption = uploadOptions.find((option) => option.value === documentType)!;
+  const invoiceUploadBlocked = documentType === 'invoice' && priceLists.length === 0;
 
   const pickDroppedFile = (files: FileList | null) => {
     const nextFile = files?.[0] ?? null;
@@ -613,6 +618,10 @@ const DocumentsModal = ({
     event.preventDefault();
     if (!file) {
       setError('Выберите файл для прикрепления.');
+      return;
+    }
+    if (invoiceUploadBlocked) {
+      setError('Сначала загрузите XLSX прайс розничных цен. После этого можно прикреплять накладные.');
       return;
     }
     setUploading(true);
@@ -646,9 +655,39 @@ const DocumentsModal = ({
     setNotice('');
     try {
       const result = await api.promotions.downloadDocument(session.token, { documentId });
-      window.open(result.url, '_blank', 'noopener,noreferrer');
+      saveBlob(result.blob, result.fileName);
     } catch (err) {
       setError(messageOf(err));
+    }
+  };
+
+  const deleteById = async (documentId: string) => {
+    if (!documentId) {
+      setError('Выберите документ для удаления.');
+      return;
+    }
+    const target = documents.find((document) => document.id === documentId);
+    if (!target) {
+      setError('Документ не найден в списке.');
+      return;
+    }
+    if (!window.confirm(`Удалить документ "${target.fileName}"?`)) return;
+    setDeletingDocumentId(documentId);
+    setError('');
+    setNotice('');
+    try {
+      const result = await api.promotions.deleteDocument(session.token, documentId);
+      setNotice(result.deletedRows > 0
+        ? `Документ удален. Удалено строк акций: ${result.deletedRows}.`
+        : 'Документ удален.');
+      await load();
+      if (target.documentType === 'invoice' || target.documentType === 'two_month_plan') {
+        await onInvoiceImported();
+      }
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setDeletingDocumentId('');
     }
   };
 
@@ -657,14 +696,7 @@ const DocumentsModal = ({
     setNotice('');
     try {
       const blob = await api.promotions.downloadFinalTableCsv(session.token);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'itogovaya_tablica.csv';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, 'itogovaya_tablica.csv');
     } catch (err) {
       setError(messageOf(err));
     }
@@ -732,8 +764,8 @@ const DocumentsModal = ({
               </small>
             </label>
 
-            <button className="documents-primary-action" disabled={uploading}>
-              {uploading ? 'Прикрепляем...' : 'Прикрепить'}
+            <button className="documents-primary-action" disabled={uploading || invoiceUploadBlocked}>
+              {uploading ? 'Прикрепляем...' : invoiceUploadBlocked ? 'Сначала загрузите прайс' : 'Прикрепить'}
             </button>
           </form>
         </section>
@@ -749,6 +781,8 @@ const DocumentsModal = ({
                 empty="Накладных пока нет"
                 onChange={setInvoiceId}
                 onDownload={() => void downloadById(invoiceId)}
+                onDelete={() => void deleteById(invoiceId)}
+                deleting={deletingDocumentId === invoiceId}
               />
               <DownloadRow
                 label="План на два месяца"
@@ -757,6 +791,8 @@ const DocumentsModal = ({
                 empty="Планов пока нет"
                 onChange={setPlanId}
                 onDownload={() => void downloadById(planId)}
+                onDelete={() => void deleteById(planId)}
+                deleting={deletingDocumentId === planId}
               />
               <DownloadRow
                 label="Прайс розничных цен"
@@ -765,6 +801,8 @@ const DocumentsModal = ({
                 empty="Прайсов пока нет"
                 onChange={setPriceListId}
                 onDownload={() => void downloadById(priceListId)}
+                onDelete={() => void deleteById(priceListId)}
+                deleting={deletingDocumentId === priceListId}
               />
               <DownloadRow
                 label="Итоговая таблица CSV"
@@ -789,6 +827,8 @@ const DownloadRow = ({
   empty,
   onChange,
   onDownload,
+  onDelete,
+  deleting = false,
 }: {
   label: string;
   value: string;
@@ -796,6 +836,8 @@ const DownloadRow = ({
   empty: string;
   onChange: (value: string) => void;
   onDownload: () => void;
+  onDelete?: () => void;
+  deleting?: boolean;
 }) => (
   <div className="documents-download-row">
     <label>
@@ -811,5 +853,10 @@ const DownloadRow = ({
       )}
     </label>
     <button className="secondary documents-download-button" onClick={onDownload}>Скачать</button>
+    {onDelete && (
+      <button className="danger documents-delete-button" disabled={!value || deleting} onClick={onDelete}>
+        {deleting ? 'Удаляем...' : 'Удалить'}
+      </button>
+    )}
   </div>
 );

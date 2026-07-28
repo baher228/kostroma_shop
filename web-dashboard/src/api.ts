@@ -134,7 +134,7 @@ const makeDownloadBlobRequest = async (baseUrl: string, path: string, bearerToke
   const response = await fetch(`${baseUrl}${path}`, {
     cache: 'no-store',
     headers: {
-      Accept: 'application/pdf',
+      Accept: '*/*',
       Authorization: `Bearer ${bearerToken}`,
     },
   });
@@ -143,10 +143,11 @@ const makeDownloadBlobRequest = async (baseUrl: string, path: string, bearerToke
     throw new ApiError(parsed?.message || 'Request failed.', response.status);
   }
   const disposition = response.headers.get('Content-Disposition') || '';
-  const fileNameMatch = disposition.match(/filename="([^"]+)"/i);
+  const fileNameUtf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i);
   return {
     blob: await response.blob(),
-    fileName: fileNameMatch?.[1] ?? 'download.pdf',
+    fileName: fileNameUtf8Match ? decodeURIComponent(fileNameUtf8Match[1]) : fileNameMatch?.[1] ?? 'download.pdf',
   };
 };
 
@@ -355,10 +356,12 @@ export const api = {
     downloadGeneratedPosterPdf: async (token: string, rowNumber: number) =>
       dxbDownloadBlobRequest(`/api/promotions/rows/by-number/${rowNumber}/poster-generated.pdf`, token),
     downloadDocument: async (token: string, params: { documentType?: PromotionDocumentType; documentId?: string }) =>
-      dxbRequest<{ url: string; fileName: string; document: PromotionDocument }>(
+      dxbDownloadBlobRequest(
         `/api/promotions/documents/download${query({ type: params.documentType, id: params.documentId })}`,
-        { token },
+        token,
       ),
+    deleteDocument: async (token: string, documentId: string) =>
+      dxbRequest<{ document: PromotionDocument; deletedRows: number }>(`/api/promotions/documents/${documentId}`, { method: 'DELETE', token }),
   },
   checkin: {
     stats: async (token: string, from: string, to: string, shopId?: string) =>

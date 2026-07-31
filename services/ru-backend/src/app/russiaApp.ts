@@ -27,7 +27,8 @@ export const createRussiaApp = () => {
   registerTaskRoutes(app);
   registerSupportRoutes(app);
 
-  app.use((_req, res) => {
+  app.use((req, res) => {
+    console.warn(`RU route not found: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ message: 'Route not found in Russia service.' });
   });
 

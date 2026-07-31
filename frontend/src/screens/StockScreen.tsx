@@ -28,6 +28,7 @@ import { useAppUpdate } from '../hooks/useAppUpdate';
 import { useTaskNotifications } from '../hooks/useTaskNotifications';
 import { AudioQcAdminPanel } from '../features/audioQc/AudioQcAdminPanel';
 import { AudioQcControls } from '../features/audioQc/AudioQcControls';
+import { AudioQcRecordingsList } from '../features/audioQc/AudioQcRecordingsList';
 import { AudioQcStatusBadge } from '../features/audioQc/AudioQcStatusBadge';
 import {
   DASHBOARD_COLUMNS,
@@ -1180,6 +1181,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             <View style={styles.audioQcStack}>
               <AudioQcStatusBadge />
               <AudioQcControls />
+              <AudioQcRecordingsList />
             </View>
           )}
           <View style={styles.fobPanelWrap}>

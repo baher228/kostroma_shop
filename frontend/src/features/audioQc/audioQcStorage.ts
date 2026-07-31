@@ -14,7 +14,6 @@ const queuedStatuses = new Set<AudioQcRecording['status']>([
   'audio_uploaded',
   'starting_processing',
   'failed_retryable',
-  'failed_permanent',
 ]);
 
 const uploadedStatuses = new Set<AudioQcRecording['status']>(['processing_started', 'completed']);

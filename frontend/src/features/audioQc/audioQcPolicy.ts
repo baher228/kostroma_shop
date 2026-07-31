@@ -7,11 +7,11 @@ export const AUDIO_QC_DEFAULTS = {
   uploadImmediately: true,
 };
 
-export const audioQcModes: AudioQcRecordingMode[] = ['manual', 'admin_remote', 'vad_auto'];
+export const audioQcModes: AudioQcRecordingMode[] = ['manual', 'vad_auto'];
 
 export const audioQcModeLabels: Record<AudioQcRecordingMode, string> = {
-  manual: 'manual',
-  admin_remote: 'admin',
+  manual: 'Ручной',
+  admin_remote: 'Удаленный запуск',
   vad_auto: 'VAD',
 };
 

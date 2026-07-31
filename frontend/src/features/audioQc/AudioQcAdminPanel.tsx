@@ -83,21 +83,22 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
 
   const activeShopName = shops.find((shop) => shop.id === activeShopId)?.name ?? activeShopId ?? '-';
   const heartbeat = activePolicy?.heartbeat ?? null;
+  const heartbeatMode = heartbeat?.currentMode ? audioQcModeLabels[heartbeat.currentMode] : '-';
 
   const onSave = async () => {
     if (!draft) return;
     try {
       await savePolicy(draft.shopId, draft);
-      Alert.alert('Audio QC', 'Policy сохранена.');
+      Alert.alert('AI-контроль', 'Настройки записи применены.');
     } catch (error) {
-      Alert.alert('Не удалось сохранить policy', error instanceof Error ? error.message : 'Неизвестная ошибка.');
+      Alert.alert('Не удалось применить настройки', error instanceof Error ? error.message : 'Неизвестная ошибка.');
     }
   };
 
   if (!activeShopId || !draft) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Audio QC</Text>
+        <Text style={styles.emptyTitle}>AI-контроль</Text>
         <Text style={styles.emptyText}>Нет доступного магазина для настройки.</Text>
       </View>
     );
@@ -107,8 +108,8 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
     <ScrollView style={styles.wrap} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.title}>Audio QC</Text>
-          <Text style={styles.subtitle}>{activeShopName}</Text>
+          <Text style={styles.title}>AI-контроль записи</Text>
+          <Text style={styles.subtitle}>Магазин: {activeShopName}</Text>
         </View>
         <Pressable style={styles.secondaryButton} onPress={() => void refreshPolicies()} disabled={isPolicyLoading}>
           <Text style={styles.secondaryButtonText}>{isPolicyLoading ? 'Загрузка...' : 'Обновить'}</Text>
@@ -133,6 +134,13 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
       )}
 
       <View style={styles.panel}>
+        <View>
+          <Text style={styles.sectionTitle}>Планшет</Text>
+          <Text style={styles.sectionMeta}>
+            {heartbeat?.deviceId ? `Выбран планшет ${heartbeat.deviceId}` : 'Планшет пока не прислал диагностический сигнал'}
+          </Text>
+        </View>
+
         <View style={styles.switchRow}>
           <View>
             <Text style={styles.sectionTitle}>Запись</Text>
@@ -163,36 +171,36 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
 
         <View style={styles.stepperGrid}>
           <View style={styles.stepper}>
-            <Text style={styles.stepperLabel}>max segment</Text>
+            <Text style={styles.stepperLabel}>Длина фрагмента</Text>
             <View style={styles.stepperControls}>
               <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'maxSegmentDurationSec', -30))}>
                 <Text style={styles.stepperButtonText}>-</Text>
               </Pressable>
-              <Text style={styles.stepperValue}>{draft.maxSegmentDurationSec}s</Text>
+              <Text style={styles.stepperValue}>{draft.maxSegmentDurationSec} с</Text>
               <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'maxSegmentDurationSec', 30))}>
                 <Text style={styles.stepperButtonText}>+</Text>
               </Pressable>
             </View>
           </View>
           <View style={styles.stepper}>
-            <Text style={styles.stepperLabel}>silence stop</Text>
+            <Text style={styles.stepperLabel}>Тишина до остановки</Text>
             <View style={styles.stepperControls}>
               <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'silenceToStopSec', -1))}>
                 <Text style={styles.stepperButtonText}>-</Text>
               </Pressable>
-              <Text style={styles.stepperValue}>{draft.silenceToStopSec}s</Text>
+              <Text style={styles.stepperValue}>{draft.silenceToStopSec} с</Text>
               <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'silenceToStopSec', 1))}>
                 <Text style={styles.stepperButtonText}>+</Text>
               </Pressable>
             </View>
           </View>
           <View style={styles.stepper}>
-            <Text style={styles.stepperLabel}>pre-roll</Text>
+            <Text style={styles.stepperLabel}>Запас перед речью</Text>
             <View style={styles.stepperControls}>
               <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'preRollSec', -1))}>
                 <Text style={styles.stepperButtonText}>-</Text>
               </Pressable>
-              <Text style={styles.stepperValue}>{draft.preRollSec}s</Text>
+              <Text style={styles.stepperValue}>{draft.preRollSec} с</Text>
               <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'preRollSec', 1))}>
                 <Text style={styles.stepperButtonText}>+</Text>
               </Pressable>
@@ -202,7 +210,7 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
 
         <View style={styles.switchRow}>
           <View>
-            <Text style={styles.sectionTitle}>Upload</Text>
+            <Text style={styles.sectionTitle}>Отправка</Text>
             <Text style={styles.sectionMeta}>{draft.uploadImmediately ? 'сразу после записи' : 'только вручную'}</Text>
           </View>
           <Switch
@@ -214,21 +222,22 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
         </View>
 
         <Pressable style={[styles.saveButton, isPolicySaving && styles.disabledButton]} onPress={() => void onSave()} disabled={isPolicySaving}>
-          <Text style={styles.saveButtonText}>{isPolicySaving ? 'Сохранение...' : 'Сохранить policy'}</Text>
+          <Text style={styles.saveButtonText}>{isPolicySaving ? 'Применяем...' : 'Применить настройки'}</Text>
         </Pressable>
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.sectionTitle}>Heartbeat планшета</Text>
+        <Text style={styles.sectionTitle}>Диагностика планшета</Text>
+        <Text style={styles.sectionMeta}>Тестовый блок. Ручная запись работает независимо от этого сигнала.</Text>
         <View style={styles.heartbeatGrid}>
-          <Text style={styles.heartbeatItem}>deviceId: {heartbeat?.deviceId ?? '-'}</Text>
-          <Text style={styles.heartbeatItem}>online: {heartbeat?.online ? 'online' : 'offline'}</Text>
-          <Text style={styles.heartbeatItem}>lastSeenAt: {formatDateTime(heartbeat?.lastSeenAt)}</Text>
-          <Text style={styles.heartbeatItem}>currentMode: {heartbeat?.currentMode ?? '-'}</Text>
-          <Text style={styles.heartbeatItem}>queueSize: {heartbeat?.queueSize ?? 0}</Text>
-          <Text style={styles.heartbeatItem}>lastUploadAt: {formatDateTime(heartbeat?.lastUploadAt)}</Text>
-          <Text style={styles.heartbeatItem}>isRecording: {heartbeat?.isRecording ? 'yes' : 'no'}</Text>
-          <Text style={styles.heartbeatItem}>lastError: {heartbeat?.lastError ?? '-'}</Text>
+          <Text style={styles.heartbeatItem}>Планшет: {heartbeat?.deviceId ?? '-'}</Text>
+          <Text style={styles.heartbeatItem}>Статус: {heartbeat?.online ? 'онлайн' : 'офлайн'}</Text>
+          <Text style={styles.heartbeatItem}>Последний сигнал: {formatDateTime(heartbeat?.lastSeenAt)}</Text>
+          <Text style={styles.heartbeatItem}>Режим: {heartbeatMode}</Text>
+          <Text style={styles.heartbeatItem}>Очередь: {heartbeat?.queueSize ?? 0}</Text>
+          <Text style={styles.heartbeatItem}>Последняя отправка: {formatDateTime(heartbeat?.lastUploadAt)}</Text>
+          <Text style={styles.heartbeatItem}>Сейчас пишет: {heartbeat?.isRecording ? 'да' : 'нет'}</Text>
+          <Text style={styles.heartbeatItem}>Ошибка: {heartbeat?.lastError ?? '-'}</Text>
         </View>
       </View>
 

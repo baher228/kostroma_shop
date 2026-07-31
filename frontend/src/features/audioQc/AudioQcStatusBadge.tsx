@@ -7,6 +7,7 @@ const activityLabels: Record<AudioQcActivityStatus, string> = {
   idle: 'ожидание',
   listening: 'ожидание речи',
   recording: 'запись',
+  paused: 'пауза',
   queued: 'очередь',
   uploading: 'отправка',
   error: 'ошибка',
@@ -16,7 +17,7 @@ const recordingStatusLabels: Partial<Record<AudioQcRecordingStatus, string>> = {
   recording: 'запись',
   recorded: 'в очереди',
   waiting_network: 'нет сети',
-  creating_ml_session: 'создание ML session',
+  creating_ml_session: 'создание ML-сессии',
   uploading_audio: 'загрузка аудио',
   audio_uploaded: 'аудио загружено',
   starting_processing: 'запуск обработки',
@@ -45,18 +46,18 @@ export const AudioQcStatusBadge = () => {
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.title}>Audio QC: {isEnabled ? 'активно' : 'выключено'}</Text>
+          <Text style={styles.title}>AI-контроль: {isEnabled ? 'активен' : 'выключен'}</Text>
           <Text style={styles.meta}>
-            режим: {policy ? audioQcModeLabels[policy.mode] : '-'} · статус: {latestStatus}
+            Режим: {policy ? audioQcModeLabels[policy.mode] : '-'} · статус: {latestStatus}
           </Text>
         </View>
         <View style={[styles.dot, isEnabled ? styles.dotActive : styles.dotOff]} />
       </View>
 
       <View style={styles.metricsRow}>
-        <Text style={styles.metric}>очередь: {queueSummary.queueSize}</Text>
-        <Text style={styles.metric}>последняя отправка: {formatDateTime(queueSummary.lastUploadAt)}</Text>
-        <Text style={styles.metric}>device: {deviceId ?? '-'}</Text>
+        <Text style={styles.metric}>В очереди: {queueSummary.queueSize}</Text>
+        <Text style={styles.metric}>Последняя отправка: {formatDateTime(queueSummary.lastUploadAt)}</Text>
+        <Text style={styles.metric}>Планшет: {deviceId ?? '-'}</Text>
       </View>
 
       {vadState.enabled && <Text style={styles.warning}>{vadState.message}</Text>}

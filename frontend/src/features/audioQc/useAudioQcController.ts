@@ -109,6 +109,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   const [isPolicyLoading, setIsPolicyLoading] = useState(false);
   const [isPolicySaving, setIsPolicySaving] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
   const currentRecordingRef = useRef<AudioQcRecording | null>(null);
   const deviceIdRef = useRef<string | null>(null);
@@ -117,6 +118,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   const queueProcessingRef = useRef(false);
   const policyApplyRef = useRef(false);
   const autoSegmentRef = useRef(false);
+  const isPausedRef = useRef(false);
 
   useEffect(() => {
     deviceIdRef.current = deviceId;
@@ -133,6 +135,11 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   const setCurrentRecordingState = useCallback((recording: AudioQcRecording | null) => {
     currentRecordingRef.current = recording;
     setCurrentRecording(recording);
+  }, []);
+
+  const setPausedState = useCallback((paused: boolean) => {
+    isPausedRef.current = paused;
+    setIsPaused(paused);
   }, []);
 
   const handleRecordingChanged = useCallback((recording: AudioQcRecording) => {
@@ -240,13 +247,14 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
 
       await recorder.prepareToRecordAsync(AUDIO_QC_RECORDING_OPTIONS);
       recorder.record();
+      setPausedState(false);
       await upsertAudioQcRecording(draft);
       setCurrentRecordingState(draft);
       handleRecordingChanged(draft);
       setLastError(null);
       setLastRecorderError(null);
     },
-    [ensureDeviceId, ensureRecordingPermission, handleRecordingChanged, recorder, session, setCurrentRecordingState],
+    [ensureDeviceId, ensureRecordingPermission, handleRecordingChanged, recorder, session, setCurrentRecordingState, setPausedState],
   );
 
   const stopRecording = useCallback(async () => {
@@ -257,6 +265,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
 
     try {
       await recorder.stop();
+      setPausedState(false);
       const sourceUri = recorder.uri ?? recorder.getStatus().url;
       if (!sourceUri) {
         throw new Error('Expo Audio did not return a recording URI.');
@@ -295,15 +304,32 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
       };
       await upsertAudioQcRecording(failed);
       setCurrentRecordingState(null);
+      setPausedState(false);
       handleRecordingChanged(failed);
       setLastError(message);
       throw error;
     }
-  }, [handleRecordingChanged, recorder, recorderState.durationMillis, runQueue, setCurrentRecordingState]);
+  }, [handleRecordingChanged, recorder, recorderState.durationMillis, runQueue, setCurrentRecordingState, setPausedState]);
 
   const startManualRecording = useCallback(async () => {
     await startRecording('manual');
   }, [startRecording]);
+
+  const pauseRecording = useCallback(async () => {
+    if (!currentRecordingRef.current || isPausedRef.current) {
+      return;
+    }
+    recorder.pause();
+    setPausedState(true);
+  }, [recorder, setPausedState]);
+
+  const resumeRecording = useCallback(async () => {
+    if (!currentRecordingRef.current || !isPausedRef.current) {
+      return;
+    }
+    recorder.record();
+    setPausedState(false);
+  }, [recorder, setPausedState]);
 
   const retryUpload = useCallback(async () => {
     if (queueProcessingRef.current) {
@@ -439,7 +465,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
         appVersion: getAppVersion(),
         currentMode: currentRecordingRef.current?.recordingMode ?? currentPolicy?.mode ?? null,
         queueSize: queueSummaryRef.current.queueSize,
-        isRecording: recorder.getStatus().isRecording,
+        isRecording: Boolean(currentRecordingRef.current) && !isPausedRef.current,
         lastError: lastRecorderError ?? queueSummaryRef.current.lastError,
         lastUploadAt: queueSummaryRef.current.lastUploadAt,
       });
@@ -543,18 +569,19 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
       enabled: true,
       available: false,
       status: 'managed_fallback',
-      message: 'Managed Expo fallback: сегменты ограничены по времени; production VAD требует native Android foreground service.',
+      message: 'MVP-режим: фрагменты ограничены по времени. Для полноценного VAD нужен native Android foreground service.',
     };
   }, [policy?.enabled, policy?.mode]);
 
   const activityStatus: AudioQcActivityStatus = useMemo(() => {
+    if (currentRecording && isPaused) return 'paused';
     if (currentRecording) return 'recording';
     if (isQueueProcessing) return 'uploading';
     if (lastError || lastRecorderError || queueSummary.lastError) return 'error';
     if (policy?.enabled && policy.mode === 'vad_auto') return 'listening';
     if (queueSummary.queueSize > 0) return 'queued';
     return 'idle';
-  }, [currentRecording, isQueueProcessing, lastError, lastRecorderError, policy?.enabled, policy?.mode, queueSummary]);
+  }, [currentRecording, isPaused, isQueueProcessing, lastError, lastRecorderError, policy?.enabled, policy?.mode, queueSummary]);
 
   return {
     session,
@@ -566,6 +593,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     currentRecording,
     activityStatus,
     isRecording: Boolean(currentRecording) || recorderState.isRecording,
+    isPaused,
     isQueueProcessing,
     isPolicyLoading,
     isPolicySaving,
@@ -573,6 +601,8 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     lastError: lastError ?? lastRecorderError ?? queueSummary.lastError,
     vadState,
     startManualRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     retryUpload,
     refreshPolicy,

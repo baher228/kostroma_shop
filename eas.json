@@ -36,7 +36,7 @@
         "EXPO_DISABLE_UPDATES": "1",
         "EXPO_PUBLIC_RU_API_URL": "http://192.168.100.165:4000",
         "EXPO_PUBLIC_DXB_API_URL": "http://192.168.100.165:4001",
-        "EXPO_PUBLIC_ML_API_URL": "https://affera.co.uk/ml"
+        "EXPO_PUBLIC_ML_API_URL": "http://192.168.100.165:8000"
       }
     },
     "production": {

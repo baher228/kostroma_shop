@@ -15,7 +15,7 @@ export type AudioQcRecordingStatus =
   | 'failed_retryable'
   | 'failed_permanent';
 
-export type AudioQcActivityStatus = 'idle' | 'listening' | 'recording' | 'queued' | 'uploading' | 'error';
+export type AudioQcActivityStatus = 'idle' | 'listening' | 'recording' | 'paused' | 'queued' | 'uploading' | 'error';
 
 export type AudioQcPolicy = {
   enabled: boolean;
@@ -107,6 +107,7 @@ export type AudioQcControllerValue = {
   currentRecording: AudioQcRecording | null;
   activityStatus: AudioQcActivityStatus;
   isRecording: boolean;
+  isPaused: boolean;
   isQueueProcessing: boolean;
   isPolicyLoading: boolean;
   isPolicySaving: boolean;
@@ -114,6 +115,8 @@ export type AudioQcControllerValue = {
   lastError: string | null;
   vadState: AudioQcVadState;
   startManualRecording: () => Promise<void>;
+  pauseRecording: () => Promise<void>;
+  resumeRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   retryUpload: () => Promise<void>;
   refreshPolicy: () => Promise<void>;

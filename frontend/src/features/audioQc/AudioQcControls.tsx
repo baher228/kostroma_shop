@@ -11,9 +11,12 @@ export const AudioQcControls = () => {
   const {
     elapsedSec,
     isRecording,
+    isPaused,
     isQueueProcessing,
     queueSummary,
     startManualRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     retryUpload,
   } = useAudioQc();
@@ -26,25 +29,41 @@ export const AudioQcControls = () => {
     }
   };
 
-  const retryLabel = queueSummary.retryableFailures > 0 || queueSummary.queueSize > 0 ? 'Повторить отправку' : 'Отправить сейчас';
+  const retryLabel = queueSummary.retryableFailures > 0 || queueSummary.queueSize > 0 ? 'Повторить отправку' : 'Отправить очередь';
+  const recordingLabel = isRecording ? (isPaused ? 'Запись на паузе' : 'Идет запись') : 'Запись выключена';
+  const pauseLabel = isPaused ? 'Продолжить' : 'Пауза';
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.timerRow}>
-        <Text style={styles.timerLabel}>Таймер</Text>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.title}>Запись разговора</Text>
+          <Text style={styles.stateText}>{recordingLabel}</Text>
+        </View>
         <Text style={styles.timerValue}>{formatTimer(elapsedSec)}</Text>
       </View>
       <View style={styles.actions}>
         {isRecording ? (
-          <Pressable style={[styles.button, styles.stopButton]} onPress={() => void runSafely(stopRecording, 'Не удалось остановить запись')}>
-            <Text style={styles.stopText}>Остановить запись</Text>
-          </Pressable>
+          <>
+            <Pressable
+              style={[styles.button, styles.stopButton]}
+              onPress={() => void runSafely(stopRecording, 'Не удалось выключить запись')}
+            >
+              <Text style={styles.stopText}>Выключить запись</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.button, styles.pauseButton]}
+              onPress={() => void runSafely(isPaused ? resumeRecording : pauseRecording, 'Не удалось изменить паузу')}
+            >
+              <Text style={styles.pauseText}>{pauseLabel}</Text>
+            </Pressable>
+          </>
         ) : (
           <Pressable
             style={[styles.button, styles.startButton]}
             onPress={() => void runSafely(startManualRecording, 'Не удалось начать запись')}
           >
-            <Text style={styles.startText}>Начать запись</Text>
+            <Text style={styles.startText}>Включить запись</Text>
           </Pressable>
         )}
         <Pressable
@@ -54,6 +73,10 @@ export const AudioQcControls = () => {
         >
           <Text style={styles.retryText}>{isQueueProcessing ? 'Отправка...' : retryLabel}</Text>
         </Pressable>
+      </View>
+      <View style={styles.queueRow}>
+        <Text style={styles.queueText}>В очереди: {queueSummary.queueSize}</Text>
+        <Text style={styles.queueText}>Ошибки: {queueSummary.retryableFailures + queueSummary.permanentFailures}</Text>
       </View>
     </View>
   );
@@ -68,15 +91,22 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 9,
   },
-  timerRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
-  timerLabel: {
+  title: {
+    color: '#1f2f26',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  stateText: {
+    marginTop: 2,
     color: '#445a4b',
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   timerValue: {
     color: '#1f2f26',
@@ -101,6 +131,9 @@ const styles = StyleSheet.create({
   stopButton: {
     backgroundColor: '#a54338',
   },
+  pauseButton: {
+    backgroundColor: '#ead8a0',
+  },
   retryButton: {
     backgroundColor: '#dbe4dc',
   },
@@ -117,9 +150,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
   },
+  pauseText: {
+    color: '#3e3312',
+    fontSize: 13,
+    fontWeight: '900',
+  },
   retryText: {
     color: '#223529',
     fontSize: 13,
     fontWeight: '900',
+  },
+  queueRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  queueText: {
+    color: '#445a4b',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

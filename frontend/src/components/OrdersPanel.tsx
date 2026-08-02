@@ -60,6 +60,14 @@ const tomorrowDate = (from = new Date()): string => {
   return toDateKey(target);
 };
 
+const nextDelicaciesDeliveryDate = (from = new Date()): string => {
+  const target = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  do {
+    target.setDate(target.getDate() + 1);
+  } while (target.getDay() === 0);
+  return toDateKey(target);
+};
+
 const formatDateShort = (iso: string): string => {
   const [, month, day] = iso.split('-');
   return `${day}.${month}`;
@@ -105,6 +113,27 @@ const suggestPacks = (row: StockTable['rows'][number], stockOnHand: number | nul
     return suggestedUnits;
   }
   return Math.max(1, Math.ceil(suggestedUnits / unitsInPack));
+};
+
+const suggestDelicaciesPacks = (
+  row: StockTable['rows'][number],
+  stockOnHand: number | null,
+  stockDate: string,
+  orders: SellerOrder[],
+): number => {
+  if (stockOnHand === null) {
+    return 0;
+  }
+  const deliveredOrder = orders.find((order) => order.productId === row.productId && order.orderDate === stockDate);
+  const previousDate = parseDateKey(stockDate);
+  previousDate.setDate(previousDate.getDate() - 1);
+  const previousStock = deliveredOrder?.stockOnHand ?? parseStock(row.values[toDateKey(previousDate)]);
+  if (previousStock === null) {
+    return 0;
+  }
+  const soldUnits = Math.max(0, previousStock + (deliveredOrder?.requestedUnits ?? 0) - stockOnHand);
+  const unitsInPack = row.unitsInPack && row.unitsInPack > 0 ? row.unitsInPack : 1;
+  return soldUnits > 0 ? Math.ceil(soldUnits / unitsInPack) : 0;
 };
 
 type OrdersPanelProps = {
@@ -155,7 +184,9 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       const defaults: Record<string, string> = {};
       for (const row of nextTable.rows) {
         const stock = parseStock(row.values[preferred]);
-        const suggested = suggestPacks(row, stock);
+        const suggested = activeBusinessCategory === 'Деликатесы'
+          ? suggestDelicaciesPacks(row, stock, preferred, nextOrders)
+          : suggestPacks(row, stock);
         defaults[row.productId] = suggested > 0 ? String(suggested) : '';
       }
       setPacksByProduct(defaults);
@@ -171,7 +202,11 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   }, [session.token, activeBusinessCategory]);
 
   const stockDate = useMemo(() => (table ? preferredDate(table.dates) : null), [table]);
-  const orderDate = activeBusinessCategory === 'Молоко' ? nextOrderDate() : tomorrowDate();
+  const orderDate = activeBusinessCategory === 'Молоко'
+    ? nextOrderDate()
+    : activeBusinessCategory === 'Деликатесы'
+      ? nextDelicaciesDeliveryDate()
+      : tomorrowDate();
   const orderTargetLabel = `Заказ упаковок на ${formatTargetWeekday(orderDate)} ${formatDateShort(orderDate)}`;
 
   const saveMeta = async (productId: string) => {
@@ -232,7 +267,9 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
         const unitsInPack = row.unitsInPack && row.unitsInPack > 0 ? row.unitsInPack : 1;
         const requestedUnits = requestedPacks * unitsInPack;
         const stockOnHand = stockDate ? parseStock(row.values[stockDate]) : null;
-        const suggested = suggestPacks(row, stockOnHand);
+        const suggested = activeBusinessCategory === 'Деликатесы' && stockDate
+          ? suggestDelicaciesPacks(row, stockOnHand, stockDate, orders)
+          : suggestPacks(row, stockOnHand);
         const autoSuggested = suggested > 0 && suggested === requestedPacks;
         return {
           productId: row.productId,
@@ -294,7 +331,6 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
           <ScrollView style={[styles.orderList, styles.orderListExpanded]}>
             {(table?.rows ?? []).map((row) => {
               const currentStock = stockDate ? parseStock(row.values[stockDate]) : null;
-              const suggested = suggestPacks(row, currentStock);
               const pending = !!savingByProduct[row.productId];
               return (
                 <View key={row.productId} style={styles.orderCard}>
@@ -321,10 +357,6 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                         placeholder="Коробки"
                         placeholderTextColor="#7a8b7f"
                       />
-                    </View>
-                    <View style={styles.recommendationBlock}>
-                      <Text style={styles.orderLabel}>Авто-рекомендация</Text>
-                      <Text style={styles.recommendationValueText}>{suggested > 0 ? `${suggested} кор.` : '-'}</Text>
                     </View>
                   </View>
                   <Text style={styles.productMetaStrong}>Шт/кор: {row.unitsInPack ?? '-'}</Text>
@@ -540,12 +572,6 @@ const styles = StyleSheet.create({
     minWidth: 240,
     justifyContent: 'center',
   },
-  recommendationBlock: {
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 190,
-    justifyContent: 'center',
-  },
   stockLabel: {
     fontSize: 20,
     fontWeight: '800',
@@ -577,12 +603,6 @@ const styles = StyleSheet.create({
     color: '#1d3326',
     textAlign: 'left',
     minHeight: 86,
-  },
-  recommendationValueText: {
-    fontSize: 40,
-    lineHeight: 46,
-    fontWeight: '900',
-    color: '#1d3326',
   },
   productMetaStrong: {
     fontSize: 24,

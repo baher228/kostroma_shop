@@ -79,6 +79,23 @@ const nearestAllowedOrderDate = (dateKey: string): string => {
   return shiftToAllowedOrderDate(dateKey, 1);
 };
 
+const isDelicaciesOrderDate = (dateKey: string): boolean => parseDateKey(dateKey).getDay() !== 0;
+
+const shiftToDelicaciesOrderDate = (dateKey: string, direction: 1 | -1): string => {
+  const nextDate = parseDateKey(dateKey);
+  do {
+    nextDate.setDate(nextDate.getDate() + direction);
+  } while (nextDate.getDay() === 0);
+  return toDateKey(nextDate);
+};
+
+const nextOrderDateForCategory = (category: BusinessCategory): string => {
+  const today = todayDateKey();
+  if (category === 'Молоко') return nearestAllowedOrderDate(today);
+  if (category === 'Деликатесы') return shiftToDelicaciesOrderDate(today, 1);
+  return shiftOneDay(today, 1);
+};
+
 const formatWeekdayLabel = (iso: string): string =>
   parseDateKey(iso).toLocaleDateString('ru-RU', { weekday: 'long' });
 
@@ -120,7 +137,7 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
   };
 
   useEffect(() => {
-    void loadSheet(date);
+    void loadSheet(nextOrderDateForCategory(activeBusinessCategory));
   }, [activeBusinessCategory]);
 
   const handleLoadDate = () => {
@@ -134,13 +151,19 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
       );
       return;
     }
+    if (activeBusinessCategory === 'Деликатесы' && !isDelicaciesOrderDate(inputDate)) {
+      setError('По воскресеньям поставки деликатесов нет.');
+      return;
+    }
     void loadSheet(inputDate);
   };
 
   const shiftDate = (direction: 1 | -1) => {
     const next = activeBusinessCategory === 'Молоко'
       ? shiftToAllowedOrderDate(date, direction)
-      : shiftOneDay(date, direction);
+      : activeBusinessCategory === 'Деликатесы'
+        ? shiftToDelicaciesOrderDate(date, direction)
+        : shiftOneDay(date, direction);
     setInputDate(next);
     void loadSheet(next);
   };

@@ -6,8 +6,11 @@ import {
   formatDateLabel,
   formatWeekdayLabel,
   addDays,
+  isDelicaciesOrderDate,
   isAllowedOrderDate,
+  nearestDelicaciesOrderDate,
   nearestAllowedOrderDate,
+  shiftToDelicaciesOrderDate,
   shiftToAllowedOrderDate,
   todayDateKey,
 } from '../../dateUtils';
@@ -16,8 +19,16 @@ import { makeXlsxBlob, xlsxColumnName, type XlsxCell } from '../../export/xlsx';
 import { sortProductsLikeImage } from '../../productOrdering';
 import { formatWeight, messageOf } from '../../shared/format';
 import type { BusinessCategory, OrderSheet, OrderSheetRow, ProductCategory, Session, Shop } from '../../types';
+
+const nextOrderDateForCategory = (category: BusinessCategory): string => {
+  const today = todayDateKey();
+  if (category === 'Молоко') return nearestAllowedOrderDate(today);
+  if (category === 'Деликатесы') return nearestDelicaciesOrderDate(today);
+  return addDays(today, 1);
+};
+
 export const OrdersPanel = ({ session }: { session: Session }) => {
-  const initialDate = nearestAllowedOrderDate(todayDateKey());
+  const initialDate = nextOrderDateForCategory(DEFAULT_BUSINESS_CATEGORY);
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [date, setDate] = useState(initialDate);
   const [inputDate, setInputDate] = useState(initialDate);
@@ -44,7 +55,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
   };
 
   useEffect(() => {
-    void load(initialDate);
+    void load(nextOrderDateForCategory(activeBusinessCategory));
   }, [session.token, activeBusinessCategory]);
 
   const handleLoadDate = () => {
@@ -56,13 +67,19 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       setError('Лист заказа доступен только во вторник, четверг и субботу.');
       return;
     }
+    if (activeBusinessCategory === 'Деликатесы' && !isDelicaciesOrderDate(inputDate)) {
+      setError('По воскресеньям поставки деликатесов нет.');
+      return;
+    }
     void load(inputDate);
   };
 
   const shiftDate = (direction: 1 | -1) => {
     const next = activeBusinessCategory === 'Молоко'
       ? shiftToAllowedOrderDate(date, direction)
-      : addDays(date, direction);
+      : activeBusinessCategory === 'Деликатесы'
+        ? shiftToDelicaciesOrderDate(date, direction)
+        : addDays(date, direction);
     void load(next);
   };
 
@@ -127,6 +144,10 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     }
     if (activeBusinessCategory === 'Молоко' && !isAllowedOrderDate(inputDate)) {
       setError('Лист заказа доступен только во вторник, четверг и субботу.');
+      return;
+    }
+    if (activeBusinessCategory === 'Деликатесы' && !isDelicaciesOrderDate(inputDate)) {
+      setError('По воскресеньям поставки деликатесов нет.');
       return;
     }
 
@@ -217,7 +238,6 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
             className={activeBusinessCategory === category ? '' : 'secondary'}
             onClick={() => {
               setActiveBusinessCategory(category);
-              void load(date);
             }}
           >
             {category}

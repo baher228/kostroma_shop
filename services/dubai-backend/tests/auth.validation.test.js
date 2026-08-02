@@ -7,6 +7,7 @@ const {
   createRowSchema,
   createSellerOrderBulkSchema,
   createSellerOrderSchema,
+  orderSheetQuerySchema,
   updateProductMetaSchema,
   updateProductSchema,
   updateSellerOrderStatusSchema,
@@ -58,6 +59,26 @@ test('Dubai order schema rejects personal and free-text fields', () => {
     requestedUnits: 6,
     orderDate: '2026-05-01',
   }).orderDate, '2026-05-01');
+  assert.throws(() => createSellerOrderSchema.parse({
+    shopId: 'shop_main',
+    businessCategory: 'Деликатесы',
+    productId: 'prod_1',
+    requestedPacks: 1,
+    requestedUnits: 6,
+    orderDate: '2026-08-02',
+  }));
+  assert.equal(createSellerOrderSchema.parse({
+    shopId: 'shop_main',
+    businessCategory: 'Деликатесы',
+    productId: 'prod_1',
+    requestedPacks: 1,
+    requestedUnits: 6,
+    orderDate: '2026-08-03',
+  }).orderDate, '2026-08-03');
+  assert.throws(() => orderSheetQuerySchema.parse({
+    businessCategory: 'Деликатесы',
+    date: '2026-08-02',
+  }));
   assert.throws(() => createSellerOrderSchema.parse({
     shopId: 'shop_main',
     productId: 'prod_1',

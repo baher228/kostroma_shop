@@ -46,6 +46,20 @@ export const nearestAllowedOrderDate = (dateKey: string): string => {
   return shiftToAllowedOrderDate(dateKey, 1);
 };
 
+export const isDelicaciesOrderDate = (dateKey: string): boolean =>
+  parseDateKey(dateKey).getDay() !== 0;
+
+export const shiftToDelicaciesOrderDate = (dateKey: string, direction: 1 | -1): string => {
+  const nextDate = parseDateKey(dateKey);
+  do {
+    nextDate.setDate(nextDate.getDate() + direction);
+  } while (nextDate.getDay() === 0);
+  return toDateKey(nextDate);
+};
+
+export const nearestDelicaciesOrderDate = (dateKey: string): string =>
+  shiftToDelicaciesOrderDate(dateKey, 1);
+
 export const formatDateLabel = (iso: string): string => {
   const [year, month, day] = iso.split('-');
   return `${day}.${month}.${year}`;

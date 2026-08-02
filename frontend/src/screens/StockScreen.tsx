@@ -45,10 +45,12 @@ import {
 import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
 import {
   buildDashboardRowValues,
+  computeSold,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
   isManualOrderKey,
   isManualStockKey,
+  orderUnitsFromPacks,
   sanitizeOrderValue,
 } from '../../../shared/dashboard-calculations';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
@@ -131,6 +133,14 @@ const shiftDateKey = (dateKey: string, deltaDays: number): string => {
   const shifted = parseDateKey(dateKey);
   shifted.setDate(shifted.getDate() + deltaDays);
   return toDateKey(shifted);
+};
+
+const nextDelicaciesDeliveryDate = (dateKey: string): string => {
+  let target = shiftDateKey(dateKey, 1);
+  if (parseDateKey(target).getDay() === 0) {
+    target = shiftDateKey(target, 1);
+  }
+  return target;
 };
 
 const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
@@ -833,6 +843,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const soldForDate = (row: StockTableRow, date: string): string => {
+    if (activeBusinessCategory === 'Деликатесы') {
+      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, date), row.unitsInPack ?? 1);
+      return computeSold(row.values[shiftDateKey(date, -1)], deliveryUnits, row.values[date]);
+    }
     const previous = stockNumberFor(row, shiftDateKey(date, -1));
     const current = stockNumberFor(row, date);
     if (previous === null || current === null) {
@@ -906,7 +920,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               rows.map((row) => (
                 <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
                   {table?.dates.map((date) => {
-                    const orderDate = shiftDateKey(date, 1);
+                    const orderDate = activeBusinessCategory === 'Деликатесы'
+                      ? nextDelicaciesDeliveryDate(date)
+                      : shiftDateKey(date, 1);
                     return (
                       <View key={`${row.productId}:${date}`} style={styles.dailyValueGroup}>
                         <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>

@@ -43,6 +43,13 @@ const toDateKey = (date: Date): string => {
 };
 
 export const nearestOrderSheetDate = (from = new Date(), businessCategory: BusinessCategory = DEFAULT_BUSINESS_CATEGORY): string => {
+  if (businessCategory === 'Деликатесы') {
+    const target = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    do {
+      target.setDate(target.getDate() + 1);
+    } while (target.getDay() === 0);
+    return toDateKey(target);
+  }
   if (businessCategory !== 'Молоко') {
     const tomorrow = new Date(from.getFullYear(), from.getMonth(), from.getDate());
     tomorrow.setDate(tomorrow.getDate() + 1);

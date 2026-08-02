@@ -178,6 +178,8 @@ test('seller order creation writes through to order sheet values', async () => {
 
   assert.equal(nearestOrderSheetDate(new Date(2026, 3, 27)), '2026-04-28');
   assert.equal(nearestOrderSheetDate(new Date(2026, 3, 30)), '2026-05-02');
+  assert.equal(nearestOrderSheetDate(new Date(2026, 6, 31), 'Деликатесы'), '2026-08-01');
+  assert.equal(nearestOrderSheetDate(new Date(2026, 7, 1), 'Деликатесы'), '2026-08-03');
 
   const order = await createSellerOrder(
     { role: 'worker', shopIds: ['shop_main'], scopes: ['orders:write'], jti: 'jti_1' },

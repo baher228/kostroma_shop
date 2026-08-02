@@ -12,15 +12,17 @@ import {
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, getTwoWeeksEnd, startOfWeek } from '../../dateUtils';
+import { addDays, formatDateLabel, getTwoWeeksEnd, nearestDelicaciesOrderDate, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
+  computeSold,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
   type DashboardWeeks,
   isManualOrderKey,
   isManualStockKey,
+  orderUnitsFromPacks,
   productReferenceLabel,
   productToForm,
   sanitizeOrderValue,
@@ -380,6 +382,10 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   };
 
   const soldFor = (row: Product, date: string): string => {
+    if (activeBusinessCategory === 'Деликатесы') {
+      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, date), row.unitsInPack ?? 1);
+      return computeSold(row.values[addDays(date, -1)], deliveryUnits, row.values[date]);
+    }
     const previous = stockFor(row, addDays(date, -1));
     const current = stockFor(row, date);
     if (previous === null || current === null) return '';
@@ -397,7 +403,10 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               {(table?.dates ?? []).map((date) => (
                 <React.Fragment key={date}>
                   <th>{formatDateLabel(date)}<small>Остаток</small></th>
-                  <th>{formatDateLabel(addDays(date, 1))}<small>Заказ</small></th>
+                  <th>
+                    {formatDateLabel(activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1))}
+                    <small>Заказ</small>
+                  </th>
                   <th>{formatDateLabel(date)}<small>Продано</small></th>
                 </React.Fragment>
               ))}
@@ -410,7 +419,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <tr key={row.productId}>
                 <td className="manager-name-col"><strong>{row.name}</strong><small>{productReferenceLabel(row)}</small></td>
                 {(table?.dates ?? []).map((date) => {
-                  const orderDate = addDays(date, 1);
+                  const orderDate = activeBusinessCategory === 'Деликатесы'
+                    ? nearestDelicaciesOrderDate(date)
+                    : addDays(date, 1);
                   return (
                     <React.Fragment key={`${row.productId}:${date}`}>
                       <td>

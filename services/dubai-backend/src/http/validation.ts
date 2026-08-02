@@ -38,6 +38,11 @@ const isAllowedOrderDate = (dateKey: string): boolean => {
   return new Set([2, 4, 6]).has(date.getDay());
 };
 
+const isAllowedBusinessOrderDate = (businessCategory: BusinessCategory, dateKey: string): boolean =>
+  businessCategory === 'Молоко'
+    ? isAllowedOrderDate(dateKey)
+    : businessCategory !== 'Деликатесы' || new Date(`${dateKey}T00:00:00`).getDay() !== 0;
+
 const businessCategorySchema = z.enum(BUSINESS_CATEGORIES);
 const productCategorySchema = z.string().trim().min(1).max(80);
 const resolveBusinessCategory = (value?: BusinessCategory): BusinessCategory => value ?? DEFAULT_BUSINESS_CATEGORY;
@@ -263,8 +268,8 @@ export const createSellerOrderSchema = z.object({
   autoSuggested: z.boolean().optional().default(false),
   orderDate: dateKeySchema.optional(),
 }).strict()
-  .refine((payload) => resolveBusinessCategory(payload.businessCategory) !== 'Молоко' || !payload.orderDate || isAllowedOrderDate(payload.orderDate), {
-    message: 'Milk order date must be Tuesday, Thursday or Saturday.',
+  .refine((payload) => !payload.orderDate || isAllowedBusinessOrderDate(resolveBusinessCategory(payload.businessCategory), payload.orderDate), {
+    message: 'Order date is unavailable for this business category.',
   });
 
 const sellerOrderItemSchema = z.object({
@@ -281,8 +286,8 @@ export const createSellerOrderBulkSchema = z.object({
   orderDate: dateKeySchema,
   items: z.array(sellerOrderItemSchema).min(1).max(1000),
 }).strict()
-  .refine((payload) => resolveBusinessCategory(payload.businessCategory) !== 'Молоко' || isAllowedOrderDate(payload.orderDate), {
-    message: 'Milk order date must be Tuesday, Thursday or Saturday.',
+  .refine((payload) => isAllowedBusinessOrderDate(resolveBusinessCategory(payload.businessCategory), payload.orderDate), {
+    message: 'Order date is unavailable for this business category.',
   })
   .refine((payload) => new Set(payload.items.map((item) => item.productId)).size === payload.items.length, {
     message: 'Order items must have unique products.',
@@ -299,6 +304,8 @@ export const updateCheckInStatusSchema = z.object({
 export const orderSheetQuerySchema = z.object({
   date: dateKeySchema,
   businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
+}).refine((payload) => isAllowedBusinessOrderDate(payload.businessCategory, payload.date), {
+  message: 'Order date is unavailable for this business category.',
 });
 
 export const upsertOrderSheetValueSchema = z.object({

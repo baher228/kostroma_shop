@@ -47,6 +47,19 @@ export const listPromotionPriceListItems = async (): Promise<PromotionPriceListI
   }));
 };
 
+export const hasPromotionPriceListItems = async (): Promise<boolean> => {
+  const result = await opsDb.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM promotion_price_list_items
+       WHERE normalized_product_name IS NOT NULL
+         AND regular_price IS NOT NULL
+       LIMIT 1
+     ) AS exists;`,
+  );
+  return Boolean(result.rows[0]?.exists);
+};
+
 export const upsertPromotionPriceListItems = async (items: PromotionPriceListItemInput[]): Promise<number> => {
   if (!items.length) return 0;
 

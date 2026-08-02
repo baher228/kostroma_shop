@@ -13,6 +13,11 @@ export type PromotionDocument = {
   uploadedAt: string;
 };
 
+export type DeletedPromotionDocument = {
+  document: PromotionDocument;
+  deletedRows: number;
+};
+
 type PromotionDocumentRow = {
   id: string;
   document_type: PromotionDocumentType;
@@ -68,3 +73,56 @@ export const getPromotionDocumentById = async (documentId: string): Promise<Prom
   );
   return result.rows[0] ? mapDocument(result.rows[0]) : null;
 };
+
+export const deletePromotionDocumentById = async (documentId: string): Promise<DeletedPromotionDocument | null> =>
+  opsDb.withClient(async (client) => {
+    await client.query('BEGIN');
+    try {
+      const found = await client.query<PromotionDocumentRow>(
+        'SELECT * FROM promotion_storage_documents WHERE id = $1 FOR UPDATE;',
+        [documentId],
+      );
+      const row = found.rows[0];
+      if (!row) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      let deletedRows = 0;
+      if (row.document_type === 'invoice') {
+        const removed = await client.query(
+          `DELETE FROM promotion_table_rows
+           WHERE invoice_document_id = $1
+              OR source_document_id = $1;`,
+          [documentId],
+        );
+        deletedRows = removed.rowCount ?? 0;
+      } else if (row.document_type === 'two_month_plan') {
+        const removed = await client.query(
+          `DELETE FROM promotion_table_rows
+           WHERE source_document_id = $1
+             AND invoice_document_id IS NULL;`,
+          [documentId],
+        );
+        deletedRows = removed.rowCount ?? 0;
+        await client.query(
+          `UPDATE promotion_table_rows
+           SET plan_document_id = NULL,
+               plan_document_file_name = NULL,
+               updated_at = NOW()
+           WHERE plan_document_id = $1;`,
+          [documentId],
+        );
+      }
+
+      await client.query(
+        'DELETE FROM promotion_storage_documents WHERE id = $1;',
+        [documentId],
+      );
+      await client.query('COMMIT');
+      return { document: mapDocument(row), deletedRows };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });

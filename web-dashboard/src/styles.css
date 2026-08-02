@@ -1452,14 +1452,19 @@ td.sticky {
 
 .documents-download-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px;
+  grid-template-columns: minmax(0, 1fr) 132px 116px;
   align-items: end;
   gap: 10px;
 }
 
-.documents-download-button {
+.documents-download-button,
+.documents-delete-button {
   width: 132px;
   min-height: 42px;
+}
+
+.documents-delete-button {
+  width: 116px;
 }
 
 .documents-loading {
@@ -1501,7 +1506,8 @@ td.sticky {
     grid-template-columns: 1fr;
   }
 
-  .documents-download-button {
+  .documents-download-button,
+  .documents-delete-button {
     width: 100%;
   }
 

@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from '../config/config';
 
@@ -6,6 +6,12 @@ type UploadInput = {
   key: string;
   body: Uint8Array;
   contentType: string;
+};
+
+export type DownloadedObject = {
+  body: Buffer;
+  contentType: string;
+  contentLength: number;
 };
 
 const hasAnyR2Config = Boolean(config.r2AccountId || config.r2AccessKeyId || config.r2SecretAccessKey || config.r2Bucket);
@@ -40,6 +46,36 @@ export const uploadObject = async ({ key, body, contentType }: UploadInput): Pro
     }),
   );
   return key;
+};
+
+export const downloadObject = async (key: string): Promise<DownloadedObject> => {
+  assertR2Configured();
+  const result = await client!.send(
+    new GetObjectCommand({
+      Bucket: config.r2Bucket!,
+      Key: key,
+    }),
+  );
+  if (!result.Body) {
+    throw new Error('Документ найден, но R2 вернул пустой файл.');
+  }
+  const bytes = await result.Body.transformToByteArray();
+  const body = Buffer.from(bytes);
+  return {
+    body,
+    contentType: result.ContentType || 'application/octet-stream',
+    contentLength: Number(result.ContentLength ?? body.byteLength),
+  };
+};
+
+export const deleteObject = async (key: string): Promise<void> => {
+  assertR2Configured();
+  await client!.send(
+    new DeleteObjectCommand({
+      Bucket: config.r2Bucket!,
+      Key: key,
+    }),
+  );
 };
 
 export const createDownloadUrl = async (key: string): Promise<string> => {

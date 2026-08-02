@@ -5,15 +5,17 @@ import {
   PromotionDocument,
   PromotionDocumentType,
   createPromotionDocument,
+  deletePromotionDocumentById,
   getLatestPromotionDocument,
   getPromotionDocumentById,
   listPromotionDocuments,
 } from '../repositories/promotionDocumentsRepository';
+import { hasPromotionPriceListItems } from '../repositories/promotionPriceListRepository';
 import { listPromotionRows } from '../repositories/promotionRowsRepository';
 import { importPromotionInvoice } from '../services/promotionInvoiceImportService';
 import { importPromotionPlan } from '../services/promotionPlanImportService';
 import { importPromotionPriceList } from '../services/promotionPriceListImportService';
-import { createDownloadUrl, uploadObject } from '../services/r2StorageService';
+import { deleteObject, downloadObject, uploadObject } from '../services/r2StorageService';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -59,10 +61,15 @@ const validateUpload = (documentType: PromotionDocumentType, fileName: string) =
   }
 };
 
-const storageKey = (documentType: PromotionDocumentType, fileName: string) =>
-  `promotions/documents/${documentType}/${Date.now()}_${safeName(fileName)}`;
+const storageKey = (_documentType: PromotionDocumentType, fileName: string) =>
+  `promotions/documents/${Date.now()}_${safeName(fileName)}`;
 
 const csvEscape = (value: string | number | null) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const contentDisposition = (fileName: string) => {
+  const fallback = fileName.replace(/[^\x20-\x7E]+/g, '_').replace(/["\\]/g, '_') || 'download';
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+};
 
 const buildFinalTableCsv = async () => {
   const promotionRows = await listPromotionRows();
@@ -126,6 +133,10 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
           res.status(400).json({ message: 'Прикрепите файл.' });
           return;
         }
+        if (documentType === 'invoice' && !(await hasPromotionPriceListItems())) {
+          res.status(400).json({ message: 'Сначала загрузите XLSX прайс розничных цен. Без него накладная не сможет посчитать разницу и проценты акций.' });
+          return;
+        }
         const fileName = decodeFileName(req.file.originalname);
         validateUpload(documentType, fileName);
         const key = storageKey(documentType, fileName);
@@ -178,9 +189,32 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
         res.status(404).json({ message: 'Документ не найден.' });
         return;
       }
-      res.json({ url: await createDownloadUrl(document.storageKey), fileName: document.fileName, document });
+      const file = await downloadObject(document.storageKey);
+      res.setHeader('Content-Type', file.contentType || document.contentType || 'application/octet-stream');
+      res.setHeader('Content-Length', String(file.contentLength));
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Content-Disposition', contentDisposition(document.fileName));
+      res.send(file.body);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось скачать документ.' });
+    }
+  });
+
+  app.delete('/api/promotions/documents/:documentId', requireOpsRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const deleted = await deletePromotionDocumentById(String(req.params.documentId ?? '').trim());
+      if (!deleted) {
+        res.status(404).json({ message: 'Документ не найден.' });
+        return;
+      }
+      try {
+        await deleteObject(deleted.document.storageKey);
+      } catch (error) {
+        console.warn('Failed to delete promotion document from R2', error);
+      }
+      res.json({ document: deleted.document, deletedRows: deleted.deletedRows });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось удалить документ.' });
     }
   });
 };

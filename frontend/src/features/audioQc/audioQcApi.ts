@@ -6,7 +6,7 @@ import {
   AudioQcRecording,
 } from './audioQcTypes';
 
-const ML_API_BASE_URL = (process.env.EXPO_PUBLIC_ML_API_URL || '').replace(/\/+$/, '');
+const ML_API_BASE_URL = (process.env.EXPO_PUBLIC_ML_API_URL || process.env.ML_API_BASE_URL || '').replace(/\/+$/, '');
 const ML_REQUEST_TIMEOUT_MS = 30_000;
 
 type JsonObject = Record<string, unknown>;
@@ -42,7 +42,7 @@ export class AudioQcApiError extends Error {
 
 const getMlApiBaseUrl = (): string => {
   if (!ML_API_BASE_URL) {
-    throw new AudioQcApiError('EXPO_PUBLIC_ML_API_URL is not configured.', 0);
+    throw new AudioQcApiError('ML_API_BASE_URL is not configured.', 0);
   }
   return ML_API_BASE_URL;
 };
@@ -80,7 +80,6 @@ const requestMlJson = async <T>(
   options: {
     method?: 'GET' | 'POST';
     body?: JsonObject;
-    authToken?: string;
   } = {},
 ): Promise<T> => {
   const response = await fetchWithTimeout(`${getMlApiBaseUrl()}${path}`, {
@@ -88,7 +87,6 @@ const requestMlJson = async <T>(
     headers: {
       Accept: 'application/json',
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(options.authToken ? { Authorization: `Bearer ${options.authToken}` } : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -139,7 +137,7 @@ const fileNameFromUri = (fileUri: string, fallback: string): string => {
   return lastSegment || fallback;
 };
 
-const uploadAudio = async (sessionId: string, fileUri: string, authToken?: string): Promise<void> => {
+const uploadAudio = async (sessionId: string, fileUri: string): Promise<void> => {
   const formData = new FormData();
   const name = fileNameFromUri(fileUri, `${sessionId}.m4a`);
   formData.append(
@@ -156,7 +154,6 @@ const uploadAudio = async (sessionId: string, fileUri: string, authToken?: strin
     method: 'POST',
     headers: {
       Accept: 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     body: formData,
   });
@@ -208,11 +205,10 @@ export const audioQcApi = {
     });
   },
 
-  createMlSession: async (recording: AudioQcRecording, authToken?: string): Promise<string> => {
+  createMlSession: async (recording: AudioQcRecording): Promise<string> => {
     try {
       const response = await requestMlJson<MlSessionResponse>('/api/ml/sessions', {
         method: 'POST',
-        authToken,
         body: buildMlSessionBody(recording, true),
       });
       return extractSessionId(response);
@@ -220,7 +216,6 @@ export const audioQcApi = {
       if (error instanceof AudioQcApiError && (error.status === 400 || error.status === 422)) {
         const response = await requestMlJson<MlSessionResponse>('/api/ml/sessions', {
           method: 'POST',
-          authToken,
           body: buildMlSessionBody(recording, false),
         });
         return extractSessionId(response);
@@ -231,15 +226,14 @@ export const audioQcApi = {
 
   uploadAudio,
 
-  startProcessing: async (sessionId: string, authToken?: string): Promise<{ jobId: string | null; status: string | null }> => {
+  startProcessing: async (sessionId: string): Promise<{ jobId: string | null; status: string | null }> => {
     const response = await requestMlJson<MlProcessResponse>(`/api/ml/sessions/${encodeURIComponent(sessionId)}/process`, {
       method: 'POST',
-      authToken,
       body: { pipeline: 'audio_mvp' },
     });
     return { jobId: extractJobId(response), status: response.status ?? response.job?.status ?? null };
   },
 
-  getMlStatus: async (sessionId: string, authToken?: string): Promise<JsonObject> =>
-    requestMlJson<JsonObject>(`/api/ml/sessions/${encodeURIComponent(sessionId)}/status`, { authToken }),
+  getMlStatus: async (sessionId: string): Promise<JsonObject> =>
+    requestMlJson<JsonObject>(`/api/ml/sessions/${encodeURIComponent(sessionId)}/status`),
 };

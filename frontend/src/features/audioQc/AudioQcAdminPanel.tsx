@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { createDefaultAudioQcPolicy, audioQcModeLabels, audioQcModes } from './audioQcPolicy';
+import { createDefaultAudioQcPolicy, audioQcModeLabels } from './audioQcPolicy';
 import { AudioQcAdminPanelProps, AudioQcPolicy } from './audioQcTypes';
 import { useAudioQc } from './AudioQcProvider';
 
@@ -12,23 +12,6 @@ const formatDateTime = (iso: string | null | undefined): string => {
     hour: '2-digit',
     minute: '2-digit',
   });
-};
-
-const numberPatch = (
-  current: AudioQcPolicy | null,
-  key: 'maxSegmentDurationSec' | 'silenceToStopSec' | 'preRollSec',
-  delta: number,
-): AudioQcPolicy | null => {
-  if (!current) return current;
-  const bounds = {
-    maxSegmentDurationSec: { min: 30, max: 1800 },
-    silenceToStopSec: { min: 1, max: 30 },
-    preRollSec: { min: 0, max: 30 },
-  }[key];
-  return {
-    ...current,
-    [key]: Math.max(bounds.min, Math.min(bounds.max, current[key] + delta)),
-  };
 };
 
 export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelProps) => {
@@ -152,60 +135,6 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
             trackColor={{ false: '#c5d0c7', true: '#8bc79b' }}
             thumbColor={draft.enabled ? '#2f6f4f' : '#f4f4f4'}
           />
-        </View>
-
-        <View style={styles.modeRow}>
-          {audioQcModes.map((mode) => {
-            const active = draft.mode === mode;
-            return (
-              <Pressable
-                key={mode}
-                style={[styles.modeButton, active && styles.modeButtonActive]}
-                onPress={() => setDraft((current) => (current ? { ...current, mode } : current))}
-              >
-                <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{audioQcModeLabels[mode]}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.stepperGrid}>
-          <View style={styles.stepper}>
-            <Text style={styles.stepperLabel}>Длина фрагмента</Text>
-            <View style={styles.stepperControls}>
-              <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'maxSegmentDurationSec', -30))}>
-                <Text style={styles.stepperButtonText}>-</Text>
-              </Pressable>
-              <Text style={styles.stepperValue}>{draft.maxSegmentDurationSec} с</Text>
-              <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'maxSegmentDurationSec', 30))}>
-                <Text style={styles.stepperButtonText}>+</Text>
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.stepper}>
-            <Text style={styles.stepperLabel}>Тишина до остановки</Text>
-            <View style={styles.stepperControls}>
-              <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'silenceToStopSec', -1))}>
-                <Text style={styles.stepperButtonText}>-</Text>
-              </Pressable>
-              <Text style={styles.stepperValue}>{draft.silenceToStopSec} с</Text>
-              <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'silenceToStopSec', 1))}>
-                <Text style={styles.stepperButtonText}>+</Text>
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.stepper}>
-            <Text style={styles.stepperLabel}>Запас перед речью</Text>
-            <View style={styles.stepperControls}>
-              <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'preRollSec', -1))}>
-                <Text style={styles.stepperButtonText}>-</Text>
-              </Pressable>
-              <Text style={styles.stepperValue}>{draft.preRollSec} с</Text>
-              <Pressable style={styles.stepperButton} onPress={() => setDraft((current) => numberPatch(current, 'preRollSec', 1))}>
-                <Text style={styles.stepperButtonText}>+</Text>
-              </Pressable>
-            </View>
-          </View>
         </View>
 
         <View style={styles.switchRow}>
@@ -352,69 +281,6 @@ const styles = StyleSheet.create({
     color: '#526459',
     fontSize: 12,
     fontWeight: '700',
-  },
-  modeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  modeButton: {
-    minHeight: 38,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#c5d0c7',
-    backgroundColor: '#f3f7f3',
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeButtonActive: {
-    backgroundColor: '#2f6f4f',
-    borderColor: '#2f6f4f',
-  },
-  modeButtonText: {
-    color: '#334b3d',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  modeButtonTextActive: {
-    color: '#ffffff',
-  },
-  stepperGrid: {
-    gap: 10,
-  },
-  stepper: {
-    gap: 6,
-  },
-  stepperLabel: {
-    color: '#445a4b',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  stepperControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepperButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#dbe4dc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperButtonText: {
-    color: '#223529',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  stepperValue: {
-    width: 72,
-    color: '#1f2f26',
-    fontSize: 15,
-    fontWeight: '900',
-    textAlign: 'center',
   },
   saveButton: {
     minHeight: 42,

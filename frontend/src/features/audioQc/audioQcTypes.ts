@@ -1,6 +1,6 @@
 import { Session, Shop } from '../../types/models';
 
-export type AudioQcRecordingMode = 'manual' | 'admin_remote' | 'vad_auto';
+export type AudioQcRecordingMode = 'manual';
 
 export type AudioQcRecordingStatus =
   | 'recording'
@@ -15,7 +15,7 @@ export type AudioQcRecordingStatus =
   | 'failed_retryable'
   | 'failed_permanent';
 
-export type AudioQcActivityStatus = 'idle' | 'listening' | 'recording' | 'paused' | 'queued' | 'uploading' | 'error';
+export type AudioQcActivityStatus = 'idle' | 'recording' | 'paused' | 'queued' | 'uploading' | 'error';
 
 export type AudioQcPolicy = {
   enabled: boolean;
@@ -90,13 +90,6 @@ export type AudioQcHeartbeatPayload = {
   lastUploadAt: string | null;
 };
 
-export type AudioQcVadState = {
-  enabled: boolean;
-  available: boolean;
-  status: 'inactive' | 'managed_fallback' | 'needs_native_service';
-  message: string;
-};
-
 export type AudioQcControllerValue = {
   session: Session;
   deviceId: string | null;
@@ -113,7 +106,6 @@ export type AudioQcControllerValue = {
   isPolicySaving: boolean;
   elapsedSec: number;
   lastError: string | null;
-  vadState: AudioQcVadState;
   startManualRecording: () => Promise<void>;
   pauseRecording: () => Promise<void>;
   resumeRecording: () => Promise<void>;

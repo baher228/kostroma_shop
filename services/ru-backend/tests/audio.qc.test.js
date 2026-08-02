@@ -41,7 +41,7 @@ test('Audio QC policy upsert stores manager command in RU backend', async () => 
         rows: [{
           shop_id: 'shop_main',
           enabled: true,
-          mode: 'vad_auto',
+          mode: 'manual',
           max_segment_duration_sec: 300,
           silence_to_stop_sec: 3,
           pre_roll_sec: 5,
@@ -58,7 +58,7 @@ test('Audio QC policy upsert stores manager command in RU backend', async () => 
     'shop_main',
     {
       enabled: true,
-      mode: 'vad_auto',
+      mode: 'manual',
       maxSegmentDurationSec: 300,
       silenceToStopSec: 3,
       preRollSec: 5,
@@ -68,7 +68,7 @@ test('Audio QC policy upsert stores manager command in RU backend', async () => 
   );
 
   assert.equal(policy.enabled, true);
-  assert.equal(policy.mode, 'vad_auto');
+  assert.equal(policy.mode, 'manual');
   assert.equal(policy.heartbeat, null);
   assert.equal(calls[0].sql.includes('ON CONFLICT (shop_id)'), true);
   assert.equal(calls[0].params[1], 'shop_main');
@@ -86,7 +86,7 @@ test('Audio QC heartbeat is upserted by device id', async () => {
         shop_id: 'shop_main',
         user_id: 'tablet_1',
         app_version: '1.0.0',
-        current_mode: 'admin_remote',
+        current_mode: 'manual',
         queue_size: 2,
         is_recording: true,
         last_error: null,
@@ -101,7 +101,7 @@ test('Audio QC heartbeat is upserted by device id', async () => {
     shopId: 'shop_main',
     userId: 'tablet_1',
     appVersion: '1.0.0',
-    currentMode: 'admin_remote',
+    currentMode: 'manual',
     queueSize: 2,
     isRecording: true,
     lastError: null,

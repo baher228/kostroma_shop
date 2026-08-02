@@ -11,7 +11,7 @@ const HEARTBEAT_ONLINE_WINDOW_MS = 90_000;
 type AudioQcPolicyRow = {
   shop_id: string;
   enabled: boolean;
-  mode: AudioQcRecordingMode;
+  mode: string;
   max_segment_duration_sec: number;
   silence_to_stop_sec: number;
   pre_roll_sec: number;
@@ -24,7 +24,7 @@ type AudioQcHeartbeatRow = {
   shop_id: string;
   user_id: string | null;
   app_version: string | null;
-  current_mode: AudioQcRecordingMode | null;
+  current_mode: string | null;
   queue_size: number;
   is_recording: boolean;
   last_error: string | null;
@@ -59,6 +59,9 @@ const createPolicyId = (shopId: string): string =>
 const createHeartbeatId = (deviceId: string): string =>
   `audio_qc_hb_${deviceId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 
+const manualModeOrNull = (mode: string | null): AudioQcRecordingMode | null =>
+  mode === 'manual' ? 'manual' : null;
+
 export const defaultAudioQcPolicy = (shopId: string): AudioQcPolicy => ({
   enabled: false,
   mode: 'manual',
@@ -73,7 +76,7 @@ export const defaultAudioQcPolicy = (shopId: string): AudioQcPolicy => ({
 
 const mapPolicy = (row: AudioQcPolicyRow): AudioQcPolicy => ({
   enabled: row.enabled,
-  mode: row.mode,
+  mode: manualModeOrNull(row.mode) ?? 'manual',
   shopId: row.shop_id,
   targetRole: 'store_tablet',
   maxSegmentDurationSec: row.max_segment_duration_sec,
@@ -90,7 +93,7 @@ const mapHeartbeat = (row: AudioQcHeartbeatRow): AudioQcDeviceHeartbeat => {
     shopId: row.shop_id,
     userId: row.user_id,
     appVersion: row.app_version,
-    currentMode: row.current_mode,
+    currentMode: manualModeOrNull(row.current_mode),
     queueSize: row.queue_size,
     isRecording: row.is_recording,
     lastError: row.last_error,
@@ -231,7 +234,7 @@ export const upsertAudioQcPolicy = async (
       createPolicyId(shopId),
       shopId,
       patch.enabled,
-      patch.mode,
+      'manual',
       patch.maxSegmentDurationSec,
       patch.silenceToStopSec,
       patch.preRollSec,

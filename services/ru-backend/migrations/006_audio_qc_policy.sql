@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS audio_qc_policies (
   updated_by TEXT NULL REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT audio_qc_policies_mode_check CHECK (mode IN ('manual', 'admin_remote', 'vad_auto')),
+  CONSTRAINT audio_qc_policies_mode_check CHECK (mode = 'manual'),
   CONSTRAINT audio_qc_policies_max_segment_check CHECK (max_segment_duration_sec BETWEEN 30 AND 1800),
   CONSTRAINT audio_qc_policies_silence_check CHECK (silence_to_stop_sec BETWEEN 1 AND 30),
   CONSTRAINT audio_qc_policies_preroll_check CHECK (pre_roll_sec BETWEEN 0 AND 30)
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS audio_qc_device_heartbeats (
   last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT audio_qc_device_heartbeats_mode_check CHECK (current_mode IS NULL OR current_mode IN ('manual', 'admin_remote', 'vad_auto')),
+  CONSTRAINT audio_qc_device_heartbeats_mode_check CHECK (current_mode IS NULL OR current_mode = 'manual'),
   CONSTRAINT audio_qc_device_heartbeats_queue_size_check CHECK (queue_size >= 0)
 );
 

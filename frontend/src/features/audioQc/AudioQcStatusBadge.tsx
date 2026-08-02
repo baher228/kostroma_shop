@@ -5,7 +5,6 @@ import { useAudioQc } from './AudioQcProvider';
 
 const activityLabels: Record<AudioQcActivityStatus, string> = {
   idle: 'ожидание',
-  listening: 'ожидание речи',
   recording: 'запись',
   paused: 'пауза',
   queued: 'очередь',
@@ -38,7 +37,7 @@ const formatDateTime = (iso: string | null): string => {
 };
 
 export const AudioQcStatusBadge = () => {
-  const { policy, currentRecording, activityStatus, queueSummary, lastError, vadState, deviceId } = useAudioQc();
+  const { policy, currentRecording, activityStatus, queueSummary, lastError, deviceId } = useAudioQc();
   const latestStatus = currentRecording?.status ? recordingStatusLabels[currentRecording.status] : activityLabels[activityStatus];
   const isEnabled = Boolean(policy?.enabled);
 
@@ -60,7 +59,6 @@ export const AudioQcStatusBadge = () => {
         <Text style={styles.metric}>Планшет: {deviceId ?? '-'}</Text>
       </View>
 
-      {vadState.enabled && <Text style={styles.warning}>{vadState.message}</Text>}
       {!!lastError && <Text style={styles.error}>Ошибка: {lastError}</Text>}
     </View>
   );
@@ -113,11 +111,6 @@ const styles = StyleSheet.create({
     color: '#354a3c',
     fontSize: 11,
     fontWeight: '800',
-  },
-  warning: {
-    color: '#7b5a19',
-    fontSize: 11,
-    fontWeight: '700',
   },
   error: {
     color: '#af4234',

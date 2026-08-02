@@ -20,6 +20,7 @@
         "NODE_ENV": "production",
         "EXPO_PUBLIC_RU_API_URL": "https://affera.co.uk/ru",
         "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb",
+        "ML_API_BASE_URL": "https://affera.co.uk/ml",
         "EXPO_PUBLIC_ML_API_URL": "https://affera.co.uk/ml"
       }
     },
@@ -36,6 +37,7 @@
         "EXPO_DISABLE_UPDATES": "1",
         "EXPO_PUBLIC_RU_API_URL": "http://192.168.100.165:4000",
         "EXPO_PUBLIC_DXB_API_URL": "http://192.168.100.165:4001",
+        "ML_API_BASE_URL": "http://localhost:8000",
         "EXPO_PUBLIC_ML_API_URL": "http://192.168.100.165:8000"
       }
     },
@@ -48,6 +50,7 @@
         "NODE_ENV": "production",
         "EXPO_PUBLIC_RU_API_URL": "https://affera.co.uk/ru",
         "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb",
+        "ML_API_BASE_URL": "https://affera.co.uk/ml",
         "EXPO_PUBLIC_ML_API_URL": "https://affera.co.uk/ml"
       }
     }

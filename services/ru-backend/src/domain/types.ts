@@ -1,6 +1,6 @@
 export type Role = 'manager' | 'worker' | 'store_tablet';
 
-export type AudioQcRecordingMode = 'manual' | 'admin_remote' | 'vad_auto';
+export type AudioQcRecordingMode = 'manual';
 
 export type ColumnKey =
   | 'packCount'

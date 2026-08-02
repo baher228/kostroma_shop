@@ -27,15 +27,12 @@ import {
   AudioQcPolicy,
   AudioQcPolicyWithHeartbeat,
   AudioQcRecording,
-  AudioQcRecordingMode,
-  AudioQcVadState,
 } from './audioQcTypes';
 import { Session } from '../../types/models';
 
 const POLICY_POLL_MS = 45_000;
 const HEARTBEAT_MS = 30_000;
 const QUEUE_POLL_MS = 20_000;
-const MIN_AUTO_SEGMENT_SEC = 30;
 
 const AUDIO_QC_RECORDING_OPTIONS: RecordingOptions = {
   ...RecordingPresets.HIGH_QUALITY,
@@ -116,8 +113,6 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   const queueSummaryRef = useRef(queueSummary);
   const policyRef = useRef<AudioQcPolicy | null>(policy);
   const queueProcessingRef = useRef(false);
-  const policyApplyRef = useRef(false);
-  const autoSegmentRef = useRef(false);
   const isPausedRef = useRef(false);
 
   useEffect(() => {
@@ -196,7 +191,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   }, []);
 
   const startRecording = useCallback(
-    async (recordingMode: AudioQcRecordingMode) => {
+    async () => {
       if (!canUseAudioQc(session)) {
         throw new Error('Audio QC доступен только manager/store_tablet.');
       }
@@ -233,7 +228,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
         endedAt: null,
         appVersion: getAppVersion(),
         timezone: getTimezone(),
-        recordingMode,
+        recordingMode: 'manual',
         localFileUri: '',
         durationSec: null,
         fileSizeBytes: null,
@@ -312,7 +307,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   }, [handleRecordingChanged, recorder, recorderState.durationMillis, runQueue, setCurrentRecordingState, setPausedState]);
 
   const startManualRecording = useCallback(async () => {
-    await startRecording('manual');
+    await startRecording();
   }, [startRecording]);
 
   const pauseRecording = useCallback(async () => {
@@ -479,109 +474,16 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
       void sendHeartbeat().catch((error) => setLastError(toErrorMessage(error)));
     }, HEARTBEAT_MS);
     return () => clearInterval(interval);
-  }, [ensureDeviceId, lastRecorderError, recorder, session.token, session.user.role, session.user.shopId]);
-
-  useEffect(() => {
-    const applyPolicy = async () => {
-      if (policyApplyRef.current || session.user.role !== 'store_tablet') {
-        return;
-      }
-      const currentPolicy = policyRef.current;
-      if (!currentPolicy) {
-        return;
-      }
-      policyApplyRef.current = true;
-      try {
-        const activeRecording = currentRecordingRef.current;
-        if (!currentPolicy.enabled) {
-          if (activeRecording && activeRecording.recordingMode !== 'manual') {
-            await stopRecording();
-          }
-          return;
-        }
-        if (currentPolicy.mode === 'manual') {
-          return;
-        }
-        if (activeRecording && activeRecording.recordingMode !== currentPolicy.mode && activeRecording.recordingMode !== 'manual') {
-          await stopRecording();
-          return;
-        }
-        if (!currentRecordingRef.current && !recorder.getStatus().isRecording) {
-          await startRecording(currentPolicy.mode);
-        }
-      } catch (error) {
-        setLastError(toErrorMessage(error));
-      } finally {
-        policyApplyRef.current = false;
-      }
-    };
-
-    void applyPolicy();
-  }, [
-    currentRecording?.localRecordingId,
-    policy?.enabled,
-    policy?.mode,
-    recorder,
-    recorderState.isRecording,
-    session.user.role,
-    startRecording,
-    stopRecording,
-  ]);
-
-  useEffect(() => {
-    const activeRecording = currentRecordingRef.current;
-    const currentPolicy = policyRef.current;
-    if (!activeRecording || activeRecording.recordingMode === 'manual' || !currentPolicy?.enabled) {
-      return;
-    }
-    const maxSegmentDurationSec = Math.max(MIN_AUTO_SEGMENT_SEC, currentPolicy.maxSegmentDurationSec);
-    if (recorderState.durationMillis < maxSegmentDurationSec * 1000 || autoSegmentRef.current) {
-      return;
-    }
-
-    const restartMode = activeRecording.recordingMode;
-    autoSegmentRef.current = true;
-    void stopRecording()
-      .then(() => {
-        const latestPolicy = policyRef.current;
-        if (latestPolicy?.enabled && latestPolicy.mode === restartMode) {
-          setTimeout(() => {
-            void startRecording(restartMode).catch((error) => setLastError(toErrorMessage(error)));
-          }, 750);
-        }
-      })
-      .catch((error) => setLastError(toErrorMessage(error)))
-      .finally(() => {
-        autoSegmentRef.current = false;
-      });
-  }, [recorderState.durationMillis, startRecording, stopRecording]);
-
-  const vadState: AudioQcVadState = useMemo(() => {
-    if (!policy?.enabled || policy.mode !== 'vad_auto') {
-      return {
-        enabled: false,
-        available: false,
-        status: 'inactive',
-        message: 'VAD выключен политикой.',
-      };
-    }
-    return {
-      enabled: true,
-      available: false,
-      status: 'managed_fallback',
-      message: 'MVP-режим: фрагменты ограничены по времени. Для полноценного VAD нужен native Android foreground service.',
-    };
-  }, [policy?.enabled, policy?.mode]);
+  }, [ensureDeviceId, lastRecorderError, session.token, session.user.role, session.user.shopId]);
 
   const activityStatus: AudioQcActivityStatus = useMemo(() => {
     if (currentRecording && isPaused) return 'paused';
     if (currentRecording) return 'recording';
     if (isQueueProcessing) return 'uploading';
     if (lastError || lastRecorderError || queueSummary.lastError) return 'error';
-    if (policy?.enabled && policy.mode === 'vad_auto') return 'listening';
     if (queueSummary.queueSize > 0) return 'queued';
     return 'idle';
-  }, [currentRecording, isPaused, isQueueProcessing, lastError, lastRecorderError, policy?.enabled, policy?.mode, queueSummary]);
+  }, [currentRecording, isPaused, isQueueProcessing, lastError, lastRecorderError, queueSummary]);
 
   return {
     session,
@@ -599,7 +501,6 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     isPolicySaving,
     elapsedSec: currentRecording ? Math.max(0, Math.round(recorderState.durationMillis / 1000)) : 0,
     lastError: lastError ?? lastRecorderError ?? queueSummary.lastError,
-    vadState,
     startManualRecording,
     pauseRecording,
     resumeRecording,

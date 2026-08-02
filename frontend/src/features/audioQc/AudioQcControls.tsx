@@ -20,6 +20,7 @@ export const AudioQcControls = () => {
     stopRecording,
     retryUpload,
   } = useAudioQc();
+  const hasRetryableError = queueSummary.retryableFailures > 0;
 
   const runSafely = async (action: () => Promise<void>, fallback: string) => {
     try {
@@ -29,9 +30,13 @@ export const AudioQcControls = () => {
     }
   };
 
-  const retryLabel = queueSummary.retryableFailures > 0 || queueSummary.queueSize > 0 ? 'Повторить отправку' : 'Отправить очередь';
   const recordingLabel = isRecording ? (isPaused ? 'Запись на паузе' : 'Идет запись') : 'Запись выключена';
   const pauseLabel = isPaused ? 'Продолжить' : 'Пауза';
+  const queueStateLabel = isQueueProcessing
+    ? 'Отправка идет'
+    : queueSummary.queueSize > 0
+      ? 'Отправится автоматически'
+      : 'Очередь пустая';
 
   return (
     <View style={styles.wrap}>
@@ -66,16 +71,19 @@ export const AudioQcControls = () => {
             <Text style={styles.startText}>Включить запись</Text>
           </Pressable>
         )}
-        <Pressable
-          style={[styles.button, styles.retryButton, isQueueProcessing && styles.disabledButton]}
-          onPress={() => void runSafely(retryUpload, 'Не удалось отправить запись')}
-          disabled={isQueueProcessing}
-        >
-          <Text style={styles.retryText}>{isQueueProcessing ? 'Отправка...' : retryLabel}</Text>
-        </Pressable>
+        {hasRetryableError && (
+          <Pressable
+            style={[styles.button, styles.retryButton, isQueueProcessing && styles.disabledButton]}
+            onPress={() => void runSafely(retryUpload, 'Не удалось отправить запись')}
+            disabled={isQueueProcessing}
+          >
+            <Text style={styles.retryText}>{isQueueProcessing ? 'Отправка...' : 'Повторить отправку'}</Text>
+          </Pressable>
+        )}
       </View>
       <View style={styles.queueRow}>
-        <Text style={styles.queueText}>В очереди: {queueSummary.queueSize}</Text>
+        <Text style={styles.queueText}>Ждет отправки: {queueSummary.queueSize}</Text>
+        <Text style={styles.queueText}>{queueStateLabel}</Text>
         <Text style={styles.queueText}>Ошибки: {queueSummary.retryableFailures + queueSummary.permanentFailures}</Text>
       </View>
     </View>

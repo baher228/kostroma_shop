@@ -7,12 +7,10 @@ export const AUDIO_QC_DEFAULTS = {
   uploadImmediately: true,
 };
 
-export const audioQcModes: AudioQcRecordingMode[] = ['manual', 'vad_auto'];
+export const audioQcModes: AudioQcRecordingMode[] = ['manual'];
 
 export const audioQcModeLabels: Record<AudioQcRecordingMode, string> = {
   manual: 'Ручной',
-  admin_remote: 'Удаленный запуск',
-  vad_auto: 'VAD',
 };
 
 export const createDefaultAudioQcPolicy = (shopId: string): AudioQcPolicy => ({
@@ -31,7 +29,7 @@ export const normalizeAudioQcPolicy = (policy: Partial<AudioQcPolicy> & { shopId
   ...createDefaultAudioQcPolicy(policy.shopId),
   ...policy,
   enabled: Boolean(policy.enabled),
-  mode: policy.mode && audioQcModes.includes(policy.mode) ? policy.mode : 'manual',
+  mode: 'manual',
   targetRole: 'store_tablet',
   maxSegmentDurationSec: Math.max(30, Math.min(1800, Number(policy.maxSegmentDurationSec ?? AUDIO_QC_DEFAULTS.maxSegmentDurationSec))),
   silenceToStopSec: Math.max(1, Math.min(30, Number(policy.silenceToStopSec ?? AUDIO_QC_DEFAULTS.silenceToStopSec))),

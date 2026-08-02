@@ -30,7 +30,6 @@ const uploadFinishedStatuses = new Set<AudioQcRecordingStatus>([
 const terminalProcessingStatuses = new Set(['completed', 'complete', 'succeeded', 'success', 'done']);
 
 type ProcessAudioQcQueueOptions = {
-  mlAuthToken?: string;
   onRecordingChanged?: (recording: AudioQcRecording) => void | Promise<void>;
 };
 
@@ -128,18 +127,18 @@ export const processAudioQcQueue = async (
 
       let sessionId = current.mlSessionId;
       if (!sessionId) {
-        sessionId = await audioQcApi.createMlSession(current, options.mlAuthToken);
+        sessionId = await audioQcApi.createMlSession(current);
         await save({ mlSessionId: sessionId, status: 'uploading_audio' });
       }
 
       if (shouldUploadAudio(current)) {
         await save({ status: 'uploading_audio' });
-        await audioQcApi.uploadAudio(sessionId, current.localFileUri, options.mlAuthToken);
+        await audioQcApi.uploadAudio(sessionId, current.localFileUri);
         await save({ status: 'audio_uploaded' });
       }
 
       await save({ status: 'starting_processing' });
-      const processResult = await audioQcApi.startProcessing(sessionId, options.mlAuthToken);
+      const processResult = await audioQcApi.startProcessing(sessionId);
       await save({
         jobId: processResult.jobId,
         status: processResult.status && terminalProcessingStatuses.has(processResult.status) ? 'completed' : 'processing_started',

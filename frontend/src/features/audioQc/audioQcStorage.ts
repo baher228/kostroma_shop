@@ -29,8 +29,12 @@ const safeParseRecordings = (raw: string | null): AudioQcRecording[] => {
     }
     return parsed.filter((item): item is AudioQcRecording => {
       const candidate = item as Partial<AudioQcRecording>;
-      return typeof candidate.localRecordingId === 'string' && typeof candidate.status === 'string';
-    });
+      return (
+        typeof candidate.localRecordingId === 'string' &&
+        typeof candidate.status === 'string' &&
+        (!candidate.recordingMode || candidate.recordingMode === 'manual')
+      );
+    }).map((recording) => ({ ...recording, recordingMode: 'manual' }));
   } catch {
     return [];
   }

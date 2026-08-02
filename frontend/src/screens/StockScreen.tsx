@@ -1176,7 +1176,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const renderContent = () => {
     if (activeTab === 'fob') {
       return (
-        <View style={styles.tabContentWrap}>
+        <ScrollView
+          style={styles.tabContentWrap}
+          contentContainerStyle={styles.fobScrollContent}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
           {isStoreTablet && (
             <View style={styles.audioQcStack}>
               <AudioQcStatusBadge />
@@ -1187,7 +1192,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           <View style={styles.fobPanelWrap}>
             {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
           </View>
-        </View>
+        </ScrollView>
       );
     }
     if (activeTab === 'audioQc') {
@@ -1605,9 +1610,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
+  fobScrollContent: {
+    gap: 8,
+    paddingBottom: 16,
+  },
   fobPanelWrap: {
-    flex: 1,
-    minHeight: 0,
+    minHeight: 520,
   },
   controls: {
     gap: 10,

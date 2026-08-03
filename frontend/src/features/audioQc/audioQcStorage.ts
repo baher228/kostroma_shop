@@ -32,9 +32,9 @@ const safeParseRecordings = (raw: string | null): AudioQcRecording[] => {
       return (
         typeof candidate.localRecordingId === 'string' &&
         typeof candidate.status === 'string' &&
-        (!candidate.recordingMode || candidate.recordingMode === 'manual')
+        (!candidate.recordingMode || candidate.recordingMode === 'manual' || candidate.recordingMode === 'vad_auto')
       );
-    }).map((recording) => ({ ...recording, recordingMode: 'manual' }));
+    }).map((recording) => ({ ...recording, recordingMode: recording.recordingMode ?? 'manual' }));
   } catch {
     return [];
   }

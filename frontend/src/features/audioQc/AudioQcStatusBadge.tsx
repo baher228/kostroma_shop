@@ -5,8 +5,10 @@ import { useAudioQc } from './AudioQcProvider';
 
 const activityLabels: Record<AudioQcActivityStatus, string> = {
   idle: 'ожидание',
+  listening: 'ожидание речи',
   recording: 'запись',
   paused: 'пауза',
+  finalizing: 'сохранение сегмента',
   queued: 'очередь',
   uploading: 'отправка',
   error: 'ошибка',
@@ -37,7 +39,7 @@ const formatDateTime = (iso: string | null): string => {
 };
 
 export const AudioQcStatusBadge = () => {
-  const { policy, currentRecording, activityStatus, queueSummary, lastError, deviceId } = useAudioQc();
+  const { policy, currentRecording, activityStatus, queueSummary, lastError, deviceId, vadStatus } = useAudioQc();
   const latestStatus = currentRecording?.status ? recordingStatusLabels[currentRecording.status] : activityLabels[activityStatus];
   const isEnabled = Boolean(policy?.enabled);
 
@@ -58,6 +60,14 @@ export const AudioQcStatusBadge = () => {
         <Text style={styles.metric}>Последняя отправка: {formatDateTime(queueSummary.lastUploadAt)}</Text>
         <Text style={styles.metric}>Планшет: {deviceId ?? '-'}</Text>
       </View>
+
+      {policy?.mode === 'vad_auto' && (
+        <View style={styles.metricsRow}>
+          <Text style={styles.metric}>VAD: {vadStatus.active ? 'активен' : 'неактивен'}</Text>
+          <Text style={styles.metric}>Модель: {vadStatus.modelLoaded ? 'загружена' : 'не загружена'}</Text>
+          <Text style={styles.metric}>State: {vadStatus.state}</Text>
+        </View>
+      )}
 
       {!!lastError && <Text style={styles.error}>Ошибка: {lastError}</Text>}
     </View>

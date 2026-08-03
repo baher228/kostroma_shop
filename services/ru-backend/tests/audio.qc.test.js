@@ -31,7 +31,7 @@ test('Audio QC default tablet policy is disabled and bounded', async () => {
   assert.equal(policy.preRollSec, 5);
 });
 
-test('Audio QC policy upsert stores manager command in RU backend', async () => {
+test('Audio QC policy upsert stores manager vad_auto command in RU backend', async () => {
   const calls = [];
   const { upsertAudioQcPolicy } = installDbMock(async (sql, params = []) => {
     calls.push({ sql, params });
@@ -41,7 +41,7 @@ test('Audio QC policy upsert stores manager command in RU backend', async () => 
         rows: [{
           shop_id: 'shop_main',
           enabled: true,
-          mode: 'manual',
+          mode: 'vad_auto',
           max_segment_duration_sec: 300,
           silence_to_stop_sec: 3,
           pre_roll_sec: 5,
@@ -58,7 +58,7 @@ test('Audio QC policy upsert stores manager command in RU backend', async () => 
     'shop_main',
     {
       enabled: true,
-      mode: 'manual',
+      mode: 'vad_auto',
       maxSegmentDurationSec: 300,
       silenceToStopSec: 3,
       preRollSec: 5,
@@ -68,10 +68,11 @@ test('Audio QC policy upsert stores manager command in RU backend', async () => 
   );
 
   assert.equal(policy.enabled, true);
-  assert.equal(policy.mode, 'manual');
+  assert.equal(policy.mode, 'vad_auto');
   assert.equal(policy.heartbeat, null);
   assert.equal(calls[0].sql.includes('ON CONFLICT (shop_id)'), true);
   assert.equal(calls[0].params[1], 'shop_main');
+  assert.equal(calls[0].params[3], 'vad_auto');
   assert.equal(calls[0].params[8], 'manager_1');
 });
 
@@ -86,7 +87,7 @@ test('Audio QC heartbeat is upserted by device id', async () => {
         shop_id: 'shop_main',
         user_id: 'tablet_1',
         app_version: '1.0.0',
-        current_mode: 'manual',
+        current_mode: 'vad_auto',
         queue_size: 2,
         is_recording: true,
         last_error: null,
@@ -101,7 +102,7 @@ test('Audio QC heartbeat is upserted by device id', async () => {
     shopId: 'shop_main',
     userId: 'tablet_1',
     appVersion: '1.0.0',
-    currentMode: 'manual',
+    currentMode: 'vad_auto',
     queueSize: 2,
     isRecording: true,
     lastError: null,
@@ -111,5 +112,6 @@ test('Audio QC heartbeat is upserted by device id', async () => {
   assert.equal(heartbeat.deviceId, 'tablet_device_1');
   assert.equal(heartbeat.queueSize, 2);
   assert.equal(heartbeat.isRecording, true);
+  assert.equal(heartbeat.currentMode, 'vad_auto');
   assert.equal(heartbeat.online, true);
 });

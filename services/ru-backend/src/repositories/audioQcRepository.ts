@@ -59,8 +59,8 @@ const createPolicyId = (shopId: string): string =>
 const createHeartbeatId = (deviceId: string): string =>
   `audio_qc_hb_${deviceId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 
-const manualModeOrNull = (mode: string | null): AudioQcRecordingMode | null =>
-  mode === 'manual' ? 'manual' : null;
+const supportedModeOrNull = (mode: string | null): AudioQcRecordingMode | null =>
+  mode === 'manual' || mode === 'vad_auto' ? mode : null;
 
 export const defaultAudioQcPolicy = (shopId: string): AudioQcPolicy => ({
   enabled: false,
@@ -76,7 +76,7 @@ export const defaultAudioQcPolicy = (shopId: string): AudioQcPolicy => ({
 
 const mapPolicy = (row: AudioQcPolicyRow): AudioQcPolicy => ({
   enabled: row.enabled,
-  mode: manualModeOrNull(row.mode) ?? 'manual',
+  mode: supportedModeOrNull(row.mode) ?? 'manual',
   shopId: row.shop_id,
   targetRole: 'store_tablet',
   maxSegmentDurationSec: row.max_segment_duration_sec,
@@ -93,7 +93,7 @@ const mapHeartbeat = (row: AudioQcHeartbeatRow): AudioQcDeviceHeartbeat => {
     shopId: row.shop_id,
     userId: row.user_id,
     appVersion: row.app_version,
-    currentMode: manualModeOrNull(row.current_mode),
+    currentMode: supportedModeOrNull(row.current_mode),
     queueSize: row.queue_size,
     isRecording: row.is_recording,
     lastError: row.last_error,
@@ -234,7 +234,7 @@ export const upsertAudioQcPolicy = async (
       createPolicyId(shopId),
       shopId,
       patch.enabled,
-      'manual',
+      patch.mode,
       patch.maxSegmentDurationSec,
       patch.silenceToStopSec,
       patch.preRollSec,

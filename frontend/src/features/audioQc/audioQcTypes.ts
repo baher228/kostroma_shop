@@ -1,6 +1,6 @@
 import { Session, Shop } from '../../types/models';
 
-export type AudioQcRecordingMode = 'manual';
+export type AudioQcRecordingMode = 'manual' | 'vad_auto';
 
 export type AudioQcRecordingStatus =
   | 'recording'
@@ -15,7 +15,44 @@ export type AudioQcRecordingStatus =
   | 'failed_retryable'
   | 'failed_permanent';
 
-export type AudioQcActivityStatus = 'idle' | 'recording' | 'paused' | 'queued' | 'uploading' | 'error';
+export type AudioQcActivityStatus =
+  | 'idle'
+  | 'listening'
+  | 'recording'
+  | 'paused'
+  | 'finalizing'
+  | 'queued'
+  | 'uploading'
+  | 'error';
+
+export type AudioQcVadLifecycleState =
+  | 'inactive'
+  | 'loading_model'
+  | 'idle'
+  | 'possible_speech'
+  | 'recording'
+  | 'possible_end'
+  | 'finalizing'
+  | 'error';
+
+export type AudioQcVadMetadata = {
+  preRollSec?: number;
+  silenceToStopSec?: number;
+  speechStartThresholdMs?: number;
+  maxSegmentDurationSec?: number;
+  vadEngine?: 'sherpa-onnx-silero';
+  speechRatio?: number;
+};
+
+export type AudioQcVadStatus = {
+  available: boolean;
+  active: boolean;
+  modelLoaded: boolean;
+  state: AudioQcVadLifecycleState;
+  currentSegmentDurationSec: number;
+  lastSegmentAt: string | null;
+  lastError: string | null;
+};
 
 export type AudioQcPolicy = {
   enabled: boolean;
@@ -63,6 +100,7 @@ export type AudioQcRecording = {
   localFileUri: string;
   durationSec: number | null;
   fileSizeBytes: number | null;
+  vad?: AudioQcVadMetadata;
   status: AudioQcRecordingStatus;
   attemptCount: number;
   nextRetryAt: string | null;
@@ -106,6 +144,7 @@ export type AudioQcControllerValue = {
   isPolicySaving: boolean;
   elapsedSec: number;
   lastError: string | null;
+  vadStatus: AudioQcVadStatus;
   startManualRecording: () => Promise<void>;
   pauseRecording: () => Promise<void>;
   resumeRecording: () => Promise<void>;

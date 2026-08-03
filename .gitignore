@@ -44,3 +44,6 @@ services/dubai-backend/secrets/
 # generated native folders
 /ios
 /android
+
+# interrupted Audio QC native artifact downloads
+modules/audio-qc-vad/**/*.download

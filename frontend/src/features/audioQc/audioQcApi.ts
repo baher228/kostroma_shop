@@ -109,6 +109,7 @@ const buildMlSessionBody = (recording: AudioQcRecording, includeClientMetadata: 
         appVersion: recording.appVersion,
         timezone: recording.timezone,
         recordingMode: recording.recordingMode,
+        ...(recording.vad ? { vad: recording.vad } : {}),
       }
     : {}),
 });

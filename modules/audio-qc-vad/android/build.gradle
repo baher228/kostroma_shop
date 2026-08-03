@@ -1,0 +1,42 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.gringobochka.analitika.audioqc'
+version = '1.0.0'
+
+android {
+  namespace 'com.gringobochka.analitika.audioqc'
+
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+
+  testOptions {
+    unitTests.returnDefaultValues = true
+  }
+}
+
+dependencies {
+  implementation files('libs/sherpa-onnx-1.13.4.aar')
+  implementation 'androidx.core:core-ktx:1.15.0'
+  testImplementation 'junit:junit:4.13.2'
+}
+
+def sherpaAar = file('libs/sherpa-onnx-1.13.4.aar')
+def sileroModel = file('src/main/assets/models/silero_vad.onnx')
+
+tasks.configureEach { task ->
+  if (task.name.startsWith('preBuild')) {
+    task.doFirst {
+      if (!sherpaAar.exists()) {
+        throw new GradleException('Missing sherpa-onnx AAR. Run: npm run audio-qc:prepare-native')
+      }
+      if (!sileroModel.exists()) {
+        throw new GradleException('Missing silero_vad.onnx. Run: npm run audio-qc:prepare-native')
+      }
+    }
+  }
+}

@@ -12,6 +12,10 @@ export const AudioQcControls = () => {
     elapsedSec,
     isRecording,
     isPaused,
+    currentRecording,
+    policy,
+    vadStatus,
+    lastError,
     isQueueProcessing,
     queueSummary,
     startManualRecording,
@@ -21,6 +25,8 @@ export const AudioQcControls = () => {
     retryUpload,
   } = useAudioQc();
   const hasRetryableError = queueSummary.retryableFailures > 0;
+  const isVadMode = policy?.mode === 'vad_auto';
+  const isManualRecording = Boolean(currentRecording);
 
   const runSafely = async (action: () => Promise<void>, fallback: string) => {
     try {
@@ -30,7 +36,19 @@ export const AudioQcControls = () => {
     }
   };
 
-  const recordingLabel = isRecording ? (isPaused ? 'Запись на паузе' : 'Идет запись') : 'Запись выключена';
+  const recordingLabel = isVadMode
+    ? vadStatus.state === 'recording' || vadStatus.state === 'possible_end'
+      ? 'Идёт запись сегмента'
+      : vadStatus.state === 'finalizing'
+        ? 'Сегмент сохраняется'
+        : vadStatus.active
+          ? 'Ожидание речи'
+          : 'VAD неактивен'
+    : isRecording
+      ? isPaused
+        ? 'Запись на паузе'
+        : 'Идет запись'
+      : 'Запись выключена';
   const pauseLabel = isPaused ? 'Продолжить' : 'Пауза';
   const queueStateLabel = isQueueProcessing
     ? 'Отправка идет'
@@ -48,7 +66,16 @@ export const AudioQcControls = () => {
         <Text style={styles.timerValue}>{formatTimer(elapsedSec)}</Text>
       </View>
       <View style={styles.actions}>
-        {isRecording ? (
+        {isVadMode ? (
+          <View style={styles.vadPanel}>
+            <Text style={styles.vadTitle}>{vadStatus.active ? 'VAD активен' : 'VAD остановлен'}</Text>
+            <Text style={styles.queueText}>Состояние: {vadStatus.state}</Text>
+            <Text style={styles.queueText}>Сегмент: {formatTimer(Math.round(vadStatus.currentSegmentDurationSec))}</Text>
+            <Text style={styles.queueText}>
+              Последний: {vadStatus.lastSegmentAt ? new Date(vadStatus.lastSegmentAt).toLocaleTimeString('ru-RU') : '-'}
+            </Text>
+          </View>
+        ) : isManualRecording ? (
           <>
             <Pressable
               style={[styles.button, styles.stopButton]}
@@ -86,6 +113,7 @@ export const AudioQcControls = () => {
         <Text style={styles.queueText}>{queueStateLabel}</Text>
         <Text style={styles.queueText}>Ошибки: {queueSummary.retryableFailures + queueSummary.permanentFailures}</Text>
       </View>
+      {!!lastError && <Text style={styles.errorText}>Последняя ошибка: {lastError}</Text>}
     </View>
   );
 };
@@ -125,6 +153,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  vadPanel: {
+    flex: 1,
+    gap: 4,
+    borderRadius: 8,
+    backgroundColor: '#e7f2e9',
+    padding: 9,
+  },
+  vadTitle: {
+    color: '#215c40',
+    fontSize: 13,
+    fontWeight: '900',
   },
   button: {
     minHeight: 42,
@@ -175,6 +215,11 @@ const styles = StyleSheet.create({
   },
   queueText: {
     color: '#445a4b',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  errorText: {
+    color: '#af4234',
     fontSize: 12,
     fontWeight: '800',
   },

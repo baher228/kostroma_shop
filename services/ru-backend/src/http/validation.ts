@@ -264,7 +264,7 @@ export const shopIdParamSchema = z.object({
 
 export const audioQcPolicySchema = z.object({
   enabled: z.boolean(),
-  mode: z.enum(['manual']),
+  mode: z.enum(['manual', 'vad_auto']),
   maxSegmentDurationSec: z.number().int().min(30).max(1800).default(300),
   silenceToStopSec: z.number().int().min(1).max(30).default(3),
   preRollSec: z.number().int().min(0).max(30).default(5),
@@ -275,7 +275,7 @@ export const audioQcHeartbeatSchema = z.object({
   deviceId: z.string().trim().min(3).max(160),
   shopId: z.string().trim().min(1).max(100).optional(),
   appVersion: z.string().trim().max(80).optional().nullable(),
-  currentMode: z.enum(['manual']).optional().nullable(),
+  currentMode: z.enum(['manual', 'vad_auto']).optional().nullable(),
   queueSize: z.number().int().min(0).max(10000),
   isRecording: z.boolean(),
   lastError: z.string().trim().max(1000).optional().nullable(),

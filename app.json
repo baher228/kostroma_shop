@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Analitika Tablet",
-    "slug": "analitika",
+    "slug": "kostroma",
+    "owner": "hlpnes-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,7 +12,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/cf59a444-8fe3-408b-93ad-76c692c0b1d2"
+      "url": "https://u.expo.dev/531a62b9-9f92-4d40-9c41-57a6d155de00"
     },
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -60,7 +61,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "cf59a444-8fe3-408b-93ad-76c692c0b1d2"
+        "projectId": "531a62b9-9f92-4d40-9c41-57a6d155de00"
       }
     }
   }

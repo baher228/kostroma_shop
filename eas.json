@@ -35,10 +35,10 @@
         "EXPO_LOCAL_APK_SLUG": "kostroma",
         "EXPO_LOCAL_APK_PROJECT_ID": "531a62b9-9f92-4d40-9c41-57a6d155de00",
         "EXPO_DISABLE_UPDATES": "1",
-        "EXPO_PUBLIC_RU_API_URL": "http://192.168.100.165:4000",
-        "EXPO_PUBLIC_DXB_API_URL": "http://192.168.100.165:4001",
-        "ML_API_BASE_URL": "http://localhost:8000",
-        "EXPO_PUBLIC_ML_API_URL": "http://192.168.100.165:8000"
+        "EXPO_PUBLIC_RU_API_URL": "http://127.0.0.1:4000",
+        "EXPO_PUBLIC_DXB_API_URL": "http://127.0.0.1:4001",
+        "ML_API_BASE_URL": "http://127.0.0.1:8000",
+        "EXPO_PUBLIC_ML_API_URL": "http://127.0.0.1:8000"
       }
     },
     "production": {

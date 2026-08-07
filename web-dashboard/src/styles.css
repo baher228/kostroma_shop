@@ -208,6 +208,74 @@ label {
   gap: 22px;
 }
 
+.audio-qc-settings,
+.audio-qc-history {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #d5ded8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 18px;
+}
+
+.audio-qc-shop-select {
+  max-width: 460px;
+}
+
+.audio-qc-toggle-row,
+.audio-qc-mode-row,
+.audio-qc-device-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.audio-qc-check {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d9e2dc;
+  border-radius: 6px;
+  background: #f7faf8;
+  padding: 10px 12px;
+}
+
+.audio-qc-check input {
+  width: auto;
+}
+
+.audio-qc-number-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.audio-qc-device-status {
+  color: #40534a;
+  font-size: 14px;
+}
+
+.audio-qc-device-status span {
+  border-radius: 6px;
+  background: #edf4ef;
+  padding: 7px 9px;
+}
+
+.audio-qc-history summary {
+  cursor: pointer;
+  color: #1f2f26;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .audio-qc-number-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .page-header {
   display: flex;
   align-items: flex-start;

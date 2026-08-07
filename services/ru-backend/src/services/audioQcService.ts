@@ -1,4 +1,11 @@
-import { AudioQcPolicyPatch, upsertAudioQcHeartbeat, upsertAudioQcPolicy } from '../repositories/audioQcRepository';
+import {
+  AudioQcPolicyPatch,
+  AudioQcRecordingInput,
+  listAudioQcRecordings,
+  upsertAudioQcHeartbeat,
+  upsertAudioQcPolicy,
+  upsertAudioQcRecording,
+} from '../repositories/audioQcRepository';
 import {
   getAudioQcPolicyByShopId,
   listAudioQcPolicies,
@@ -72,4 +79,25 @@ export const recordTabletAudioQcHeartbeat = (
     lastError: input.lastError ?? null,
     lastUploadAt: input.lastUploadAt ?? null,
   });
+};
+
+export const recordTabletAudioQcRecording = (user: SessionUser, input: AudioQcRecordingInput) => {
+  if (user.role !== 'store_tablet') {
+    throw new AudioQcPolicyError('forbidden');
+  }
+  if (!user.shopId || user.shopId !== input.shopId) {
+    throw new AudioQcPolicyError('shop_required');
+  }
+  return upsertAudioQcRecording(input);
+};
+
+export const getManagedAudioQcRecordings = (
+  user: SessionUser,
+  shopId: string | undefined,
+  limit: number,
+) => {
+  if (user.role !== 'manager') {
+    throw new AudioQcPolicyError('forbidden');
+  }
+  return listAudioQcRecordings(shopId, limit);
 };

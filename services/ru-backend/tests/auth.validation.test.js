@@ -15,6 +15,8 @@ const {
   updateUserSchema,
   createSupportThreadSchema,
   createSupportMessageSchema,
+  audioQcRecordingSchema,
+  audioQcRecordingsQuerySchema,
 } = require('../dist/http/validation');
 
 const sessionUser = {
@@ -101,6 +103,23 @@ test('personal workflow schemas validate expected fields', () => {
   assert.equal(createSupportMessageSchema.parse({ body: ' Need manager help ' }).body, 'Need manager help');
   assert.equal(checkInStatsQuerySchema.parse({ from: '2026-05-01', to: '2026-05-31' }).from, '2026-05-01');
   assert.throws(() => checkInStatsQuerySchema.parse({ from: '2026-02-31', to: '2026-05-31' }));
+});
+
+test('audio QC recording schemas normalize history payloads', () => {
+  const recording = audioQcRecordingSchema.parse({
+    localRecordingId: 'aqc_test_1',
+    shopId: 'shop_main',
+    deviceId: 'device_1',
+    startedAt: '2026-08-07T10:00:00.000Z',
+    appVersion: '1.0.0',
+    timezone: 'Europe/Moscow',
+    recordingMode: 'vad_auto',
+    status: 'processing_started',
+  });
+  assert.equal(recording.shopId, 'shop_main');
+  assert.equal(recording.mlSessionId, null);
+  assert.equal(recording.lastError, null);
+  assert.equal(audioQcRecordingsQuerySchema.parse({ limit: '25' }).limit, 25);
 });
 
 test('Russia app does not expose stock/order/shop routes', async (t) => {

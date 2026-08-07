@@ -2,6 +2,40 @@ export type Role = 'manager' | 'worker' | 'store_tablet';
 
 export type AudioQcRecordingMode = 'manual' | 'vad_auto';
 
+export type AudioQcRecordingStatus =
+  | 'recording'
+  | 'recorded'
+  | 'waiting_network'
+  | 'creating_ml_session'
+  | 'uploading_audio'
+  | 'audio_uploaded'
+  | 'starting_processing'
+  | 'processing_started'
+  | 'completed'
+  | 'failed_retryable'
+  | 'failed_permanent';
+
+export type AudioQcRecordingSummary = {
+  localRecordingId: string;
+  mlSessionId: string | null;
+  jobId: string | null;
+  shopId: string;
+  sellerId: string | null;
+  shiftId: string | null;
+  deviceId: string;
+  startedAt: string;
+  endedAt: string | null;
+  appVersion: string;
+  timezone: string;
+  recordingMode: AudioQcRecordingMode;
+  durationSec: number | null;
+  fileSizeBytes: number | null;
+  status: AudioQcRecordingStatus;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ColumnKey =
   | 'packCount'
   | 'stockTue'

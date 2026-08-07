@@ -29,13 +29,29 @@ const numberPatch = (
 };
 
 export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelProps) => {
-  const { policies, isPolicyLoading, isPolicySaving, refreshPolicies, savePolicy, lastError } = useAudioQc();
+  const {
+    policies,
+    managedRecordings,
+    isPolicyLoading,
+    isPolicySaving,
+    isManagedRecordingsLoading,
+    refreshPolicies,
+    refreshManagedRecordings,
+    savePolicy,
+    lastError,
+  } = useAudioQc();
   const [activeShopId, setActiveShopId] = useState<string | null>(selectedShopId ?? shops[0]?.id ?? null);
   const [draft, setDraft] = useState<AudioQcPolicy | null>(null);
+  const [shopPickerOpen, setShopPickerOpen] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
 
   useEffect(() => {
     void refreshPolicies();
   }, [refreshPolicies]);
+
+  useEffect(() => {
+    if (activeShopId) void refreshManagedRecordings(activeShopId);
+  }, [activeShopId, refreshManagedRecordings]);
 
   useEffect(() => {
     if (!activeShopId && (selectedShopId || shops[0]?.id)) {
@@ -113,24 +129,38 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
         </Pressable>
       </View>
 
-      {shops.length > 1 && (
-        <View style={styles.shopRow}>
-          {shops.map((shop) => {
-            const active = shop.id === activeShopId;
-            return (
-              <Pressable
-                key={shop.id}
-                style={[styles.shopChip, active && styles.shopChipActive]}
-                onPress={() => setActiveShopId(shop.id)}
-              >
-                <Text style={[styles.shopChipText, active && styles.shopChipTextActive]}>{shop.name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
       <View style={styles.panel}>
+        <View style={styles.shopPickerWrap}>
+          <Text style={styles.stepperLabel}>Магазин для записи</Text>
+          <Pressable
+            style={styles.shopPickerButton}
+            onPress={() => setShopPickerOpen((current) => !current)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: shopPickerOpen }}
+          >
+            <Text style={styles.shopPickerButtonText}>{activeShopName}</Text>
+            <Text style={styles.shopPickerChevron}>{shopPickerOpen ? '▲' : '▼'}</Text>
+          </Pressable>
+          {shopPickerOpen && (
+            <View style={styles.shopPickerMenu}>
+              {shops.map((shop) => (
+                <Pressable
+                  key={shop.id}
+                  style={[styles.shopPickerOption, shop.id === activeShopId && styles.shopPickerOptionActive]}
+                  onPress={() => {
+                    setActiveShopId(shop.id);
+                    setShopPickerOpen(false);
+                  }}
+                >
+                  <Text style={[styles.shopPickerOptionText, shop.id === activeShopId && styles.shopPickerOptionTextActive]}>
+                    {shop.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+
         <View>
           <Text style={styles.sectionTitle}>Планшет</Text>
           <Text style={styles.sectionMeta}>
@@ -222,6 +252,40 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
         </View>
       </View>
 
+      <View style={styles.panel}>
+        <Pressable
+          style={styles.historyHeader}
+          onPress={() => setHistoryExpanded((current) => !current)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: historyExpanded }}
+        >
+          <View>
+            <Text style={styles.sectionTitle}>История записей</Text>
+            <Text style={styles.sectionMeta}>{activeShopName} · {managedRecordings.length}</Text>
+          </View>
+          <Text style={styles.shopPickerChevron}>{historyExpanded ? '▲' : '▼'}</Text>
+        </Pressable>
+        {historyExpanded && (
+          isManagedRecordingsLoading ? (
+            <Text style={styles.sectionMeta}>Загрузка истории...</Text>
+          ) : managedRecordings.length === 0 ? (
+            <Text style={styles.sectionMeta}>Для этого магазина записей пока нет.</Text>
+          ) : (
+            <View style={styles.historyList}>
+              {managedRecordings.slice(0, 30).map((recording) => (
+                <View key={recording.localRecordingId} style={styles.historyItem}>
+                  <Text style={styles.historyTitle}>{activeShopName} · {formatDateTime(recording.startedAt)}</Text>
+                  <Text style={styles.sectionMeta}>
+                    {audioQcModeLabels[recording.recordingMode]} · {recording.durationSec ?? '-'} сек · {recording.status}
+                  </Text>
+                  {!!recording.lastError && <Text style={styles.error}>{recording.lastError}</Text>}
+                </View>
+              ))}
+            </View>
+          )
+        )}
+      </View>
+
       {!!lastError && <Text style={styles.error}>Ошибка: {lastError}</Text>}
     </ScrollView>
   );
@@ -288,6 +352,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  shopPickerWrap: {
+    gap: 6,
+  },
+  shopPickerButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#c5d0c7',
+    backgroundColor: '#f7faf7',
+    paddingHorizontal: 12,
+  },
+  shopPickerButtonText: {
+    color: '#1f2f26',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  shopPickerChevron: {
+    color: '#506358',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  shopPickerMenu: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#c5d0c7',
+    overflow: 'hidden',
+  },
+  shopPickerOption: {
+    minHeight: 42,
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8e3',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+  },
+  shopPickerOptionActive: {
+    backgroundColor: '#e7f2e9',
+  },
+  shopPickerOptionText: {
+    color: '#334b3d',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  shopPickerOptionTextActive: {
+    color: '#1f4f37',
   },
   shopChip: {
     borderRadius: 8,
@@ -424,5 +537,27 @@ const styles = StyleSheet.create({
     color: '#af4234',
     fontSize: 13,
     fontWeight: '800',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  historyList: {
+    gap: 8,
+  },
+  historyItem: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d7e0d9',
+    backgroundColor: '#f7faf7',
+    padding: 9,
+    gap: 3,
+  },
+  historyTitle: {
+    color: '#1f2f26',
+    fontSize: 13,
+    fontWeight: '900',
   },
 });

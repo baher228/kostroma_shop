@@ -1,11 +1,23 @@
 
+> analitika@1.0.0 dashboard:dev
+> npm --prefix web-dashboard run dev
+
+
 > analitika-web-dashboard@1.0.0 dev
-> vite --host 0.0.0.0 --host 0.0.0.0
+> vite --host 0.0.0.0
 
+[2m17:22:13[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because vite config has changed
 
-  [32m[1mVITE[22m v7.3.3[39m  [2mready in [0m[1m500[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v7.3.3[39m  [2mready in [0m[1m1404[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.100.165:[1m5173[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://172.31.80.1:[1m5173[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://172.26.160.1:[1m5173[22m/[39m
+[2m17:32:17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/app/Login.tsx, /src/panels/overview/OverviewPanel.tsx, /src/panels/shops/ShopsPanel.tsx, /src/panels/users/UsersPanel.tsx, /src/panels/orders/OrdersPanel.tsx, /src/panels/attendance/AttendancePanel.tsx, /src/panels/products/ProductsPanel.tsx, /src/panels/promotions/PromotionsPanel.tsx[22m
+[2m17:32:17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m17:32:17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m17:33:38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx[22m
+[2m17:33:38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m17:33:38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m17:33:39[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css[22m

@@ -25,6 +25,7 @@ import {
 import {
   AudioQcActivityStatus,
   AudioQcControllerValue,
+  AudioQcManagedRecording,
   AudioQcPolicy,
   AudioQcPolicyWithHeartbeat,
   AudioQcRecording,
@@ -114,11 +115,13 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   );
   const [policies, setPolicies] = useState<AudioQcPolicyWithHeartbeat[]>([]);
   const [recordings, setRecordings] = useState<AudioQcRecording[]>([]);
+  const [managedRecordings, setManagedRecordings] = useState<AudioQcManagedRecording[]>([]);
   const [queueSummary, setQueueSummary] = useState(buildAudioQcQueueSummary([]));
   const [currentRecording, setCurrentRecording] = useState<AudioQcRecording | null>(null);
   const [isQueueProcessing, setIsQueueProcessing] = useState(false);
   const [isPolicyLoading, setIsPolicyLoading] = useState(false);
   const [isPolicySaving, setIsPolicySaving] = useState(false);
+  const [isManagedRecordingsLoading, setIsManagedRecordingsLoading] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [vadStatus, setVadStatus] = useState<AudioQcVadStatus>(INITIAL_VAD_STATUS);
@@ -161,20 +164,41 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     setIsPaused(paused);
   }, []);
 
+  const syncRecording = useCallback((recording: AudioQcRecording) => {
+    if (session.user.role !== 'store_tablet') return;
+    void audioQcApi.syncRecording(session.token, recording).catch((error) => {
+      console.warn('[AudioQc] Unable to sync recording history', toErrorMessage(error));
+    });
+  }, [session.token, session.user.role]);
+
   const handleRecordingChanged = useCallback((recording: AudioQcRecording) => {
     setRecordings((current) => {
       const next = mergeRecording(current, recording);
       setQueueSummary(buildAudioQcQueueSummary(next));
       return next;
     });
-  }, []);
+    syncRecording(recording);
+  }, [syncRecording]);
 
   const refreshRecordings = useCallback(async () => {
     const next = sortRecordings(await listAudioQcRecordings());
     setRecordings(next);
     setQueueSummary(buildAudioQcQueueSummary(next));
+    next.slice(0, 200).forEach(syncRecording);
     return next;
-  }, []);
+  }, [syncRecording]);
+
+  const refreshManagedRecordings = useCallback(async (shopId?: string) => {
+    if (session.user.role !== 'manager') return;
+    setIsManagedRecordingsLoading(true);
+    try {
+      setManagedRecordings(await audioQcApi.listRecordings(session.token, shopId));
+    } catch (error) {
+      setLastError(toErrorMessage(error));
+    } finally {
+      setIsManagedRecordingsLoading(false);
+    }
+  }, [session.token, session.user.role]);
 
   const ensureDeviceId = useCallback(async (): Promise<string> => {
     if (deviceIdRef.current) {
@@ -304,9 +328,9 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
       await ensureRecordingPermission();
       await setAudioModeAsync({
         allowsRecording: true,
-        allowsBackgroundRecording: false,
+        allowsBackgroundRecording: true,
         playsInSilentMode: true,
-        shouldPlayInBackground: false,
+        shouldPlayInBackground: true,
         shouldRouteThroughEarpiece: false,
         interruptionMode: 'doNotMix',
       });
@@ -554,9 +578,9 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
         await requestNotificationPermission();
         await setAudioModeAsync({
           allowsRecording: true,
-          allowsBackgroundRecording: false,
+          allowsBackgroundRecording: true,
           playsInSilentMode: true,
-          shouldPlayInBackground: false,
+          shouldPlayInBackground: true,
           shouldRouteThroughEarpiece: false,
           interruptionMode: 'doNotMix',
         });
@@ -666,8 +690,6 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
         if (session.user.role === 'store_tablet') {
           void refreshPolicy();
         }
-      } else if (session.user.role === 'store_tablet') {
-        void stopVadService().catch((error) => setLastError(toErrorMessage(error)));
       }
     });
     return () => subscription.remove();
@@ -726,6 +748,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     policy,
     policies,
     recordings,
+    managedRecordings,
     queueSummary,
     currentRecording,
     activityStatus,
@@ -734,6 +757,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     isQueueProcessing,
     isPolicyLoading,
     isPolicySaving,
+    isManagedRecordingsLoading,
     elapsedSec: currentRecording
       ? Math.max(0, Math.round(recorderState.durationMillis / 1000))
       : Math.max(0, Math.round(vadStatus.currentSegmentDurationSec)),
@@ -746,6 +770,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     retryUpload,
     refreshPolicy,
     refreshPolicies,
+    refreshManagedRecordings,
     savePolicy,
   };
 };

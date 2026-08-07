@@ -1,4 +1,7 @@
 import {
+  AudioQcPolicy,
+  AudioQcPolicyWithHeartbeat,
+  AudioQcRecording,
   CheckInStats,
   BusinessCategory,
   ManagedUser,
@@ -405,5 +408,30 @@ export const api = {
   checkin: {
     stats: async (token: string, from: string, to: string, shopId?: string) =>
       (await ruRequest<{ stats: CheckInStats }>(`/api/checkin/stats${query({ from, to, shopId })}`, { token })).stats,
+  },
+  audioQc: {
+    policies: async (token: string) =>
+      (await ruRequest<{ policies: AudioQcPolicyWithHeartbeat[] }>('/api/audio-qc/policies', { token })).policies,
+    savePolicy: async (token: string, shopId: string, policy: AudioQcPolicy) =>
+      (await ruRequest<{ policy: AudioQcPolicyWithHeartbeat }>(
+        `/api/audio-qc/shops/${encodeURIComponent(shopId)}/policy`,
+        {
+          method: 'PUT',
+          token,
+          body: {
+            enabled: policy.enabled,
+            mode: policy.mode,
+            maxSegmentDurationSec: policy.maxSegmentDurationSec,
+            silenceToStopSec: policy.silenceToStopSec,
+            preRollSec: policy.preRollSec,
+            uploadImmediately: policy.uploadImmediately,
+          },
+        },
+      )).policy,
+    recordings: async (token: string, shopId?: string) =>
+      (await ruRequest<{ recordings: AudioQcRecording[] }>(
+        `/api/audio-qc/recordings${query({ shopId, limit: '200' })}`,
+        { token },
+      )).recordings,
   },
 };

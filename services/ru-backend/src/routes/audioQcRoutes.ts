@@ -5,13 +5,17 @@ import { toValidationMessage } from '../http/http';
 import {
   audioQcHeartbeatSchema,
   audioQcPolicySchema,
+  audioQcRecordingSchema,
+  audioQcRecordingsQuerySchema,
   shopIdParamSchema,
 } from '../http/validation';
 import {
   AudioQcPolicyError,
+  getManagedAudioQcRecordings,
   getManagedAudioQcPolicies,
   getTabletAudioQcPolicy,
   recordTabletAudioQcHeartbeat,
+  recordTabletAudioQcRecording,
   saveManagedAudioQcPolicy,
 } from '../services/audioQcService';
 
@@ -30,6 +34,16 @@ const handleAudioQcError = (error: unknown, res: Response, fallbackMessage: stri
 };
 
 export const registerAudioQcRoutes = (app: Express) => {
+  app.get('/api/audio-qc/recordings', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const query = audioQcRecordingsQuerySchema.parse(req.query);
+      const recordings = await getManagedAudioQcRecordings((req as AuthorizedRequest).user, query.shopId, query.limit);
+      res.json({ recordings });
+    } catch (error) {
+      handleAudioQcError(error, res, 'Failed to load Audio QC recordings.');
+    }
+  });
+
   app.get('/api/audio-qc/policies', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
     try {
       const policies = await getManagedAudioQcPolicies((req as AuthorizedRequest).user);
@@ -66,6 +80,16 @@ export const registerAudioQcRoutes = (app: Express) => {
       res.json({ heartbeat });
     } catch (error) {
       handleAudioQcError(error, res, 'Failed to save Audio QC heartbeat.');
+    }
+  });
+
+  app.put('/api/audio-qc/tablet/recordings', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const payload = audioQcRecordingSchema.parse(req.body);
+      const recording = await recordTabletAudioQcRecording((req as AuthorizedRequest).user, payload);
+      res.json({ recording });
+    } catch (error) {
+      handleAudioQcError(error, res, 'Failed to save Audio QC recording.');
     }
   });
 };

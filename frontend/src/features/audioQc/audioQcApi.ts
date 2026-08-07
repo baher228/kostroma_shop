@@ -1,6 +1,7 @@
 import { request } from '../../api/http';
 import {
   AudioQcHeartbeatPayload,
+  AudioQcManagedRecording,
   AudioQcPolicy,
   AudioQcPolicyWithHeartbeat,
   AudioQcRecording,
@@ -165,6 +166,41 @@ const uploadAudio = async (sessionId: string, fileUri: string): Promise<void> =>
 };
 
 export const audioQcApi = {
+  listRecordings: async (token: string, shopId?: string): Promise<AudioQcManagedRecording[]> => {
+    const params = new URLSearchParams({ limit: '200' });
+    if (shopId) params.set('shopId', shopId);
+    const result = await request<{ recordings: AudioQcManagedRecording[] }>(
+      `/api/audio-qc/recordings?${params.toString()}`,
+      { token },
+    );
+    return result.recordings;
+  },
+
+  syncRecording: async (token: string, recording: AudioQcRecording): Promise<void> => {
+    await request<{}>('/api/audio-qc/tablet/recordings', {
+      method: 'PUT',
+      token,
+      body: {
+        localRecordingId: recording.localRecordingId,
+        mlSessionId: recording.mlSessionId,
+        jobId: recording.jobId,
+        shopId: recording.shopId,
+        sellerId: recording.sellerId,
+        shiftId: recording.shiftId,
+        deviceId: recording.deviceId,
+        startedAt: recording.startedAt,
+        endedAt: recording.endedAt,
+        appVersion: recording.appVersion,
+        timezone: recording.timezone,
+        recordingMode: recording.recordingMode,
+        durationSec: recording.durationSec,
+        fileSizeBytes: recording.fileSizeBytes,
+        status: recording.status,
+        lastError: recording.lastError,
+      },
+    });
+  },
+
   listPolicies: async (token: string): Promise<AudioQcPolicyWithHeartbeat[]> => {
     const result = await request<{ policies: AudioQcPolicyWithHeartbeat[] }>('/api/audio-qc/policies', { token });
     return result.policies;

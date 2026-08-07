@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { audioQcModeLabels } from './audioQcPolicy';
 import { useAudioQc } from './AudioQcProvider';
 import { AudioQcRecording } from './audioQcTypes';
@@ -42,17 +43,27 @@ const formatSize = (bytes: number | null): string => {
 
 export const AudioQcRecordingsList = () => {
   const { recordings } = useAudioQc();
+  const [expanded, setExpanded] = useState(false);
   const visibleRecordings = recordings.slice(0, 6);
   const hiddenCount = Math.max(0, recordings.length - visibleRecordings.length);
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Записанные фрагменты</Text>
-        <Text style={styles.count}>{recordings.length}</Text>
-      </View>
+      <Pressable
+        style={styles.headerRow}
+        onPress={() => setExpanded((current) => !current)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel="История записей"
+      >
+        <Text style={styles.title}>История записей</Text>
+        <View style={styles.headerMeta}>
+          <Text style={styles.count}>{recordings.length}</Text>
+          <Text style={styles.chevron}>{expanded ? '▲' : '▼'}</Text>
+        </View>
+      </Pressable>
 
-      {visibleRecordings.length === 0 ? (
+      {expanded && (visibleRecordings.length === 0 ? (
         <Text style={styles.empty}>Фрагменты появятся здесь после остановки записи.</Text>
       ) : (
         <View style={styles.list}>
@@ -72,7 +83,7 @@ export const AudioQcRecordingsList = () => {
           ))}
           {hiddenCount > 0 && <Text style={styles.more}>Еще фрагментов: {hiddenCount}</Text>}
         </View>
-      )}
+      ))}
     </View>
   );
 };
@@ -91,6 +102,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
+  },
+  headerMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chevron: {
+    color: '#506358',
+    fontSize: 11,
+    fontWeight: '900',
   },
   title: {
     color: '#1f2f26',

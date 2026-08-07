@@ -16,6 +16,72 @@ export type Session = {
   user: SessionUser;
 };
 
+export type AudioQcRecordingMode = 'manual' | 'vad_auto';
+
+export type AudioQcRecordingStatus =
+  | 'recording'
+  | 'recorded'
+  | 'waiting_network'
+  | 'creating_ml_session'
+  | 'uploading_audio'
+  | 'audio_uploaded'
+  | 'starting_processing'
+  | 'processing_started'
+  | 'completed'
+  | 'failed_retryable'
+  | 'failed_permanent';
+
+export type AudioQcDeviceHeartbeat = {
+  deviceId: string;
+  shopId: string;
+  userId: string | null;
+  appVersion: string | null;
+  currentMode: AudioQcRecordingMode | null;
+  queueSize: number;
+  isRecording: boolean;
+  lastError: string | null;
+  lastUploadAt: string | null;
+  lastSeenAt: string;
+  online: boolean;
+};
+
+export type AudioQcPolicy = {
+  enabled: boolean;
+  mode: AudioQcRecordingMode;
+  shopId: string;
+  targetRole: 'store_tablet';
+  maxSegmentDurationSec: number;
+  silenceToStopSec: number;
+  preRollSec: number;
+  uploadImmediately: boolean;
+  updatedAt: string;
+};
+
+export type AudioQcPolicyWithHeartbeat = AudioQcPolicy & {
+  heartbeat: AudioQcDeviceHeartbeat | null;
+};
+
+export type AudioQcRecording = {
+  localRecordingId: string;
+  mlSessionId: string | null;
+  jobId: string | null;
+  shopId: string;
+  sellerId: string | null;
+  shiftId: string | null;
+  deviceId: string;
+  startedAt: string;
+  endedAt: string | null;
+  appVersion: string;
+  timezone: string;
+  recordingMode: AudioQcRecordingMode;
+  durationSec: number | null;
+  fileSizeBytes: number | null;
+  status: AudioQcRecordingStatus;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Shop = {
   id: string;
   name: string;

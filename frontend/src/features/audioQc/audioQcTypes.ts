@@ -109,6 +109,11 @@ export type AudioQcRecording = {
   updatedAt: string;
 };
 
+export type AudioQcManagedRecording = Omit<
+  AudioQcRecording,
+  'localFileUri' | 'vad' | 'attemptCount' | 'nextRetryAt'
+>;
+
 export type AudioQcQueueSummary = {
   queueSize: number;
   retryableFailures: number;
@@ -134,6 +139,7 @@ export type AudioQcControllerValue = {
   policy: AudioQcPolicy | null;
   policies: AudioQcPolicyWithHeartbeat[];
   recordings: AudioQcRecording[];
+  managedRecordings: AudioQcManagedRecording[];
   queueSummary: AudioQcQueueSummary;
   currentRecording: AudioQcRecording | null;
   activityStatus: AudioQcActivityStatus;
@@ -142,6 +148,7 @@ export type AudioQcControllerValue = {
   isQueueProcessing: boolean;
   isPolicyLoading: boolean;
   isPolicySaving: boolean;
+  isManagedRecordingsLoading: boolean;
   elapsedSec: number;
   lastError: string | null;
   vadStatus: AudioQcVadStatus;
@@ -152,6 +159,7 @@ export type AudioQcControllerValue = {
   retryUpload: () => Promise<void>;
   refreshPolicy: () => Promise<void>;
   refreshPolicies: () => Promise<void>;
+  refreshManagedRecordings: (shopId?: string) => Promise<void>;
   savePolicy: (shopId: string, patch: Partial<AudioQcPolicy>) => Promise<AudioQcPolicyWithHeartbeat>;
 };
 

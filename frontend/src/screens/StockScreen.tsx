@@ -1182,13 +1182,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
         >
-          {isStoreTablet && (
-            <View style={styles.audioQcStack}>
-              <AudioQcStatusBadge />
-              <AudioQcControls />
-              <AudioQcRecordingsList />
-            </View>
-          )}
           <View style={styles.fobPanelWrap}>
             {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
           </View>
@@ -1198,7 +1191,19 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (activeTab === 'audioQc') {
       return (
         <View style={styles.tabContentWrap}>
-          <AudioQcAdminPanel shops={shops} selectedShopId={selectedShopId} />
+          {canManage ? (
+            <AudioQcAdminPanel shops={shops} selectedShopId={selectedShopId} />
+          ) : (
+            <ScrollView
+              style={styles.tabContentWrap}
+              contentContainerStyle={styles.audioQcStack}
+              keyboardShouldPersistTaps="handled"
+            >
+              <AudioQcStatusBadge />
+              <AudioQcControls />
+              <AudioQcRecordingsList />
+            </ScrollView>
+          )}
         </View>
       );
     }
@@ -1273,6 +1278,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
+        ...(isStoreTablet ? [{ key: 'audioQc' as ScreenTab, label: 'Запись' }] : []),
         ...((isWorker || isStoreTablet)
           ? [{ key: 'fob' as ScreenTab, label: isStoreTablet ? 'FOB-сканер' : 'FOB' }]
           : []),

@@ -282,6 +282,44 @@ export const audioQcHeartbeatSchema = z.object({
   lastUploadAt: z.string().datetime().optional().nullable(),
 }).strict();
 
+export const audioQcRecordingStatusSchema = z.enum([
+  'recording',
+  'recorded',
+  'waiting_network',
+  'creating_ml_session',
+  'uploading_audio',
+  'audio_uploaded',
+  'starting_processing',
+  'processing_started',
+  'completed',
+  'failed_retryable',
+  'failed_permanent',
+]);
+
+export const audioQcRecordingSchema = z.object({
+  localRecordingId: z.string().trim().min(3).max(200),
+  mlSessionId: z.string().trim().min(1).max(200).nullable().default(null),
+  jobId: z.string().trim().min(1).max(200).nullable().default(null),
+  shopId: z.string().trim().min(1).max(100),
+  sellerId: z.string().trim().min(1).max(160).nullable().default(null),
+  shiftId: z.string().trim().min(1).max(160).nullable().default(null),
+  deviceId: z.string().trim().min(3).max(160),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime().nullable().default(null),
+  appVersion: z.string().trim().min(1).max(80),
+  timezone: z.string().trim().min(1).max(100),
+  recordingMode: z.enum(['manual', 'vad_auto']),
+  durationSec: z.number().int().min(0).max(86_400).nullable().default(null),
+  fileSizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().default(null),
+  status: audioQcRecordingStatusSchema,
+  lastError: z.string().trim().max(2000).nullable().default(null),
+}).strict();
+
+export const audioQcRecordingsQuerySchema = z.object({
+  shopId: z.string().trim().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
 export const orderSheetQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });

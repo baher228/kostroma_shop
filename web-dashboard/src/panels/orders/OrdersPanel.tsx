@@ -136,6 +136,8 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
   const rowValue = (row: OrderSheetRow, shopId: string): number => row.shopValues[shopId] ?? 0;
   const machineTotal = (row: OrderSheetRow, shops: Shop[]): number =>
     shops.reduce((sum, shop) => sum + rowValue(row, shop.id), 0);
+  const machineWeight = (rows: OrderSheetRow[], shops: Shop[]): number =>
+    Math.round(rows.reduce((sum, row) => sum + machineTotal(row, shops) * (row.packWeightKg ?? 0), 0) * 100) / 100;
 
   const downloadSheet = async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
@@ -158,6 +160,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
 
     const targetGroups = groupShopsByMachine(targetSheet);
     const targetRowsByCategory = groupRowsByCategory(targetSheet);
+    const targetRows = Object.values(targetRowsByCategory).flat();
     const rows: XlsxCell[][] = [
       [
         { value: '', style: 1 },
@@ -211,6 +214,15 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
         ]);
       }
     }
+
+    rows.push([
+      { value: 'ОБЩИЙ ВЕС ПО МАШИНАМ', style: 2 },
+      ...targetGroups.flatMap((group) => [
+        ...group.shops.map(() => ({ value: '', style: 2 })),
+        { value: 'ОБЩИЙ ВЕС, КГ', style: 2 },
+        { value: machineWeight(targetRows, group.shops), style: 2, type: 'number' as const },
+      ]),
+    ]);
 
     const blob = makeXlsxBlob(`Заказ ${targetSheet.date}`, rows, merges);
     const url = URL.createObjectURL(blob);
@@ -320,6 +332,18 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr className="machine-weight-row">
+                  <td className="sticky order-name-col">ОБЩИЙ ВЕС ПО МАШИНАМ</td>
+                  {machineGroups.flatMap((group) => [
+                    ...group.shops.map((shop) => <td key={`weight:${group.machineNumber}:${shop.id}`} />),
+                    <td key={`weight:${group.machineNumber}:label`} className="total-cell">ОБЩИЙ ВЕС, КГ</td>,
+                    <td key={`weight:${group.machineNumber}:value`} className="weight-cell">
+                      {formatWeight(1, machineWeight(Object.values(rowsByCategory).flat(), group.shops))}
+                    </td>,
+                  ])}
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>

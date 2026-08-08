@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -287,6 +288,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       });
       setOrders((current) => [...createdOrders.reverse(), ...current]);
       setSubmittedByProduct(Object.fromEntries(rowsToSubmit.map(({ row }) => [row.productId, true])));
+      Alert.alert('Заказ отправлен', 'Заказ успешно отправлен.');
     } catch (createError) {
       setError(errorMessage(createError));
     } finally {

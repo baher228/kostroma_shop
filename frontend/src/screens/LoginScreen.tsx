@@ -1,5 +1,6 @@
 ﻿import { ActivityIndicator, Platform, Pressable, SafeAreaView, StatusBar as NativeStatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useState } from 'react';
+import { useAppUpdate } from '../hooks/useAppUpdate';
 
 type LoginScreenProps = {
   onSubmit: (username: string, password: string) => Promise<void>;
@@ -10,8 +11,10 @@ const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0
 export const LoginScreen = ({ onSubmit }: LoginScreenProps) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const { checkingUpdate, checkForAppUpdate } = useAppUpdate();
 
   const handleSubmit = async () => {
     if (!username.trim() || !password.trim()) {
@@ -42,20 +45,41 @@ export const LoginScreen = ({ onSubmit }: LoginScreenProps) => {
           style={styles.input}
           placeholder="Логин"
           placeholderTextColor="#76877c"
+          accessibilityLabel="Логин"
         />
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          style={styles.input}
-          placeholder="Пароль"
-          placeholderTextColor="#76877c"
-        />
+        <View style={styles.passwordField}>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!passwordVisible}
+            style={[styles.input, styles.passwordInput]}
+            placeholder="Пароль"
+            placeholderTextColor="#76877c"
+            accessibilityLabel="Пароль"
+          />
+          <Pressable
+            style={styles.passwordVisibilityButton}
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            accessibilityRole="button"
+            accessibilityLabel={passwordVisible ? 'Скрыть пароль' : 'Показать пароль'}
+            accessibilityState={{ selected: passwordVisible }}
+          >
+            <Text style={styles.passwordVisibilityIcon}>👁</Text>
+          </Pressable>
+        </View>
 
         {!!error && <Text style={styles.error}>{error}</Text>}
 
         <Pressable style={[styles.button, submitting && styles.buttonDisabled]} onPress={handleSubmit} disabled={submitting}>
           {submitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Войти</Text>}
+        </Pressable>
+
+        <Pressable
+          style={[styles.updateButton, checkingUpdate && styles.buttonDisabled]}
+          onPress={() => void checkForAppUpdate()}
+          disabled={checkingUpdate}
+        >
+          <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить'}</Text>
         </Pressable>
 
       </View>
@@ -94,6 +118,24 @@ const styles = StyleSheet.create({
     color: '#1f2f26',
     backgroundColor: '#f8fbf8',
   },
+  passwordField: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 48,
+  },
+  passwordVisibilityButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  passwordVisibilityIcon: {
+    fontSize: 18,
+  },
   error: {
     color: '#b04334',
     fontSize: 14,
@@ -110,6 +152,18 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  updateButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2f6f4f',
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  updateButtonText: {
+    color: '#2f6f4f',
     fontSize: 16,
     fontWeight: '800',
   },

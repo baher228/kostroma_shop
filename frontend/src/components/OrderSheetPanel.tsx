@@ -247,6 +247,8 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
 
   const machineTotal = (row: OrderSheetRow, shops: Shop[]): number =>
     shops.reduce((sum, shop) => sum + rowValue(row, shop.id), 0);
+  const machineWeight = (rows: OrderSheetRow[], shops: Shop[]): number =>
+    Math.round(rows.reduce((sum, row) => sum + machineTotal(row, shops) * (row.packWeightKg ?? 0), 0) * 100) / 100;
 
   if (loading && !sheet) {
     return (
@@ -308,6 +310,7 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     if (!sheet) {
       return null;
     }
+    const visibleRows = Object.values(rowsByCategory).flat();
 
     return (
       <ScrollView horizontal keyboardShouldPersistTaps="handled">
@@ -388,6 +391,26 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
                 </View>
               );
             })}
+            <View style={styles.machineWeightRow}>
+              <View style={[styles.cell, styles.nameColumn, styles.machineWeightCell]}>
+                <Text style={styles.machineWeightText}>ОБЩИЙ ВЕС ПО МАШИНАМ</Text>
+              </View>
+              {machineGroups.map((group) => (
+                <View key={`weight:${group.machineNumber}`} style={styles.machineGroup}>
+                  {group.shops.map((shop) => (
+                    <View key={`weight:${group.machineNumber}:${shop.id}`} style={[styles.cell, styles.shopCol, styles.machineWeightCell]} />
+                  ))}
+                  <View style={[styles.cell, styles.totalCol, styles.machineWeightCell]}>
+                    <Text style={styles.machineWeightText}>ВЕС, КГ</Text>
+                  </View>
+                  <View style={[styles.cell, styles.weightCol, styles.machineWeightCell]}>
+                    <Text style={styles.machineWeightValue}>
+                      {formatWeight(1, machineWeight(visibleRows, group.shops))}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
           </ScrollView>
         </View>
       </ScrollView>
@@ -723,5 +746,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#223528',
+  },
+  machineWeightRow: {
+    flexDirection: 'row',
+  },
+  machineWeightCell: {
+    backgroundColor: '#d6dfd6',
+  },
+  machineWeightText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#20352a',
+    textAlign: 'center',
+  },
+  machineWeightValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#20352a',
   },
 });

@@ -1,5 +1,4 @@
 ﻿import { StatusBar } from 'expo-status-bar';
-import * as Updates from 'expo-updates';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +24,7 @@ import { TasksPanel } from '../components/TasksPanel';
 import { UsersPanel } from '../components/UsersPanel';
 import { FobQrCard } from '../components/FobQrCard';
 import { FobScannerPanel } from '../components/FobScannerPanel';
+import { useAppUpdate } from '../hooks/useAppUpdate';
 import {
   DASHBOARD_COLUMNS,
   BUSINESS_CATEGORIES,
@@ -200,7 +200,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [newProductMinStockUnits, setNewProductMinStockUnits] = useState('');
   const [newProductMaxStockUnits, setNewProductMaxStockUnits] = useState('');
   const [addingProduct, setAddingProduct] = useState(false);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const { checkingUpdate, checkForAppUpdate } = useAppUpdate();
 
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -220,32 +220,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const setPending = (key: string, value: boolean) => {
     setPendingKeys((current) => ({ ...current, [key]: value }));
-  };
-
-  const checkForAppUpdate = async () => {
-    if (Platform.OS === 'web' || !Updates.isEnabled) {
-      Alert.alert('Обновления приложения', 'OTA-обновления доступны только в установленном приложении.');
-      return;
-    }
-
-    try {
-      setCheckingUpdate(true);
-      const update = await Updates.checkForUpdateAsync();
-      if (!update.isAvailable) {
-        Alert.alert('Обновления приложения', 'Установлена последняя версия.');
-        return;
-      }
-
-      await Updates.fetchUpdateAsync();
-      Alert.alert('Обновление готово', 'Перезапустить приложение, чтобы применить обновление?', [
-        { text: 'Позже', style: 'cancel' },
-        { text: 'Перезапустить', onPress: () => void Updates.reloadAsync() },
-      ]);
-    } catch (updateError) {
-      Alert.alert('Не удалось проверить обновление', errorMessage(updateError));
-    } finally {
-      setCheckingUpdate(false);
-    }
   };
 
   const loadShops = async () => {

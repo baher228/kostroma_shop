@@ -2121,6 +2121,13 @@ td.sticky {
   background: #f4f5f3;
 }
 
+.order-sheet-table .machine-weight-row td,
+.order-sheet-table .machine-weight-row td.order-name-col {
+  background: #d6dfd6;
+  color: #20352a;
+  font-weight: 900;
+}
+
 .modal-backdrop {
   background: rgba(25, 38, 30, 0.46);
   backdrop-filter: blur(3px);

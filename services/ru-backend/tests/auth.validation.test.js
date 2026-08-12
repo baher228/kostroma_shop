@@ -7,6 +7,7 @@ const { createRussiaApp } = require('../dist/app/russiaApp');
 const {
   loginSchema,
   createTaskSchema,
+  pushTokenSchema,
   updateTaskStatusSchema,
   createUserSchema,
   checkInStatsQuerySchema,
@@ -75,6 +76,8 @@ test('personal workflow schemas validate expected fields', () => {
   assert.equal(loginSchema.parse({ username: '  Worker.User  ', password: 'admin' }).username, 'worker.user');
   assert.equal(createTaskSchema.parse({ title: ' Pack apples ', assigneeId: 'u2' }).title, 'Pack apples');
   assert.equal(updateTaskStatusSchema.parse({ status: 'done', photoConfirmationUrl: 'https://example.com/x.jpg' }).status, 'done');
+  assert.equal(pushTokenSchema.parse({ pushToken: 'ExpoPushToken[abc_123-xyz]' }).pushToken, 'ExpoPushToken[abc_123-xyz]');
+  assert.throws(() => pushTokenSchema.parse({ pushToken: 'not-a-push-token' }));
   assert.equal(createUserSchema.parse({
     username: 'worker.user',
     firstName: 'Ivan',

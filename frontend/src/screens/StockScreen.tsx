@@ -1,5 +1,5 @@
 ﻿import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,6 +25,7 @@ import { UsersPanel } from '../components/UsersPanel';
 import { FobQrCard } from '../components/FobQrCard';
 import { FobScannerPanel } from '../components/FobScannerPanel';
 import { useAppUpdate } from '../hooks/useAppUpdate';
+import { useTaskNotifications } from '../hooks/useTaskNotifications';
 import {
   DASHBOARD_COLUMNS,
   BUSINESS_CATEGORIES,
@@ -177,6 +178,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const isStoreTablet = session.user.role === 'store_tablet';
 
   const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
+  const openTasks = useCallback(() => setActiveTab('tasks'), []);
+  const { hasUnreadTasks, markTasksViewed, taskNotificationVersion, unregisterPushToken } = useTaskNotifications(
+    session,
+    openTasks,
+  );
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [table, setTable] = useState<StockTable | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -1200,7 +1206,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (activeTab === 'tasks') {
       return (
         <View style={styles.tabContentWrap}>
-          <TasksPanel session={session} fullHeight />
+          <TasksPanel
+            key={taskNotificationVersion}
+            session={session}
+            fullHeight
+            onTasksViewed={markTasksViewed}
+          />
         </View>
       );
     }
@@ -1233,6 +1244,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       );
     }
     return renderStockTab();
+  };
+
+  const logout = async () => {
+    await unregisterPushToken();
+    await onLogout();
   };
 
   if (loading) {
@@ -1281,7 +1297,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           >
             <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить'}</Text>
           </Pressable>
-          <Pressable style={styles.logoutButton} onPress={onLogout}>
+          <Pressable style={styles.logoutButton} onPress={() => void logout()}>
             <Text style={styles.logoutButtonText}>Выйти</Text>
           </Pressable>
         </View>
@@ -1298,6 +1314,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               style={[styles.bottomTabButton, active && styles.bottomTabButtonActive]}
               onPress={() => setActiveTab(tab.key)}
             >
+              {tab.key === 'tasks' && hasUnreadTasks && <View style={styles.taskBadge} />}
               <Text style={[styles.bottomTabButtonText, active && styles.bottomTabButtonTextActive]}>{tab.label}</Text>
             </Pressable>
           );
@@ -2097,6 +2114,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   bottomTabButton: {
+    position: 'relative',
     minHeight: 50,
     flex: 1,
     borderRadius: 9,
@@ -2116,6 +2134,15 @@ const styles = StyleSheet.create({
   },
   bottomTabButtonTextActive: {
     color: '#ffffff',
+  },
+  taskBadge: {
+    position: 'absolute',
+    top: 5,
+    right: '28%',
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#d4382f',
   },
   modalBackdrop: {
     flex: 1,

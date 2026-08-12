@@ -108,6 +108,10 @@ export const updateTaskStatusSchema = z.object({
   photoConfirmationUrl: z.string().trim().url().optional().nullable(),
 });
 
+export const pushTokenSchema = z.object({
+  pushToken: z.string().trim().regex(/^(?:Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/),
+});
+
 export const createUserSchema = z.object({
   username: z
     .string()

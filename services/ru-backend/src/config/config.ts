@@ -26,6 +26,7 @@ export const config = {
   opsTokenPrivateKey: trimToUndefined(process.env.OPS_TOKEN_PRIVATE_KEY),
   opsTokenPublicKey: trimToUndefined(process.env.OPS_TOKEN_PUBLIC_KEY),
   opsTokenKeyId: trimToUndefined(process.env.OPS_TOKEN_KEY_ID) || 'ops-token-dev',
+  expoPushAccessToken: trimToUndefined(process.env.EXPO_PUSH_ACCESS_TOKEN),
   corsOrigin: resolveCorsOrigin({ value: process.env.CORS_ORIGIN, isProduction }),
   personalDatabaseUrl,
   personalDbHost: personalDatabaseUrl

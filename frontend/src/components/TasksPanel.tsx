@@ -15,6 +15,7 @@ import { Session, Task, TaskStatus, Worker } from "../types/models";
 type TasksPanelProps = {
   session: Session;
   fullHeight?: boolean;
+  onTasksViewed?: (tasks: Task[]) => void;
 };
 
 type CalendarCell = {
@@ -100,7 +101,7 @@ const buildDeadlineIso = (dateKey: string | null, time: string) => {
   return localDate.toISOString();
 };
 
-export const TasksPanel = ({ session, fullHeight = false }: TasksPanelProps) => {
+export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: TasksPanelProps) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,6 +156,7 @@ export const TasksPanel = ({ session, fullHeight = false }: TasksPanelProps) => 
       } else {
         const nextTasks = await tasksApi.list(session.token);
         setTasks(nextTasks);
+        onTasksViewed?.(nextTasks);
       }
     } catch (loadError) {
       setError(errorMessage(loadError));
@@ -168,11 +170,11 @@ export const TasksPanel = ({ session, fullHeight = false }: TasksPanelProps) => 
   }, [session.token, session.user.role]);
 
   const createTask = async () => {
-    if (!canManage) {
+    if (!canManage || savingTask) {
       return;
     }
     const normalizedTitle = title.trim();
-    if (!normalizedTitle) {
+    if (normalizedTitle.length < 2) {
       setError("Введите текст задачи.");
       return;
     }

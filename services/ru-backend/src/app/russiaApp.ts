@@ -3,6 +3,7 @@ import { applyAppMiddleware } from './appMiddleware';
 import { registerAuthRoutes } from '../routes/authRoutes';
 import { registerCheckInRoutes } from '../routes/checkInRoutes';
 import { registerFobRoutes } from '../routes/fobRoutes';
+import { registerNotificationRoutes } from '../routes/notificationRoutes';
 import { registerSupportRoutes } from '../routes/supportRoutes';
 import { registerTaskRoutes } from '../routes/taskRoutes';
 import { registerUserRoutes } from '../routes/userRoutes';
@@ -20,6 +21,7 @@ export const createRussiaApp = () => {
   registerUserRoutes(app);
   registerCheckInRoutes(app);
   registerFobRoutes(app);
+  registerNotificationRoutes(app);
   registerTaskRoutes(app);
   registerSupportRoutes(app);
 

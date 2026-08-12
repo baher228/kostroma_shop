@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { toValidationMessage } from '../http/http';
 import { AuthorizedRequest, requireAuth, requireRole } from '../auth/middleware';
 import { changeTaskStatus, createManagedTask, getVisibleTasks, removeTask } from '../services/taskService';
+import { notifyWorkerOfNewTask } from '../services/notificationService';
 import { createTaskSchema, idParamSchema, updateTaskStatusSchema } from '../http/validation';
 
 export const registerTaskRoutes = (app: Express) => {
@@ -25,6 +26,9 @@ export const registerTaskRoutes = (app: Express) => {
         res.status(400).json({ message: 'Assignee was not found.' });
         return;
       }
+      void notifyWorkerOfNewTask(created).catch((error) => {
+        console.error('Failed to send task notification:', error);
+      });
       res.status(201).json({ task: created });
     } catch (error) {
       if (error instanceof ZodError) {

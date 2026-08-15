@@ -1,8 +1,7 @@
-import fs from 'fs';
-import path from 'path';
 import zlib from 'zlib';
-import { GlobalFonts, SKRSContext2D, createCanvas } from '@napi-rs/canvas';
+import { SKRSContext2D, createCanvas } from '@napi-rs/canvas';
 import { PromotionTableRow } from '../repositories/promotionRowsRepository';
+import { promotionFont, registerPromotionFonts } from './promotionFonts';
 
 type TextBox = {
   x: number;
@@ -26,20 +25,6 @@ const HEIGHT = 1358;
 const RENDER_SCALE = 3;
 const PAGE_WIDTH_PT = 100 / 25.4 * 72;
 const PAGE_HEIGHT_PT = 115 / 25.4 * 72;
-const FONT_FAMILY = 'PromotionTagSans';
-const fontRoot = path.resolve(__dirname, '../../node_modules/pdfjs-dist/standard_fonts');
-
-let fontsRegistered = false;
-
-const registerFonts = () => {
-  if (fontsRegistered) return;
-  const regular = path.join(fontRoot, 'LiberationSans-Regular.ttf');
-  const bold = path.join(fontRoot, 'LiberationSans-Bold.ttf');
-  if (fs.existsSync(regular)) GlobalFonts.registerFromPath(regular, FONT_FAMILY);
-  if (fs.existsSync(bold)) GlobalFonts.registerFromPath(bold, FONT_FAMILY);
-  fontsRegistered = true;
-};
-
 const formatMoneyParts = (value: number | null) => {
   const amount = Math.max(0, value ?? 0);
   const fixed = amount.toFixed(2);
@@ -122,7 +107,8 @@ const splitProductName = (value: string) => {
   };
 };
 
-const font = (size: number, weight: 'bold' | 'normal' = 'bold') => `${weight} ${size}px "${FONT_FAMILY}"`;
+const font = (size: number, weight: 'bold' | 'normal' = 'bold') =>
+  promotionFont(size, weight === 'bold' ? 700 : 400);
 
 const compactDescription = (value: string) => {
   const compacted = value
@@ -275,7 +261,7 @@ export const promotionPriceTagFileName = (row: PromotionTableRow) =>
   `${pdfName(`${row.rowNumber}_${row.productName}`)}.pdf`;
 
 export const createPromotionPriceTagPdf = (row: PromotionTableRow): Buffer => {
-  registerFonts();
+  registerPromotionFonts();
 
   const renderWidth = WIDTH * RENDER_SCALE;
   const renderHeight = HEIGHT * RENDER_SCALE;

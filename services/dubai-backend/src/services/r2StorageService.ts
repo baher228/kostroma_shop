@@ -14,6 +14,14 @@ export type DownloadedObject = {
   contentLength: number;
 };
 
+export const isObjectNotFoundError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { name?: unknown; Code?: unknown; code?: unknown };
+  return [candidate.name, candidate.Code, candidate.code]
+    .map((value) => String(value ?? ''))
+    .some((code) => code === 'NoSuchKey' || code === 'NotFound');
+};
+
 const hasAnyR2Config = Boolean(config.r2AccountId || config.r2AccessKeyId || config.r2SecretAccessKey || config.r2Bucket);
 const hasR2Config = Boolean(config.r2AccountId && config.r2AccessKeyId && config.r2SecretAccessKey && config.r2Bucket);
 

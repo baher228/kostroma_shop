@@ -15,6 +15,7 @@ import {
   Shop,
   StockTable,
 } from './types';
+import { downloadFileName } from './downloadFileName';
 
 const RU_API_BASE_URL = (import.meta.env.VITE_RU_API_URL || '/ru').replace(/\/+$/, '');
 const DXB_API_BASE_URL = (import.meta.env.VITE_DXB_API_URL || '/dxb').replace(/\/+$/, '');
@@ -130,7 +131,12 @@ const makeBlobRequest = async (baseUrl: string, path: string, bearerToken: strin
   return response.blob();
 };
 
-const makeDownloadBlobRequest = async (baseUrl: string, path: string, bearerToken: string): Promise<{ blob: Blob; fileName: string }> => {
+const makeDownloadBlobRequest = async (
+  baseUrl: string,
+  path: string,
+  bearerToken: string,
+  selectedDocumentFileName?: string,
+): Promise<{ blob: Blob; fileName: string }> => {
   const response = await fetch(`${baseUrl}${path}`, {
     cache: 'no-store',
     headers: {
@@ -143,11 +149,9 @@ const makeDownloadBlobRequest = async (baseUrl: string, path: string, bearerToke
     throw new ApiError(parsed?.message || 'Request failed.', response.status);
   }
   const disposition = response.headers.get('Content-Disposition') || '';
-  const fileNameUtf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-  const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i);
   return {
     blob: await response.blob(),
-    fileName: fileNameUtf8Match ? decodeURIComponent(fileNameUtf8Match[1]) : fileNameMatch?.[1] ?? 'download.pdf',
+    fileName: downloadFileName(disposition, response.headers.get('Content-Type'), selectedDocumentFileName),
   };
 };
 
@@ -208,15 +212,15 @@ const dxbBlobRequest = async (path: string, token: string) => {
   }
 };
 
-const dxbDownloadBlobRequest = async (path: string, token: string) => {
+const dxbDownloadBlobRequest = async (path: string, token: string, selectedDocumentFileName?: string) => {
   try {
     const opsToken = await fetchOpsToken(token);
-    return await makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken);
+    return await makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken, selectedDocumentFileName);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       opsTokenCache.delete(token);
       const opsToken = await fetchOpsToken(token);
-      return makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken);
+      return makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken, selectedDocumentFileName);
     }
     throw error;
   }
@@ -355,10 +359,11 @@ export const api = {
       dxbDownloadBlobRequest(`/api/promotions/rows/by-number/${rowNumber}/price-tag.pdf`, token),
     downloadGeneratedPosterPdf: async (token: string, rowNumber: number) =>
       dxbDownloadBlobRequest(`/api/promotions/rows/by-number/${rowNumber}/poster-generated.pdf`, token),
-    downloadDocument: async (token: string, params: { documentType?: PromotionDocumentType; documentId?: string }) =>
+    downloadDocument: async (token: string, params: { documentType?: PromotionDocumentType; documentId?: string; fileName?: string }) =>
       dxbDownloadBlobRequest(
         `/api/promotions/documents/download${query({ type: params.documentType, id: params.documentId })}`,
         token,
+        params.fileName,
       ),
     deleteDocument: async (token: string, documentId: string) =>
       dxbRequest<{ document: PromotionDocument; deletedRows: number }>(`/api/promotions/documents/${documentId}`, { method: 'DELETE', token }),

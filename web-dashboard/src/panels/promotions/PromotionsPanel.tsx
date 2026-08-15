@@ -10,6 +10,7 @@ import type {
   PromotionTableRow,
   Session,
 } from '../../types';
+import { comparePromotionRowsByDate } from './promotionSorting';
 
 type SortKey =
   | 'rowNumber'
@@ -177,7 +178,7 @@ export const PromotionsPanel = ({ session }: { session: Session }) => {
 
     const sorted = [...filtered];
     if (sort.direction === 'default') {
-      sorted.sort((left, right) => statusOrder[left.status] - statusOrder[right.status] || left.rowNumber - right.rowNumber);
+      sorted.sort(comparePromotionRowsByDate);
       return sorted;
     }
     sorted.sort((left, right) => {
@@ -374,7 +375,10 @@ const PromotionProductCard = ({
     if (!invoiceDocumentId) return;
     setError('');
     try {
-      const result = await api.promotions.downloadDocument(session.token, { documentId: invoiceDocumentId });
+      const result = await api.promotions.downloadDocument(session.token, {
+        documentId: invoiceDocumentId,
+        fileName: invoiceDocumentFileName ?? undefined,
+      });
       saveBlob(result.blob, result.fileName);
     } catch (err) {
       setError(messageOf(err));
@@ -654,7 +658,11 @@ const DocumentsModal = ({
     setError('');
     setNotice('');
     try {
-      const result = await api.promotions.downloadDocument(session.token, { documentId });
+      const selectedDocument = documents.find((document) => document.id === documentId);
+      const result = await api.promotions.downloadDocument(session.token, {
+        documentId,
+        fileName: selectedDocument?.fileName,
+      });
       saveBlob(result.blob, result.fileName);
     } catch (err) {
       setError(messageOf(err));

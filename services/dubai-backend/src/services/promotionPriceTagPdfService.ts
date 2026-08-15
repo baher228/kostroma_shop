@@ -198,12 +198,22 @@ const fitMultilineText = (ctx: SKRSContext2D, text: string, box: MultiLineTextBo
   });
 };
 
-const pdfName = (value: string) =>
+const priceTagPeriod = (row: Pick<PromotionTableRow, 'startDate' | 'endDate'>) => {
+  const start = formatDate(row.startDate);
+  const end = formatDate(row.endDate);
+  if (start && end && start !== end) return `${start}-${end}`;
+  return start || end || 'без_даты';
+};
+
+const safeFileNamePart = (value: string) =>
   value
-    .normalize('NFKD')
-    .replace(/[^\w.-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80) || 'price-tag';
+    .normalize('NFC')
+    .replace(/[\\/:]+/g, '-')
+    .replace(/[<>"|?*\u0000-\u001F]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .replace(/_+/g, '_')
+    .trim()
+    .replace(/[. ]+$/g, '') || 'Товар';
 
 const pdfObject = (id: number, body: string | Buffer) => {
   const content = Buffer.isBuffer(body) ? body : Buffer.from(body, 'binary');
@@ -257,8 +267,20 @@ const buildPdf = (image: { width: number; height: number; rgb: Buffer }) => {
   return Buffer.concat(chunks);
 };
 
-export const promotionPriceTagFileName = (row: PromotionTableRow) =>
-  `${pdfName(`${row.rowNumber}_${row.productName}`)}.pdf`;
+export const promotionPriceTagFileName = (row: PromotionTableRow) => {
+  const period = priceTagPeriod(row);
+  const prefix = 'Ценник_';
+  const suffix = `_${period}.pdf`;
+  const maxProductLength = Math.max(1, 180 - prefix.length - suffix.length);
+  const product = safeFileNamePart(row.productName).slice(0, maxProductLength).trim().replace(/[. ]+$/g, '');
+  return `${prefix}${product || 'Товар'}${suffix}`;
+};
+
+export const promotionPriceTagContentDisposition = (row: PromotionTableRow) => {
+  const fileName = promotionPriceTagFileName(row);
+  const fallback = `price-tag-${row.rowNumber}-${priceTagPeriod(row)}.pdf`;
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+};
 
 export const createPromotionPriceTagPdf = (row: PromotionTableRow): Buffer => {
   registerPromotionFonts();

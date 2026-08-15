@@ -5,6 +5,7 @@ require('./google-drive-posters.test');
 require('./google-service-account-credentials.test');
 require('./promotion-document-storage.test');
 require('./promotion-fonts.test');
+require('./promotion-price-tag-filename.test');
 require('./promotion-rules.test');
 require('./promotion-provenance.test');
 require('./product.creation.test');

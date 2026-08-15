@@ -16,7 +16,7 @@ import {
   POSTER_NOT_READY_MESSAGE,
   posterPdfContentDisposition,
 } from '../services/googleDrivePosterService';
-import { createPromotionPriceTagPdf, promotionPriceTagFileName } from '../services/promotionPriceTagPdfService';
+import { createPromotionPriceTagPdf, promotionPriceTagContentDisposition } from '../services/promotionPriceTagPdfService';
 
 const statuses = new Set<PromotionRowStatus>(['past', 'current', 'future']);
 
@@ -98,7 +98,7 @@ export const registerPromotionRowsRoutes = (app: Express) => {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Cache-Control', 'no-store, max-age=0');
       res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Content-Disposition', `attachment; filename="${promotionPriceTagFileName(row)}"`);
+      res.setHeader('Content-Disposition', promotionPriceTagContentDisposition(row));
       res.send(pdf);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось сделать ценник.' });

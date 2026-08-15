@@ -24,6 +24,9 @@ export type PosterMatch = {
 const psdMimeTypes = ['image/vnd.adobe.photoshop', 'image/x-photoshop'];
 const tokenScope = 'https://www.googleapis.com/auth/drive.readonly';
 const driveApiBase = 'https://www.googleapis.com/drive/v3';
+const minimumPosterMatchScore = 0.75;
+
+export const POSTER_NOT_READY_MESSAGE = 'Такой постер ещё не сделали.';
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -154,7 +157,7 @@ export const listPosterPsdFiles = async (folderId = config.googleDrivePostersFol
   return files.filter((file) => file.name.toLowerCase().endsWith('.psd') || psdMimeTypes.includes(file.mimeType));
 };
 
-const findPosterFileForProduct = async (productName: string, files: DrivePosterFile[]) => {
+export const selectPosterFileForProduct = (productName: string, files: DrivePosterFile[]) => {
   const matches = files
     .map((file) => ({ file, score: scorePosterFileName(productName, file.name) }))
     .filter((match) => match.score > 0)
@@ -162,13 +165,15 @@ const findPosterFileForProduct = async (productName: string, files: DrivePosterF
 
   const best = matches[0] ?? null;
   return {
-    best: best && best.score >= 0.45 ? best : null,
+    // Poster templates are product-specific. A false positive is worse than a
+    // missing poster because it applies the prices to somebody else's design.
+    best: best && best.score >= minimumPosterMatchScore ? best : null,
     candidates: matches.slice(0, 5),
   };
 };
 
 export const findPosterPsdForProduct = async (productName: string) =>
-  findPosterFileForProduct(productName, await listPosterPsdFiles());
+  selectPosterFileForProduct(productName, await listPosterPsdFiles());
 
 export const downloadPosterDriveFile = async (fileId: string) => {
   const token = await requestAccessToken();

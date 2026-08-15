@@ -16,6 +16,20 @@ test('poster file scoring prefers exact and word-overlap matches', () => {
   assert.ok(scorePosterFileName('Ветчина прага', 'Сосиски сливочные.pdf') < 0.45);
 });
 
+test('poster selection rejects a merely similar product and reports a friendly message', () => {
+  const {
+    POSTER_NOT_READY_MESSAGE,
+    selectPosterFileForProduct,
+  } = require('../dist/services/googleDrivePosterService');
+  const files = [
+    { id: 'finnish', name: 'Сервелат Финский п:к 1 кг.psd', mimeType: 'image/x-photoshop' },
+    { id: 'milk', name: 'Молочная (целлоф.) 1 кг.psd', mimeType: 'image/x-photoshop' },
+  ];
+
+  assert.equal(selectPosterFileForProduct('Сервелат Кремлёвский п/к 1 кг.', files).best, null);
+  assert.equal(POSTER_NOT_READY_MESSAGE, 'Такой постер ещё не сделали.');
+});
+
 test('poster content disposition supports cyrillic filenames', () => {
   const { posterPdfContentDisposition } = require('../dist/services/googleDrivePosterService');
 

@@ -13,6 +13,7 @@ import { createGeneratedPosterPdfFromPsd } from '../services/generatedPosterPdfS
 import {
   downloadPosterDriveFile,
   findPosterPsdForProduct,
+  POSTER_NOT_READY_MESSAGE,
   posterPdfContentDisposition,
 } from '../services/googleDrivePosterService';
 import { createPromotionPriceTagPdf, promotionPriceTagFileName } from '../services/promotionPriceTagPdfService';
@@ -119,7 +120,7 @@ export const registerPromotionRowsRoutes = (app: Express) => {
       const match = await findPosterPsdForProduct(row.productName);
       if (!match.best) {
         res.status(404).json({
-          message: 'Не удалось найти PSD-постер для этого товара в Google Drive.',
+          message: POSTER_NOT_READY_MESSAGE,
           candidates: match.candidates.map((candidate) => ({
             fileName: candidate.file.name,
             score: candidate.score,

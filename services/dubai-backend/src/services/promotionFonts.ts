@@ -4,10 +4,11 @@ import { GlobalFonts } from '@napi-rs/canvas';
 
 export const PROMOTION_FONT_FAMILY = 'Golos Text';
 
-type PromotionFontWeight = 400 | 700;
+type PromotionFontWeight = 400 | 600 | 700;
 
 const fontFiles: ReadonlyArray<{ fileName: string; weight: PromotionFontWeight }> = [
   { fileName: 'GolosText-Regular.ttf', weight: 400 },
+  { fileName: 'GolosText-SemiBold.ttf', weight: 600 },
   { fileName: 'GolosText-Bold.ttf', weight: 700 },
 ];
 

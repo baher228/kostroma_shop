@@ -21,6 +21,7 @@ on:
       - 'services/ru-backend/**'
       - 'services/dubai-backend/**'
       - 'services/shared/**'
+      - 'assets/Price_tag/**'
       - 'package.json'
       - 'package-lock.json'
 

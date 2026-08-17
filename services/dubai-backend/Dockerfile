@@ -23,6 +23,7 @@ COPY --from=build /workspace/services/dubai-backend/dist ./dist
 COPY --from=build /workspace/services/dubai-backend/migrations ./migrations
 COPY --from=build /workspace/services/shared ../shared
 COPY assets/Golos_text ./assets/Golos_text
+COPY assets/Price_tag ./assets/Price_tag
 
 EXPOSE 4001
 CMD ["node", "dist/server.js"]

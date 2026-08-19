@@ -60,6 +60,27 @@ export type OrderValueEntry = {
 
 export type ManagedUser = SessionUser;
 
+export type TaskStatus = 'open' | 'done';
+
+export type Task = {
+  id: string;
+  title: string;
+  assigneeId: string;
+  assigneeDisplayName: string;
+  createdById: string;
+  createdByDisplayName: string;
+  status: TaskStatus;
+  createdAt: string;
+  completedAt: string | null;
+  deadlineAt: string | null;
+  requiresPhotoConfirmation: boolean;
+  photoConfirmationUrl: string | null;
+  photoConfirmedAt: string | null;
+  overdue: boolean;
+};
+
+export type Worker = Pick<SessionUser, 'id' | 'username' | 'firstName' | 'lastName' | 'fullName'>;
+
 export type SellerOrder = {
   id: string;
   shopId: string;

@@ -9,11 +9,12 @@ import { OverviewPanel } from './panels/overview/OverviewPanel';
 import { ProductsPanel } from './panels/products/ProductsPanel';
 import { PromotionsPanel } from './panels/promotions/PromotionsPanel';
 import { ShopsPanel } from './panels/shops/ShopsPanel';
+import { TasksPanel } from './panels/tasks/TasksPanel';
 import { UsersPanel } from './panels/users/UsersPanel';
 import './styles.css';
 import { Session } from './types';
 
-type Section = 'overview' | 'attendance' | 'users' | 'shops' | 'products' | 'orders' | 'promotions' | 'app';
+type Section = 'overview' | 'attendance' | 'users' | 'tasks' | 'shops' | 'products' | 'orders' | 'promotions' | 'app';
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -72,6 +73,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
     { key: 'overview', label: 'Обзор' },
     { key: 'attendance', label: 'Посещаемость' },
     { key: 'users', label: 'Пользователи' },
+    { key: 'tasks', label: 'Задачи' },
     { key: 'shops', label: 'Магазины' },
     { key: 'products', label: 'Остатки' },
     { key: 'orders', label: 'Заказ' },
@@ -103,6 +105,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         {section === 'overview' && <OverviewPanel session={session} setSection={setSection} />}
         {section === 'attendance' && <AttendancePanel session={session} />}
         {section === 'users' && <UsersPanel session={session} />}
+        {section === 'tasks' && <TasksPanel session={session} />}
         {section === 'shops' && <ShopsPanel session={session} />}
         {section === 'products' && <ProductsPanel session={session} />}
         {section === 'orders' && <OrdersPanel session={session} />}

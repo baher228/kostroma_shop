@@ -398,6 +398,17 @@ label {
   padding: 16px;
 }
 
+.task-photo-control {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.task-photo-control input {
+  width: auto;
+  padding: 0;
+}
+
 .error,
 .notice {
   margin: 0;

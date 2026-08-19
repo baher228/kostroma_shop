@@ -14,6 +14,9 @@ import {
   SessionUser,
   Shop,
   StockTable,
+  Task,
+  TaskStatus,
+  Worker,
 } from './types';
 
 const RU_API_BASE_URL = (import.meta.env.VITE_RU_API_URL || '/ru').replace(/\/+$/, '');
@@ -267,6 +270,19 @@ export const api = {
     },
     delete: async (token: string, userId: string) => {
       await ruRequest<{}>(`/api/users/${userId}`, { method: 'DELETE', token });
+    },
+  },
+  tasks: {
+    list: async (token: string) => (await ruRequest<{ tasks: Task[] }>('/api/tasks', { token })).tasks,
+    listWorkers: async (token: string) => (await ruRequest<{ workers: Worker[] }>('/api/workers', { token })).workers,
+    create: async (
+      token: string,
+      payload: { title: string; assigneeId: string; deadlineAt: string | null; requiresPhotoConfirmation: boolean },
+    ) => (await ruRequest<{ task: Task }>('/api/tasks', { method: 'POST', token, body: payload })).task,
+    updateStatus: async (token: string, taskId: string, status: TaskStatus) =>
+      (await ruRequest<{ task: Task }>(`/api/tasks/${taskId}/status`, { method: 'PATCH', token, body: { status } })).task,
+    delete: async (token: string, taskId: string) => {
+      await ruRequest<{}>(`/api/tasks/${taskId}`, { method: 'DELETE', token });
     },
   },
   shops: {

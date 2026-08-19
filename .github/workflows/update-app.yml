@@ -27,6 +27,7 @@ on:
       - 'package-lock.json'
       - 'frontend/**'
       - 'worker-app/**'
+      - 'shared/**'
       - 'assets/**'
       - 'withCleartextTraffic.js'
 

@@ -1,13 +1,7 @@
 import crypto from 'crypto';
-import fs from 'fs/promises';
 import path from 'path';
 import { config } from '../config/config';
-
-type GoogleServiceAccount = {
-  client_email?: string;
-  private_key?: string;
-  token_uri?: string;
-};
+import { readGoogleServiceAccount } from './googleServiceAccountCredentials';
 
 type DriveListResponse = {
   files?: DrivePosterFile[];
@@ -30,6 +24,9 @@ export type PosterMatch = {
 const psdMimeTypes = ['image/vnd.adobe.photoshop', 'image/x-photoshop'];
 const tokenScope = 'https://www.googleapis.com/auth/drive.readonly';
 const driveApiBase = 'https://www.googleapis.com/drive/v3';
+const minimumPosterMatchScore = 0.75;
+
+export const POSTER_NOT_READY_MESSAGE = 'Такой постер ещё не сделали.';
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -76,32 +73,17 @@ export const scorePosterFileName = (productName: string, fileName: string) => {
   return Number(Math.max(overlap * 0.85, jaccard).toFixed(3));
 };
 
-const credentialsPath = () => {
-  const configured = config.googleApplicationCredentials;
-  if (!configured) throw new Error('GOOGLE_APPLICATION_CREDENTIALS is not configured.');
-  return path.isAbsolute(configured) ? configured : path.resolve(__dirname, '../..', configured);
-};
-
-const readServiceAccount = async (): Promise<GoogleServiceAccount> => {
-  let raw: string;
-  if (config.googleServiceAccountJsonBase64) {
-    raw = Buffer.from(config.googleServiceAccountJsonBase64, 'base64').toString('utf8');
-  } else if (config.googleServiceAccountJson) {
-    raw = config.googleServiceAccountJson;
-  } else {
-    raw = await fs.readFile(credentialsPath(), 'utf8');
-  }
-  const parsed = JSON.parse(raw) as GoogleServiceAccount;
-  if (!parsed.client_email || !parsed.private_key) {
-    throw new Error('Google service account JSON is missing client_email or private_key.');
-  }
-  return parsed;
-};
-
 const requestAccessToken = async () => {
   if (cachedToken && cachedToken.expiresAt - Date.now() > 60_000) return cachedToken.token;
 
-  const serviceAccount = await readServiceAccount();
+  const serviceAccount = await readGoogleServiceAccount(
+    {
+      applicationCredentials: config.googleApplicationCredentials,
+      serviceAccountJson: config.googleServiceAccountJson,
+      serviceAccountJsonBase64: config.googleServiceAccountJsonBase64,
+    },
+    { baseDirectory: path.resolve(__dirname, '../..') },
+  );
   const privateKey = serviceAccount.private_key;
   if (!privateKey) throw new Error('Google service account JSON is missing private_key.');
   const now = Math.floor(Date.now() / 1000);
@@ -175,7 +157,7 @@ export const listPosterPsdFiles = async (folderId = config.googleDrivePostersFol
   return files.filter((file) => file.name.toLowerCase().endsWith('.psd') || psdMimeTypes.includes(file.mimeType));
 };
 
-const findPosterFileForProduct = async (productName: string, files: DrivePosterFile[]) => {
+export const selectPosterFileForProduct = (productName: string, files: DrivePosterFile[]) => {
   const matches = files
     .map((file) => ({ file, score: scorePosterFileName(productName, file.name) }))
     .filter((match) => match.score > 0)
@@ -183,13 +165,15 @@ const findPosterFileForProduct = async (productName: string, files: DrivePosterF
 
   const best = matches[0] ?? null;
   return {
-    best: best && best.score >= 0.45 ? best : null,
+    // Poster templates are product-specific. A false positive is worse than a
+    // missing poster because it applies the prices to somebody else's design.
+    best: best && best.score >= minimumPosterMatchScore ? best : null,
     candidates: matches.slice(0, 5),
   };
 };
 
 export const findPosterPsdForProduct = async (productName: string) =>
-  findPosterFileForProduct(productName, await listPosterPsdFiles());
+  selectPosterFileForProduct(productName, await listPosterPsdFiles());
 
 export const downloadPosterDriveFile = async (fileId: string) => {
   const token = await requestAccessToken();

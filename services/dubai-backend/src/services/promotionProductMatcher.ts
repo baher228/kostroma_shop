@@ -2,7 +2,6 @@ import { PromotionPriceListItem } from '../repositories/promotionPriceListReposi
 
 type PackageMark = {
   grams: number;
-  unit: 'g' | 'kg';
 };
 
 export type PromotionProductMatch = {
@@ -21,6 +20,9 @@ const RU = {
   cooledFull: '\u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u043d\u044b\u0439',
   cooledShort: '\u043e\u0445\u043b',
   cellophane: '\u0446\u0435\u043b\u043b\u043e\u0444',
+  semiSmoked: '\u043f\u043e\u043b\u0443\u043a\u043e\u043f\u0447',
+  boiledSmoked: '\u0432\u0430\u0440\u0435\u043d\u043e\u043a\u043e\u043f\u0447',
+  rawSmoked: '\u0441\u044b\u0440\u043e\u043a\u043e\u043f\u0447',
   vacuum: '\u0432\u0430\u043a',
   packageWord: '\u0443\u043f',
   frozenFull: '\u0437\u0430\u043c\u043e\u0440\u043e\u0436',
@@ -37,9 +39,8 @@ const packagePattern = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${RU.kg}|${RU.gram})\
 
 const stripDecorativeAttributes = (value: string) =>
   value
-    .replace(new RegExp(`${RU.category}\\.?\\s*[\\u0430-\\u044fa-z]`, 'giu'), ' ')
-    .replace(new RegExp(`\\b[\\u0432v]/[\\u043ak]\\b`, 'giu'), ' ')
-    .replace(new RegExp(`${RU.vacuum}\\.?\\s*${RU.packageWord}\\.?`, 'giu'), ' ')
+    .replace(new RegExp(`${RU.category}(?:\\u0435\\u0433\\u043e\\u0440\\u0438\\u044f)?\\.?\\s*[\\u0430-\\u044fa-z](?![\\p{L}])`, 'giu'), ' ')
+    .replace(new RegExp(`${RU.vacuum}(?:\\u0443\\u0443\\u043c\\u043d[\\p{L}]*)?\\.?\\s*${RU.packageWord}(?:\\u0430\\u043a\\u043e\\u0432\\u043a[\\p{L}]*)?\\.?`, 'giu'), ' ')
     .replace(new RegExp(`${RU.frozenFull}\\.?`, 'giu'), ' ')
     .replace(new RegExp(`${RU.frozenShort}\\.?`, 'giu'), ' ')
     .replace(new RegExp(`${RU.packedShort}\\.?`, 'giu'), ' ')
@@ -48,6 +49,12 @@ const stripDecorativeAttributes = (value: string) =>
 
 const normalizeKnownAbbreviations = (value: string) =>
   value
+    .replace(new RegExp(`(?<![\\p{L}])[\\u043fp]\\s*[/\\\\]\\s*[\\u043ak](?![\\p{L}])`, 'giu'), ` ${RU.semiSmoked} `)
+    .replace(new RegExp(`(?<![\\p{L}])[\\u0432v]\\s*[/\\\\]\\s*[\\u043ak](?![\\p{L}])`, 'giu'), ` ${RU.boiledSmoked} `)
+    .replace(new RegExp(`(?<![\\p{L}])[\\u0441c]\\s*[/\\\\]\\s*[\\u043ak](?![\\p{L}])`, 'giu'), ` ${RU.rawSmoked} `)
+    .replace(new RegExp(`\\u043f\\u043e\\u043b\\u0443[\\s-]*\\u043a\\u043e\\u043f\\u0447[\\p{L}]*`, 'giu'), ` ${RU.semiSmoked} `)
+    .replace(new RegExp(`\\u0432\\u0430\\u0440[\\p{L}]*[\\s-]*\\u043a\\u043e\\u043f\\u0447[\\p{L}]*`, 'giu'), ` ${RU.boiledSmoked} `)
+    .replace(new RegExp(`\\u0441\\u044b\\u0440[\\p{L}]*[\\s-]*\\u043a\\u043e\\u043f\\u0447[\\p{L}]*`, 'giu'), ` ${RU.rawSmoked} `)
     .replace(new RegExp(`${RU.cooledFull}`, 'giu'), ` ${RU.cooledShort} `)
     .replace(new RegExp(`${RU.cooledShort}\\.?`, 'giu'), ` ${RU.cooledShort} `)
     .replace(new RegExp(`${RU.cellophane}\\.?[^\\s)]*`, 'giu'), ` ${RU.cellophane} `);
@@ -60,7 +67,6 @@ const extractPackageMarks = (value: string): PackageMark[] => {
     const unit = match[2] === RU.kg ? 'kg' : 'g';
     marks.push({
       grams: unit === 'kg' ? amount * 1000 : amount,
-      unit,
     });
   }
   return marks;
@@ -103,21 +109,16 @@ const tokenSimilarity = (left: string, right: string) => {
 const packageScore = (rawName: string, cleanName: string) => {
   const rawMarks = extractPackageMarks(rawName);
   const cleanMarks = extractPackageMarks(cleanName);
-  if (!rawMarks.length || !cleanMarks.length) return { score: 0, exact: false };
+  if (!rawMarks.length || !cleanMarks.length) return { score: 0, exact: false, conflict: false };
 
   const hasExact = rawMarks.some((raw) =>
     cleanMarks.some((clean) => Math.abs(raw.grams - clean.grams) <= 5),
   );
-  if (hasExact) return { score: 0.25, exact: true };
+  if (hasExact) return { score: 0.25, exact: true, conflict: false };
 
-  const rawHasKg = rawMarks.some((mark) => mark.unit === 'kg' && mark.grams >= 1000);
-  const cleanHasKg = cleanMarks.some((mark) => mark.unit === 'kg');
-  const rawHasSmallGram = rawMarks.some((mark) => mark.unit === 'g' && mark.grams < 1000);
-  const cleanHasSmallGram = cleanMarks.some((mark) => mark.unit === 'g' && mark.grams < 1000);
-
-  if (rawHasKg && cleanHasKg) return { score: 0.04, exact: false };
-  if (rawHasSmallGram && cleanHasSmallGram) return { score: 0.04, exact: false };
-  return { score: -0.18, exact: false };
+  // A stated package is a strong discriminator. A 700 g product must not be
+  // accepted as a 500 g/1 kg product merely because the remaining words match.
+  return { score: -0.45, exact: false, conflict: true };
 };
 
 const quotedTokens = (value: string) => {
@@ -146,6 +147,7 @@ const matchScore = (rawName: string, cleanName: string) => {
   return {
     score: Math.max(0, Math.min(1, base * 0.82 + pack.score + quoteScore(rawName, cleanName))),
     exactPackage: pack.exact,
+    packageConflict: pack.conflict,
   };
 };
 
@@ -159,16 +161,25 @@ const itemMatchScore = (rawName: string, item: PromotionPriceListItem) => {
 export const matchPromotionProduct = (
   rawName: string,
   priceListItems: PromotionPriceListItem[],
+  promoPrice: number | null = null,
 ): PromotionProductMatch | null => {
-  const scored = priceListItems
+  const priceCompatibleItems = promoPrice === null || !Number.isFinite(promoPrice)
+    ? priceListItems
+    : priceListItems.filter((item) => item.regularPrice >= promoPrice);
+
+  const scored = priceCompatibleItems
     .map((item) => ({ item, ...itemMatchScore(rawName, item) }))
     .sort((left, right) => right.score - left.score);
 
   const best = scored[0];
   const second = scored[1];
-  if (!best || best.score < 0.45) return null;
+  if (!best || best.packageConflict || best.score < 0.45) return null;
 
   const margin = second ? best.score - second.score : 1;
   if (margin < 0.04 && !best.exactPackage) return null;
-  return best;
+  return {
+    item: best.item,
+    score: best.score,
+    exactPackage: best.exactPackage,
+  };
 };

@@ -1,9 +1,8 @@
-import fs from 'fs';
-import path from 'path';
 import zlib from 'zlib';
-import { createCanvas, GlobalFonts, SKRSContext2D } from '@napi-rs/canvas';
+import { createCanvas, SKRSContext2D } from '@napi-rs/canvas';
 import { initializeCanvas, Layer, Psd, readPsd } from 'ag-psd';
 import { PromotionTableRow } from '../repositories/promotionRowsRepository';
+import { promotionFont, registerPromotionFonts } from './promotionFonts';
 
 type TextRole = 'oldPrice' | 'currentPrice' | 'benefit' | 'discountPercent';
 
@@ -26,8 +25,6 @@ type Replacement = ParsedTextLayer & {
   value: string;
 };
 
-const FONT_FAMILY = 'GeneratedPosterSans';
-const fontRoot = path.resolve(__dirname, '../../node_modules/pdfjs-dist/standard_fonts');
 const pageWidthPt = 160 / 25.4 * 72;
 
 let initialized = false;
@@ -35,10 +32,7 @@ let initialized = false;
 const initialize = () => {
   if (initialized) return;
   initializeCanvas((width, height) => createCanvas(width, height) as unknown as HTMLCanvasElement);
-  const regular = path.join(fontRoot, 'LiberationSans-Regular.ttf');
-  const bold = path.join(fontRoot, 'LiberationSans-Bold.ttf');
-  if (fs.existsSync(regular)) GlobalFonts.registerFromPath(regular, FONT_FAMILY);
-  if (fs.existsSync(bold)) GlobalFonts.registerFromPath(bold, FONT_FAMILY);
+  registerPromotionFonts();
   initialized = true;
 };
 
@@ -152,12 +146,12 @@ const fitAndDrawText = (ctx: SKRSContext2D, replacement: Replacement) => {
   const maxWidth = Math.max(20, replacement.width * roleMaxWidthScale(replacement.role));
   let size = Math.max(16, Math.round((replacement.fontSize ?? replacement.height * 0.86) * roleSizeScale(replacement.role)));
   while (size > 8) {
-    ctx.font = `bold ${size}px "${FONT_FAMILY}"`;
+    ctx.font = promotionFont(size);
     if (ctx.measureText(replacement.value).width <= maxWidth) break;
     size -= 2;
   }
   ctx.fillStyle = replacement.color ?? (replacement.role === 'discountPercent' ? '#e30613' : '#ffffff');
-  ctx.font = `bold ${size}px "${FONT_FAMILY}"`;
+  ctx.font = promotionFont(size);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(replacement.value, replacement.left + replacement.width / 2, replacement.top + replacement.height / 2);

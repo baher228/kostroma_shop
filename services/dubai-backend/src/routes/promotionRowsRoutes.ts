@@ -13,9 +13,10 @@ import { createGeneratedPosterPdfFromPsd } from '../services/generatedPosterPdfS
 import {
   downloadPosterDriveFile,
   findPosterPsdForProduct,
+  POSTER_NOT_READY_MESSAGE,
   posterPdfContentDisposition,
 } from '../services/googleDrivePosterService';
-import { createPromotionPriceTagPdf, promotionPriceTagFileName } from '../services/promotionPriceTagPdfService';
+import { createPromotionPriceTagPdf, promotionPriceTagContentDisposition } from '../services/promotionPriceTagPdfService';
 
 const statuses = new Set<PromotionRowStatus>(['past', 'current', 'future']);
 
@@ -97,7 +98,7 @@ export const registerPromotionRowsRoutes = (app: Express) => {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Cache-Control', 'no-store, max-age=0');
       res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Content-Disposition', `attachment; filename="${promotionPriceTagFileName(row)}"`);
+      res.setHeader('Content-Disposition', promotionPriceTagContentDisposition(row));
       res.send(pdf);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось сделать ценник.' });
@@ -119,7 +120,7 @@ export const registerPromotionRowsRoutes = (app: Express) => {
       const match = await findPosterPsdForProduct(row.productName);
       if (!match.best) {
         res.status(404).json({
-          message: 'Не удалось найти PSD-постер для этого товара в Google Drive.',
+          message: POSTER_NOT_READY_MESSAGE,
           candidates: match.candidates.map((candidate) => ({
             fileName: candidate.file.name,
             score: candidate.score,

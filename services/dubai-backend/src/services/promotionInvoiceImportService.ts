@@ -127,7 +127,7 @@ export const importPromotionInvoice = async (input: {
   const status = statusForPeriod(period.startDate, period.endDate);
 
   const rows = await upsertPromotionDocumentRows(parsedItems.map((item) => {
-    const match = matchPromotionProduct(item.rawName, priceListItems);
+    const match = matchPromotionProduct(item.rawName, priceListItems, item.promoPrice);
     return {
       status,
       productName: match?.item.productNameClean || item.rawName,

@@ -1,4 +1,5 @@
 import { opsDb } from '../db/opsDb';
+import { rebuildPromotionRowsForClient } from './promotionRowsRepository';
 
 export type PromotionDocumentType = 'invoice' | 'two_month_plan' | 'retail_price_list' | 'final_table_csv';
 
@@ -89,30 +90,28 @@ export const deletePromotionDocumentById = async (documentId: string): Promise<D
       }
 
       let deletedRows = 0;
-      if (row.document_type === 'invoice') {
-        const removed = await client.query(
-          `DELETE FROM promotion_table_rows
-           WHERE invoice_document_id = $1
-              OR source_document_id = $1;`,
+      if (row.document_type === 'invoice' || row.document_type === 'two_month_plan') {
+        const affected = await client.query<{ id: string }>(
+          `SELECT aggregate.id
+           FROM promotion_table_rows aggregate
+           WHERE EXISTS (
+             SELECT 1
+             FROM promotion_row_intervals interval
+             WHERE interval.promotion_row_id = aggregate.id
+               AND interval.source_document_id = $1
+           )
+           ORDER BY aggregate.id
+           FOR UPDATE;`,
           [documentId],
         );
-        deletedRows = removed.rowCount ?? 0;
-      } else if (row.document_type === 'two_month_plan') {
-        const removed = await client.query(
-          `DELETE FROM promotion_table_rows
-           WHERE source_document_id = $1
-             AND invoice_document_id IS NULL;`,
-          [documentId],
-        );
-        deletedRows = removed.rowCount ?? 0;
+        const affectedRowIds = affected.rows.map((item: { id: string }) => item.id);
         await client.query(
-          `UPDATE promotion_table_rows
-           SET plan_document_id = NULL,
-               plan_document_file_name = NULL,
-               updated_at = NOW()
-           WHERE plan_document_id = $1;`,
+          `DELETE FROM promotion_row_intervals
+           WHERE source_document_id = $1;`,
           [documentId],
         );
+        const rebuilt = await rebuildPromotionRowsForClient(client, affectedRowIds);
+        deletedRows = rebuilt.deletedRows;
       }
 
       await client.query(

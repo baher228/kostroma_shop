@@ -15,7 +15,14 @@ import { listPromotionRows } from '../repositories/promotionRowsRepository';
 import { importPromotionInvoice } from '../services/promotionInvoiceImportService';
 import { importPromotionPlan } from '../services/promotionPlanImportService';
 import { importPromotionPriceList } from '../services/promotionPriceListImportService';
-import { deleteObject, downloadObject, uploadObject } from '../services/r2StorageService';
+import {
+  PromotionDocumentFileMissingError,
+  createPromotionDocumentStorageKey,
+  deletePromotionDocumentObjects,
+  downloadPromotionDocument,
+  promotionDocumentDownloadContentType,
+} from '../services/promotionDocumentStorageService';
+import { uploadObject } from '../services/r2StorageService';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -40,9 +47,6 @@ const decodeFileName = (fileName: string) => {
   return decoded.includes('�') ? fileName : decoded;
 };
 
-const safeName = (value: string) =>
-  value.replace(/[^\wа-яА-ЯёЁ. -]+/g, '_').replace(/\s+/g, '_').slice(0, 120);
-
 const documentTypeFromRequest = (raw: unknown): PromotionDocumentType | null => {
   const value = String(raw ?? '').trim();
   return allowedTypes.has(value as PromotionDocumentType) ? value as PromotionDocumentType : null;
@@ -60,9 +64,6 @@ const validateUpload = (documentType: PromotionDocumentType, fileName: string) =
     throw new Error('Прайс розничных цен должен быть в формате XLSX.');
   }
 };
-
-const storageKey = (_documentType: PromotionDocumentType, fileName: string) =>
-  `promotions/documents/${Date.now()}_${safeName(fileName)}`;
 
 const csvEscape = (value: string | number | null) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
@@ -92,7 +93,7 @@ const buildFinalTableCsv = async () => {
 
 const ensureFinalTableCsv = async (req: Request) => {
   const body = await buildFinalTableCsv();
-  const key = storageKey('final_table_csv', 'itogovaya_tablica.csv');
+  const key = createPromotionDocumentStorageKey('final_table_csv', 'itogovaya_tablica.csv');
   await uploadObject({ key, body, contentType: 'text/csv; charset=utf-8' });
   return createPromotionDocument({
     documentType: 'final_table_csv',
@@ -139,7 +140,7 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
         }
         const fileName = decodeFileName(req.file.originalname);
         validateUpload(documentType, fileName);
-        const key = storageKey(documentType, fileName);
+        const key = createPromotionDocumentStorageKey(documentType, fileName);
         await uploadObject({ key, body: req.file.buffer, contentType: req.file.mimetype || 'application/octet-stream' });
         const document = await createPromotionDocument({
           documentType,
@@ -189,14 +190,19 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
         res.status(404).json({ message: 'Документ не найден.' });
         return;
       }
-      const file = await downloadObject(document.storageKey);
-      res.setHeader('Content-Type', file.contentType || document.contentType || 'application/octet-stream');
-      res.setHeader('Content-Length', String(file.contentLength));
+      const file = await downloadPromotionDocument(document);
+      // The database metadata belongs to the selected document id and was
+      // validated during upload. Prefer it over potentially stale object
+      // metadata so an XLSX cannot be advertised as a PDF by R2.
+      res.setHeader('Content-Type', promotionDocumentDownloadContentType(document, file.contentType));
+      res.setHeader('Content-Length', String(file.body.byteLength));
       res.setHeader('Cache-Control', 'no-store, max-age=0');
       res.setHeader('Content-Disposition', contentDisposition(document.fileName));
       res.send(file.body);
     } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось скачать документ.' });
+      res.status(error instanceof PromotionDocumentFileMissingError ? 404 : 400).json({
+        message: error instanceof Error ? error.message : 'Не удалось скачать документ.',
+      });
     }
   });
 
@@ -208,7 +214,7 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
         return;
       }
       try {
-        await deleteObject(deleted.document.storageKey);
+        await deletePromotionDocumentObjects(deleted.document);
       } catch (error) {
         console.warn('Failed to delete promotion document from R2', error);
       }

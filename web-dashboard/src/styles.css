@@ -2371,6 +2371,180 @@ td.sticky {
   min-height: 48px;
 }
 
+.deadline-picker {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 94px;
+  gap: 8px;
+}
+
+.deadline-picker-trigger {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 650;
+  padding: 10px 11px;
+}
+
+.deadline-picker-trigger:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-soft);
+  box-shadow: none;
+  transform: none;
+}
+
+.deadline-picker-icon {
+  color: var(--color-primary-hover);
+  font-size: 16px;
+}
+
+.deadline-time-field {
+  gap: 5px;
+}
+
+.deadline-time-field > span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.deadline-time-field select {
+  min-height: 48px;
+  padding-inline: 9px;
+}
+
+.deadline-calendar {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 316px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 14px rgba(31, 42, 35, 0.12);
+  padding: 12px;
+}
+
+.deadline-calendar-header,
+.deadline-calendar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.deadline-calendar-header strong {
+  color: var(--color-text);
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.deadline-calendar-nav {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-soft);
+  color: var(--color-primary-hover);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0;
+}
+
+.deadline-calendar-nav:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+  box-shadow: none;
+  transform: none;
+}
+
+.deadline-calendar-weekdays,
+.deadline-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.deadline-calendar-weekdays {
+  margin-top: 12px;
+}
+
+.deadline-calendar-weekdays span {
+  color: var(--color-text-soft);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.deadline-calendar-days {
+  margin-top: 6px;
+  row-gap: 2px;
+}
+
+.deadline-calendar-day {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  justify-self: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.deadline-calendar-day:hover:not(:disabled) {
+  border-color: #c6d8cc;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+.deadline-calendar-day.outside {
+  color: #a0aba4;
+}
+
+.deadline-calendar-day.today {
+  border-color: #9fc2ab;
+}
+
+.deadline-calendar-day.selected,
+.deadline-calendar-day.selected:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.deadline-calendar-footer {
+  margin-top: 10px;
+  border-top: 1px solid #e4ebe6;
+  padding-top: 10px;
+}
+
+.deadline-calendar-footer button {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+select,
+input[type='checkbox'],
+input[type='radio'],
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'] {
+  cursor: pointer;
+}
+
 .task-photo-control {
   display: flex;
   min-height: 48px;
@@ -2504,6 +2678,10 @@ td.sticky {
 
   .task-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .deadline-calendar {
+    width: min(316px, calc(100vw - 56px));
   }
 
   .task-composer-footer {

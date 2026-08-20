@@ -1,10 +1,142 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, RefreshButton, Table } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
 import type { Session, Task, Worker } from '../../types';
 
 const statusLabel = (task: Task) => task.status === 'open' ? 'Открыта' : 'Выполнена';
+
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const hour = String(Math.floor(index / 2)).padStart(2, '0');
+  const minute = index % 2 ? '30' : '00';
+  return `${hour}:${minute}`;
+});
+
+const toDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const dateFromKey = (key: string) => {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
+
+const monthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const calendarDays = (month: Date) => {
+  const first = monthStart(month);
+  const offset = (first.getDay() + 6) % 7;
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(first.getFullYear(), first.getMonth(), index - offset + 1);
+    return { date, key: toDateKey(date), inCurrentMonth: date.getMonth() === first.getMonth() };
+  });
+};
+
+const dateLabel = (key: string) => dateFromKey(key).toLocaleDateString('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+
+const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
+  const selectedDateKey = value.slice(0, 10);
+  const selectedTime = value.slice(11, 16) || '09:00';
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(selectedDateKey) ? dateFromKey(selectedDateKey) : null;
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState(() => monthStart(selectedDate ?? new Date()));
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  const chooseDate = (key: string) => {
+    onChange(`${key}T${selectedTime}`);
+    close();
+  };
+
+  return (
+    <div className="deadline-picker" ref={pickerRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="deadline-picker-trigger"
+        aria-label="Выбрать дату дедлайна"
+        aria-expanded={open}
+        onClick={() => {
+          if (!open) setMonth(monthStart(selectedDate ?? new Date()));
+          setOpen((current) => !current);
+        }}
+      >
+        <span>{selectedDate ? dateLabel(selectedDateKey) : 'Выберите дату'}</span>
+        <span className="deadline-picker-icon" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <section className="deadline-calendar" role="dialog" aria-label="Выбор даты дедлайна">
+          <header className="deadline-calendar-header">
+            <button type="button" className="deadline-calendar-nav" aria-label="Предыдущий месяц" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹</button>
+            <strong>{month.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</strong>
+            <button type="button" className="deadline-calendar-nav" aria-label="Следующий месяц" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>›</button>
+          </header>
+          <div className="deadline-calendar-weekdays" aria-hidden="true">
+            {WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
+          </div>
+          <div className="deadline-calendar-days">
+            {calendarDays(month).map(({ date, key, inCurrentMonth }) => (
+              <button
+                key={key}
+                type="button"
+                className={`deadline-calendar-day${inCurrentMonth ? '' : ' outside'}${key === selectedDateKey ? ' selected' : ''}${key === toDateKey(new Date()) ? ' today' : ''}`}
+                aria-label={dateLabel(key)}
+                aria-pressed={key === selectedDateKey}
+                onClick={() => chooseDate(key)}
+              >
+                {date.getDate()}
+              </button>
+            ))}
+          </div>
+          <div className="deadline-calendar-footer">
+            <button type="button" className="ghost" onClick={() => {
+              onChange('');
+              close();
+            }}>Очистить</button>
+            <button type="button" className="secondary" onClick={close}>Готово</button>
+          </div>
+        </section>
+      )}
+      <label className="deadline-time-field">
+        <span>Время</span>
+        <select disabled={!selectedDate} value={selectedTime} onChange={(event) => selectedDate && onChange(`${selectedDateKey}T${event.target.value}`)}>
+          {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
+        </select>
+      </label>
+    </div>
+  );
+};
 
 export const TasksPanel = ({ session }: { session: Session }) => {
   const emptyForm = { title: '', assigneeId: '', deadlineAt: '', requiresPhotoConfirmation: false };
@@ -124,7 +256,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           </label>
           <label className="task-field">
             <span>Дедлайн <small>необязательно</small></span>
-            <input type="datetime-local" value={form.deadlineAt} onChange={(event) => setForm({ ...form, deadlineAt: event.target.value })} />
+            <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt })} />
           </label>
           <label className="task-photo-control">
             <input type="checkbox" checked={form.requiresPhotoConfirmation} onChange={(event) => setForm({ ...form, requiresPhotoConfirmation: event.target.checked })} />

@@ -3,7 +3,7 @@ import { ZodError } from 'zod';
 import { toValidationMessage } from '../http/http';
 import { AuthorizedRequest, requireAuth, requireRole } from '../auth/middleware';
 import { changeTaskStatus, createManagedTask, getVisibleTasks, removeTask } from '../services/taskService';
-import { notifyWorkerOfNewTask } from '../services/notificationService';
+import { notifyTaskAssigneeOfNewTask } from '../services/notificationService';
 import { createTaskSchema, idParamSchema, updateTaskStatusSchema } from '../http/validation';
 
 export const registerTaskRoutes = (app: Express) => {
@@ -23,10 +23,10 @@ export const registerTaskRoutes = (app: Express) => {
       const manager = (req as AuthorizedRequest).user;
       const created = await createManagedTask(manager, payload);
       if (!created) {
-        res.status(400).json({ message: 'Assignee was not found.' });
+        res.status(400).json({ message: 'Store tablet was not found.' });
         return;
       }
-      void notifyWorkerOfNewTask(created).catch((error) => {
+      void notifyTaskAssigneeOfNewTask(created).catch((error) => {
         console.error('Failed to send task notification:', error);
       });
       res.status(201).json({ task: created });

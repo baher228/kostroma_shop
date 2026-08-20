@@ -4,6 +4,7 @@ import {
   assignUserShop,
   createUser,
   deleteUser,
+  listStoreTablets,
   listUsers,
   listWorkers,
   updateUser,
@@ -18,6 +19,8 @@ import {
 import { z } from 'zod';
 
 export const getWorkers = () => listWorkers();
+
+export const getStoreTablets = () => listStoreTablets();
 
 export const getUsers = () => listUsers();
 

@@ -1,18 +1,18 @@
-import { Task, TaskStatus, Worker } from '../types/models';
+import { StoreTablet, Task, TaskStatus } from '../types/models';
 import { request } from './http';
 
 type TasksResponse = { tasks: Task[] };
 type TaskResponse = { task: Task };
-type WorkersResponse = { workers: Worker[] };
+type StoreTabletsResponse = { storeTablets: StoreTablet[] };
 
 export const tasksApi = {
   list: async (token: string): Promise<Task[]> => {
     const result = await request<TasksResponse>('/api/tasks', { token });
     return result.tasks;
   },
-  listWorkers: async (token: string): Promise<Worker[]> => {
-    const result = await request<WorkersResponse>('/api/workers', { token });
-    return result.workers;
+  listStoreTablets: async (token: string): Promise<StoreTablet[]> => {
+    const result = await request<StoreTabletsResponse>('/api/store-tablets', { token });
+    return result.storeTablets;
   },
   create: async (
     token: string,

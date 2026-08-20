@@ -1,6 +1,6 @@
 import { createTask, deleteTask, listTasks, updateTaskStatus } from '../repositories/taskRepository';
 import { SessionUser, Task } from '../domain/types';
-import { findWorkerById } from '../repositories/userRepository';
+import { findStoreTabletById } from '../repositories/userRepository';
 import { createTaskSchema, updateTaskStatusSchema } from '../http/validation';
 import { z } from 'zod';
 
@@ -13,7 +13,7 @@ export const createManagedTask = async (
   manager: SessionUser,
   payload: z.infer<typeof createTaskSchema>,
 ) => {
-  const assignee = await findWorkerById(payload.assigneeId);
+  const assignee = await findStoreTabletById(payload.assigneeId);
   if (!assignee) {
     return null;
   }

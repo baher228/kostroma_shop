@@ -74,11 +74,11 @@ export const findUserById = async (id: string): Promise<SessionUser | null> => {
   return result.rows[0] ? mapSessionUser(result.rows[0]) : null;
 };
 
-export const findWorkerById = async (id: string): Promise<SessionUser | null> => {
+export const findStoreTabletById = async (id: string): Promise<SessionUser | null> => {
   const result = await personalDb.query<UserDbRow>(
     `
       ${userSelect}
-      WHERE u.id = $1 AND u.role = 'worker'
+      WHERE u.id = $1 AND u.role = 'store_tablet'
       LIMIT 1;
     `,
     [id],
@@ -169,6 +169,17 @@ export const assignUserShop = async (userId: string, shopId: string | null): Pro
     [userId],
   );
   return result.rows[0] ? mapSessionUser(result.rows[0]) : null;
+};
+
+export const listStoreTablets = async (): Promise<SessionUser[]> => {
+  const result = await personalDb.query<UserDbRow>(
+    `
+      ${userSelect}
+      WHERE u.role = 'store_tablet'
+      ORDER BY u.shop_id ASC NULLS LAST, u.last_name ASC, u.first_name ASC, u.username ASC;
+    `,
+  );
+  return result.rows.map(mapSessionUser);
 };
 
 export const updateUser = async (

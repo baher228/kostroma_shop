@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, RefreshButton, Table } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
-import type { Session, Task, Worker } from '../../types';
+import type { Session, StoreTablet, Task } from '../../types';
 
 const statusLabel = (task: Task) => task.status === 'open' ? 'Открыта' : 'Выполнена';
 
@@ -170,7 +170,7 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
 export const TasksPanel = ({ session }: { session: Session }) => {
   const emptyForm = { title: '', assigneeId: '', deadlineAt: '', requiresPhotoConfirmation: false };
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -184,10 +184,10 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     setLoading(true);
     setError('');
     try {
-      const [nextTasks, nextWorkers] = await Promise.all([api.tasks.list(session.token), api.tasks.listWorkers(session.token)]);
+      const [nextTasks, nextStoreTablets] = await Promise.all([api.tasks.list(session.token), api.tasks.listStoreTablets(session.token)]);
       setTasks(nextTasks);
-      setWorkers(nextWorkers);
-      setForm((current) => current.assigneeId || !nextWorkers[0] ? current : { ...current, assigneeId: nextWorkers[0].id });
+      setStoreTablets(nextStoreTablets);
+      setForm((current) => current.assigneeId || !nextStoreTablets[0] ? current : { ...current, assigneeId: nextStoreTablets[0].id });
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -204,7 +204,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     setError('');
     setNotice('');
     if (!form.assigneeId) {
-      setError('Выберите сотрудника.');
+      setError('Выберите планшет магазина.');
       return;
     }
     try {
@@ -261,7 +261,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
               {overdueCount ? `${overdueCount} просрочено` : `${openCount} открыто`}
             </span>
           </div>
-          <p>Назначайте задачи сотрудникам и отслеживайте их выполнение.</p>
+          <p>Назначайте задачи планшетам магазинов и отслеживайте их выполнение.</p>
         </div>
         <RefreshButton onClick={load} />
       </header>
@@ -269,7 +269,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       <form className="task-composer" onSubmit={create} aria-busy={saving}>
         <div className="task-composer-intro">
           <h3>Новая задача</h3>
-          <p>Исполнитель получит push-уведомление сразу после назначения.</p>
+          <p>Планшет магазина получит push-уведомление сразу после назначения.</p>
         </div>
         <div className="task-form-grid">
           <label className="task-field task-title-field">
@@ -277,10 +277,10 @@ export const TasksPanel = ({ session }: { session: Session }) => {
             <input required minLength={2} maxLength={240} aria-invalid={Boolean(error)} aria-describedby={error ? 'tasks-feedback' : undefined} placeholder="Например, проверить выкладку у витрины" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
           </label>
           <label className="task-field">
-            <span>Исполнитель</span>
+            <span>Планшет магазина</span>
             <select required aria-invalid={Boolean(error)} aria-describedby={error ? 'tasks-feedback' : undefined} value={form.assigneeId} onChange={(event) => setForm({ ...form, assigneeId: event.target.value })}>
-              <option value="">Выберите сотрудника</option>
-              {workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.fullName}</option>)}
+              <option value="">Выберите планшет</option>
+              {storeTablets.map((tablet) => <option key={tablet.id} value={tablet.id}>{tablet.fullName}</option>)}
             </select>
           </label>
           <div className="task-deadline-row">
@@ -292,25 +292,25 @@ export const TasksPanel = ({ session }: { session: Session }) => {
               <input type="checkbox" checked={form.requiresPhotoConfirmation} onChange={(event) => setForm({ ...form, requiresPhotoConfirmation: event.target.checked })} />
               <span>
                 <strong>Фото-подтверждение</strong>
-                <small>Попросить сотрудника приложить фото</small>
+                <small>Запросить фото после выполнения</small>
               </span>
             </label>
           </div>
         </div>
         <footer className="task-composer-footer">
-          <p id="task-form-hint">{workers.length === 0 && !loading ? 'Сначала создайте сотрудника, чтобы назначить задачу.' : 'Дедлайн можно оставить пустым, если задача без срока.'}</p>
-          <button aria-describedby="task-form-hint" disabled={saving || workers.length === 0}>{saving ? 'Назначаем...' : 'Назначить задачу'}</button>
+          <p id="task-form-hint">{storeTablets.length === 0 && !loading ? 'Сначала создайте планшет магазина, чтобы назначить задачу.' : 'Дедлайн можно оставить пустым, если задача без срока.'}</p>
+          <button aria-describedby="task-form-hint" disabled={saving || storeTablets.length === 0}>{saving ? 'Назначаем...' : 'Назначить задачу'}</button>
         </footer>
       </form>
       {loading ? <p className="tasks-loading">Загружаем задачи...</p> : tasks.length === 0 ? (
         <section className="tasks-empty" aria-live="polite">
           <h3>Пока нет задач</h3>
-          <p>Заполните форму выше, чтобы назначить первую задачу сотруднику.</p>
+          <p>Заполните форму выше, чтобы назначить первую задачу планшету магазина.</p>
         </section>
       ) : (
         <div className="tasks-table">
           <Table>
-          <thead><tr><th scope="col">Задача</th><th scope="col">Исполнитель</th><th scope="col">Статус</th><th scope="col">Дедлайн</th><th scope="col">Фото</th><th scope="col">Действия</th></tr></thead>
+          <thead><tr><th scope="col">Задача</th><th scope="col">Планшет</th><th scope="col">Статус</th><th scope="col">Дедлайн</th><th scope="col">Фото</th><th scope="col">Действия</th></tr></thead>
           <tbody>
             {tasks.map((task) => (
               <tr key={task.id}>

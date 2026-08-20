@@ -3,13 +3,13 @@ import { ZodError } from 'zod';
 import { AuthorizedRequest, requireAuth, requireRole } from '../auth/middleware';
 import { toValidationMessage } from '../http/http';
 import { pushTokenSchema } from '../http/validation';
-import { registerWorkerPushToken, removeWorkerPushToken } from '../services/notificationService';
+import { registerTaskAssigneePushToken, removeTaskAssigneePushToken } from '../services/notificationService';
 
 export const registerNotificationRoutes = (app: Express) => {
-  app.put('/api/notifications/push-token', requireAuth, requireRole('worker'), async (req: Request, res: Response) => {
+  app.put('/api/notifications/push-token', requireAuth, requireRole('store_tablet'), async (req: Request, res: Response) => {
     try {
       const { pushToken } = pushTokenSchema.parse(req.body);
-      await registerWorkerPushToken((req as AuthorizedRequest).user.id, pushToken);
+      await registerTaskAssigneePushToken((req as AuthorizedRequest).user.id, pushToken);
       res.status(204).send();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -20,10 +20,10 @@ export const registerNotificationRoutes = (app: Express) => {
     }
   });
 
-  app.delete('/api/notifications/push-token', requireAuth, requireRole('worker'), async (req: Request, res: Response) => {
+  app.delete('/api/notifications/push-token', requireAuth, requireRole('store_tablet'), async (req: Request, res: Response) => {
     try {
       const { pushToken } = pushTokenSchema.parse(req.body);
-      await removeWorkerPushToken((req as AuthorizedRequest).user.id, pushToken);
+      await removeTaskAssigneePushToken((req as AuthorizedRequest).user.id, pushToken);
       res.status(204).send();
     } catch (error) {
       if (error instanceof ZodError) {

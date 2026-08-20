@@ -6,6 +6,7 @@ import {
   assignManagedUserShop,
   createManagedUser,
   deleteManagedUser,
+  getStoreTablets,
   getUsers,
   getWorkers,
   resetManagedUserPassword,
@@ -20,6 +21,12 @@ import {
 } from '../http/validation';
 
 export const registerUserRoutes = (app: Express) => {
+  app.get('/api/store-tablets', requireAuth, requireRole('manager'), (_req, res) => {
+    getStoreTablets()
+      .then((storeTablets) => res.json({ storeTablets }))
+      .catch(() => res.status(500).json({ message: 'Failed to load store tablets.' }));
+  });
+
   app.get('/api/workers', requireAuth, requireRole('manager'), (_req, res) => {
     getWorkers()
       .then((workers) => res.json({ workers }))

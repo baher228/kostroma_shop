@@ -45,13 +45,13 @@ const tablet = {
   role: 'store_tablet',
 };
 
-test('task service enforces worker ownership and photo confirmation rules', async () => {
+test('task service assigns tasks to store tablets and enforces ownership rules', async () => {
   let createdTaskInput = null;
   const baseTask = {
     id: 'task_1',
     title: 'Check fridge',
-    assigneeId: 'worker_2',
-    assigneeDisplayName: 'Other Worker',
+    assigneeId: tablet.id,
+    assigneeDisplayName: tablet.fullName,
     createdById: 'manager_1',
     createdByDisplayName: 'Main Manager',
     status: 'open',
@@ -74,7 +74,7 @@ test('task service enforces worker ownership and photo confirmation rules', asyn
       updateTaskStatus: async () => ({ ...baseTask, status: 'done' }),
     },
     '../dist/repositories/userRepository': {
-      findWorkerById: async (id) => (id === worker.id ? worker : null),
+      findStoreTabletById: async (id) => (id === tablet.id ? tablet : null),
     },
   });
 
@@ -84,7 +84,7 @@ test('task service enforces worker ownership and photo confirmation rules', asyn
   );
   assert.deepEqual(
     await changeTaskStatus(tablet, 'task_1', { status: 'done' }),
-    { status: 'forbidden' },
+    { status: 'photo_required' },
   );
   assert.deepEqual(
     await changeTaskStatus(manager, 'task_1', { status: 'done' }),
@@ -100,17 +100,17 @@ test('task service enforces worker ownership and photo confirmation rules', asyn
 
   const created = await createManagedTask(manager, {
     title: 'Check delivery',
-    assigneeId: worker.id,
+    assigneeId: tablet.id,
     deadlineAt: null,
     requiresPhotoConfirmation: false,
   });
-  assert.equal(created.assigneeId, worker.id);
+  assert.equal(created.assigneeId, tablet.id);
   assert.equal(created.createdById, manager.id);
-  assert.equal(createdTaskInput.assigneeDisplayName, worker.fullName);
+  assert.equal(createdTaskInput.assigneeDisplayName, tablet.fullName);
   assert.equal(
     await createManagedTask(manager, {
-      title: 'Missing worker',
-      assigneeId: 'missing',
+      title: 'Worker cannot be assigned',
+      assigneeId: worker.id,
       deadlineAt: null,
       requiresPhotoConfirmation: false,
     }),
@@ -136,7 +136,7 @@ test('task notification sounds on the tasks channel and removes invalid devices'
   };
 
   try {
-    const { notifyWorkerOfNewTask } = loadWithMock('../dist/services/notificationService', {
+    const { notifyTaskAssigneeOfNewTask } = loadWithMock('../dist/services/notificationService', {
       '../dist/repositories/notificationRepository': {
         savePushToken: async () => undefined,
         listPushTokens: async () => ['ExpoPushToken[first]', 'ExpoPushToken[stale]'],
@@ -146,8 +146,8 @@ test('task notification sounds on the tasks channel and removes invalid devices'
     const task = {
       id: 'task_1',
       title: 'Check fridge',
-      assigneeId: worker.id,
-      assigneeDisplayName: worker.fullName,
+      assigneeId: tablet.id,
+      assigneeDisplayName: tablet.fullName,
       createdById: manager.id,
       createdByDisplayName: manager.fullName,
       status: 'open',
@@ -160,7 +160,7 @@ test('task notification sounds on the tasks channel and removes invalid devices'
       overdue: false,
     };
 
-    await notifyWorkerOfNewTask(task);
+    await notifyTaskAssigneeOfNewTask(task);
     const messages = JSON.parse(requestBody);
     assert.equal(messages[0].channelId, 'tasks');
     assert.equal(messages[0].sound, 'default');
@@ -183,6 +183,7 @@ test('user service prevents deleting the current user before repository access',
       },
       listUsers: async () => [],
       listWorkers: async () => [],
+      listStoreTablets: async () => [],
       updateUser: async () => null,
       updateUserPassword: async () => false,
     },

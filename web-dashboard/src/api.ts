@@ -16,7 +16,7 @@ import {
   StockTable,
   Task,
   TaskStatus,
-  Worker,
+  StoreTablet,
 } from './types';
 import { downloadFileName } from './downloadFileName';
 
@@ -278,7 +278,7 @@ export const api = {
   },
   tasks: {
     list: async (token: string) => (await ruRequest<{ tasks: Task[] }>('/api/tasks', { token })).tasks,
-    listWorkers: async (token: string) => (await ruRequest<{ workers: Worker[] }>('/api/workers', { token })).workers,
+    listStoreTablets: async (token: string) => (await ruRequest<{ storeTablets: StoreTablet[] }>('/api/store-tablets', { token })).storeTablets,
     create: async (
       token: string,
       payload: { title: string; assigneeId: string; deadlineAt: string | null; requiresPhotoConfirmation: boolean },

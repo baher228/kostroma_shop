@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { tasksApi } from "../api/tasks";
-import { Session, Task, TaskStatus, Worker } from "../types/models";
+import { Session, StoreTablet, Task, TaskStatus } from "../types/models";
 
 type TasksPanelProps = {
   session: Session;
@@ -103,11 +103,11 @@ const buildDeadlineIso = (dateKey: string | null, time: string) => {
 
 export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: TasksPanelProps) => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [title, setTitle] = useState("");
-  const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [selectedTabletId, setSelectedTabletId] = useState("");
   const [savingTask, setSavingTask] = useState(false);
   const [deadlineDate, setDeadlineDate] = useState<string | null>(null);
   const [pendingDeadlineDate, setPendingDeadlineDate] = useState<string | null>(null);
@@ -126,9 +126,9 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
     [calendarMonthCursor],
   );
 
-  const selectedWorkerName =
-    workers.find((worker) => worker.id === selectedWorkerId)?.fullName ??
-    "Выберите сотрудника";
+  const selectedTabletName =
+    storeTablets.find((tablet) => tablet.id === selectedTabletId)?.fullName ??
+    "Выберите планшет";
 
   const setTaskPending = (taskId: string, value: boolean) => {
     setPendingTaskIds((current) => ({ ...current, [taskId]: value }));
@@ -146,13 +146,13 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
       setLoading(true);
       setError("");
       if (canManage) {
-        const [nextTasks, nextWorkers] = await Promise.all([
+        const [nextTasks, nextStoreTablets] = await Promise.all([
           tasksApi.list(session.token),
-          tasksApi.listWorkers(session.token),
+          tasksApi.listStoreTablets(session.token),
         ]);
         setTasks(nextTasks);
-        setWorkers(nextWorkers);
-        setSelectedWorkerId((current) => current || nextWorkers[0]?.id || "");
+        setStoreTablets(nextStoreTablets);
+        setSelectedTabletId((current) => current || nextStoreTablets[0]?.id || "");
       } else {
         const nextTasks = await tasksApi.list(session.token);
         setTasks(nextTasks);
@@ -178,8 +178,8 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
       setError("Введите текст задачи.");
       return;
     }
-    if (!selectedWorkerId) {
-      setError("Выберите сотрудника.");
+    if (!selectedTabletId) {
+      setError("Выберите планшет магазина.");
       return;
     }
     try {
@@ -187,7 +187,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
       const created = await tasksApi.create(
         session.token,
         normalizedTitle,
-        selectedWorkerId,
+        selectedTabletId,
         buildDeadlineIso(deadlineDate, deadlineTime),
         requiresPhotoConfirmation,
       );
@@ -260,7 +260,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
       />
 
       <View style={styles.selectorGroup}>
-        <Text style={styles.selectorLabel}>Исполнитель</Text>
+        <Text style={styles.selectorLabel}>Планшет магазина</Text>
         <Pressable
           style={styles.dropdownTrigger}
           onPress={() => {
@@ -269,27 +269,27 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
             setShowTimeDropdown(false);
           }}
         >
-          <Text style={styles.dropdownText}>{selectedWorkerName}</Text>
+          <Text style={styles.dropdownText}>{selectedTabletName}</Text>
           <Text style={styles.dropdownArrow}>{showAssigneeDropdown ? "▲" : "▼"}</Text>
         </Pressable>
         {showAssigneeDropdown && (
           <View style={styles.dropdownMenu}>
             <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
-              {workers.map((worker) => {
-                const active = worker.id === selectedWorkerId;
+              {storeTablets.map((tablet) => {
+                const active = tablet.id === selectedTabletId;
                 return (
                   <Pressable
-                    key={worker.id}
+                    key={tablet.id}
                     style={[styles.dropdownItem, active && styles.dropdownItemActive]}
                     onPress={() => {
-                      setSelectedWorkerId(worker.id);
+                      setSelectedTabletId(tablet.id);
                       setShowAssigneeDropdown(false);
                     }}
                   >
                     <Text
                       style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}
                     >
-                      {worker.fullName}
+                      {tablet.fullName}
                     </Text>
                   </Pressable>
                 );
@@ -510,7 +510,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
                   {canManage
-                    ? `Исполнитель: ${task.assigneeDisplayName}`
+                    ? `Планшет: ${task.assigneeDisplayName}`
                     : `Поставил: ${task.createdByDisplayName}`}{" "}
                   · {statusLabel(task.status)}
                 </Text>

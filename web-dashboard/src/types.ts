@@ -79,7 +79,7 @@ export type Task = {
   overdue: boolean;
 };
 
-export type Worker = Pick<SessionUser, 'id' | 'username' | 'firstName' | 'lastName' | 'fullName'>;
+export type StoreTablet = Pick<SessionUser, 'id' | 'username' | 'firstName' | 'lastName' | 'fullName' | 'shopId'>;
 
 export type SellerOrder = {
   id: string;

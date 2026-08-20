@@ -34,7 +34,7 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
   const viewedVersionRef = useRef(0);
   const storageKey = unreadStorageKey(session.user.id);
   const viewedKey = viewedStorageKey(session.user.id);
-  const isWorker = session.user.role === 'worker';
+  const isTaskAssignee = session.user.role === 'store_tablet';
 
   const markUnreadTasks = useCallback(() => {
     unreadVersionRef.current += 1;
@@ -72,7 +72,7 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
   }, [storageKey]);
 
   useEffect(() => {
-    if (!isWorker) return;
+    if (!isTaskAssignee) return;
     let active = true;
     const viewedVersion = viewedVersionRef.current;
     void Promise.all([AsyncStorage.getItem(viewedKey), tasksApi.list(session.token)])
@@ -86,10 +86,10 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
     return () => {
       active = false;
     };
-  }, [isWorker, markUnreadTasks, session.token, viewedKey]);
+  }, [isTaskAssignee, markUnreadTasks, session.token, viewedKey]);
 
   useEffect(() => {
-    if (!isWorker || Platform.OS === 'web') return;
+    if (!isTaskAssignee || Platform.OS === 'web') return;
 
     const register = async () => {
       if (Platform.OS === 'android') {
@@ -121,10 +121,10 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
       void notificationsApi.registerPushToken(session.token, data).catch(() => undefined);
     });
     return () => tokenSubscription.remove();
-  }, [isWorker, session.token]);
+  }, [isTaskAssignee, session.token]);
 
   useEffect(() => {
-    if (!isWorker || Platform.OS === 'web') return;
+    if (!isTaskAssignee || Platform.OS === 'web') return;
 
     const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
       if (isTaskNotification(notification)) markUnreadTasks();
@@ -146,14 +146,14 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
       receivedSubscription.remove();
       responseSubscription.remove();
     };
-  }, [isWorker, markUnreadTasks, onOpenTasks]);
+  }, [isTaskAssignee, markUnreadTasks, onOpenTasks]);
 
   const unregisterPushToken = useCallback(async () => {
     const pushToken = pushTokenRef.current;
-    if (!isWorker || !pushToken) return;
+    if (!isTaskAssignee || !pushToken) return;
     await notificationsApi.removePushToken(session.token, pushToken).catch(() => undefined);
     pushTokenRef.current = null;
-  }, [isWorker, session.token]);
+  }, [isTaskAssignee, session.token]);
 
   return { hasUnreadTasks, markTasksViewed, taskNotificationVersion, unregisterPushToken };
 };

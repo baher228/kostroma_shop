@@ -98,7 +98,7 @@ export type Task = {
   overdue: boolean;
 };
 
-export type Worker = {
+export type StoreTablet = {
   id: string;
   username: string;
   firstName: string;

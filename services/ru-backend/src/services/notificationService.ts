@@ -11,11 +11,11 @@ type ExpoPushTicket = {
 
 type ExpoPushResponse = { data?: ExpoPushTicket[] };
 
-export const registerWorkerPushToken = (userId: string, token: string) => savePushToken(userId, token);
+export const registerTaskAssigneePushToken = (userId: string, token: string) => savePushToken(userId, token);
 
-export const removeWorkerPushToken = (userId: string, token: string) => deletePushToken(userId, token);
+export const removeTaskAssigneePushToken = (userId: string, token: string) => deletePushToken(userId, token);
 
-export const notifyWorkerOfNewTask = async (task: Task) => {
+export const notifyTaskAssigneeOfNewTask = async (task: Task) => {
   const tokens = await listPushTokens(task.assigneeId);
   for (let start = 0; start < tokens.length; start += 100) {
     const batch = tokens.slice(start, start + 100);

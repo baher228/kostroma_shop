@@ -46,7 +46,7 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
   const selectedDateKey = value.slice(0, 10);
   const selectedTime = value.slice(11, 16) || '09:00';
   const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(selectedDateKey) ? dateFromKey(selectedDateKey) : null;
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<'date' | 'time' | null>(null);
   const [month, setMonth] = useState(() => monthStart(selectedDate ?? new Date()));
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -54,11 +54,11 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      setOpen(false);
+      setOpen(null);
       triggerRef.current?.focus();
     };
     document.addEventListener('pointerdown', onPointerDown);
@@ -70,7 +70,7 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
   }, [open]);
 
   const close = () => {
-    setOpen(false);
+    setOpen(null);
     triggerRef.current?.focus();
   };
 
@@ -86,16 +86,16 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
         type="button"
         className="deadline-picker-trigger"
         aria-label="Выбрать дату дедлайна"
-        aria-expanded={open}
+        aria-expanded={open === 'date'}
         onClick={() => {
-          if (!open) setMonth(monthStart(selectedDate ?? new Date()));
-          setOpen((current) => !current);
+          if (open !== 'date') setMonth(monthStart(selectedDate ?? new Date()));
+          setOpen((current) => current === 'date' ? null : 'date');
         }}
       >
         <span>{selectedDate ? dateLabel(selectedDateKey) : 'Выберите дату'}</span>
         <span className="deadline-picker-icon" aria-hidden="true">▾</span>
       </button>
-      {open && (
+      {open === 'date' && (
         <section className="deadline-calendar" role="dialog" aria-label="Выбор даты дедлайна">
           <header className="deadline-calendar-header">
             <button type="button" className="deadline-calendar-nav" aria-label="Предыдущий месяц" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹</button>
@@ -128,12 +128,41 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
           </div>
         </section>
       )}
-      <label className="deadline-time-field">
-        <span>Время</span>
-        <select disabled={!selectedDate} value={selectedTime} onChange={(event) => selectedDate && onChange(`${selectedDateKey}T${event.target.value}`)}>
-          {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
-        </select>
-      </label>
+      <button
+        type="button"
+        className="deadline-time-trigger"
+        aria-label="Выбрать время дедлайна"
+        aria-expanded={open === 'time'}
+        title={selectedDate ? undefined : 'Сначала выберите дату'}
+        disabled={!selectedDate}
+        onClick={() => setOpen((current) => current === 'time' ? null : 'time')}
+      >
+        <span>{selectedTime}</span>
+        <span className="deadline-picker-icon" aria-hidden="true">▾</span>
+      </button>
+      {open === 'time' && selectedDate && (
+        <section className="deadline-time-menu" role="dialog" aria-label="Выбор времени дедлайна">
+          <header>
+            <strong>Время</strong>
+            <span>{dateLabel(selectedDateKey)}</span>
+          </header>
+          <div className="deadline-time-options">
+            {TIME_OPTIONS.map((time) => (
+              <button
+                key={time}
+                type="button"
+                className={time === selectedTime ? 'selected' : ''}
+                onClick={() => {
+                  onChange(`${selectedDateKey}T${time}`);
+                  close();
+                }}
+              >
+                {time}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 };
@@ -254,17 +283,19 @@ export const TasksPanel = ({ session }: { session: Session }) => {
               {workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.fullName}</option>)}
             </select>
           </label>
-          <label className="task-field">
-            <span>Дедлайн <small>необязательно</small></span>
-            <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt })} />
-          </label>
-          <label className="task-photo-control">
-            <input type="checkbox" checked={form.requiresPhotoConfirmation} onChange={(event) => setForm({ ...form, requiresPhotoConfirmation: event.target.checked })} />
-            <span>
-              <strong>Фото-подтверждение</strong>
-              <small>Попросить сотрудника приложить фото</small>
-            </span>
-          </label>
+          <div className="task-deadline-row">
+            <label className="task-field task-deadline-field">
+              <span>Дедлайн <small>необязательно</small></span>
+              <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt })} />
+            </label>
+            <label className="task-photo-control">
+              <input type="checkbox" checked={form.requiresPhotoConfirmation} onChange={(event) => setForm({ ...form, requiresPhotoConfirmation: event.target.checked })} />
+              <span>
+                <strong>Фото-подтверждение</strong>
+                <small>Попросить сотрудника приложить фото</small>
+              </span>
+            </label>
+          </div>
         </div>
         <footer className="task-composer-footer">
           <p id="task-form-hint">{workers.length === 0 && !loading ? 'Сначала создайте сотрудника, чтобы назначить задачу.' : 'Дедлайн можно оставить пустым, если задача без срока.'}</p>

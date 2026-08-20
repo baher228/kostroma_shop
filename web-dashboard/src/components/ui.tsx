@@ -18,10 +18,10 @@ export const Metric = ({ label, value, hint }: { label: string; value: React.Rea
   </article>
 );
 
-export const Feedback = ({ error, notice }: { error?: string; notice?: string }) => (
+export const Feedback = ({ error, notice, id }: { error?: string; notice?: string; id?: string }) => (
   <>
-    {error && <p className="error">{error}</p>}
-    {notice && <p className="notice">{notice}</p>}
+    {error && <p className="error" id={id} role="alert">{error}</p>}
+    {notice && <p className="notice" role="status">{notice}</p>}
   </>
 );
 

@@ -96,7 +96,8 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
           ))}
         </nav>
         <div className="account-box">
-          <span>{session.user.fullName}</span>
+          <span className="account-avatar" aria-hidden="true">{session.user.fullName.trim().charAt(0).toUpperCase()}</span>
+          <span className="account-name" title={session.user.fullName}>{session.user.fullName}</span>
           <button className="secondary" onClick={onLogout}>Выйти</button>
         </div>
       </header>

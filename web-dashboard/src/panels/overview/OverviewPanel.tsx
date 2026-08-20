@@ -4,7 +4,7 @@ import { Metric, PageHeader } from '../../components/ui';
 import { addDays, startOfWeek } from '../../dateUtils';
 import type { CheckInStats, ManagedUser, SellerOrder, Session, Shop } from '../../types';
 
-type OverviewSection = 'overview' | 'attendance' | 'users' | 'shops' | 'products' | 'orders' | 'app';
+type OverviewSection = 'overview' | 'attendance' | 'users' | 'tasks' | 'shops' | 'products' | 'orders' | 'app';
 
 export const OverviewPanel = ({
   session,
@@ -45,6 +45,7 @@ export const OverviewPanel = ({
         {[
           ['Посещаемость', 'Статусы работников, часы, опоздания и графики.', 'attendance'],
           ['Пользователи', 'Создание, роли, привязка к магазинам и сброс пароля.', 'users'],
+          ['Задачи', 'Назначение задач сотрудникам и контроль выполнения.', 'tasks'],
           ['Остатки', 'Менеджерская таблица остатков, заказов и продаж.', 'products'],
           ['Заказ', 'Сводная таблица заказов по магазинам, машинам и товарам.', 'orders'],
           ['Приложение', 'Скачать актуальный APK для Android.', 'app'],

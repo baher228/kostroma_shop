@@ -54,6 +54,7 @@ import {
   orderUnitsFromPacks,
   sanitizeOrderValue,
 } from '../../../shared/dashboard-calculations';
+import { managerProductName } from '../../../shared/product-display';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob';
@@ -870,7 +871,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
               <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
                 <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
-                  {row.name}
+                  {managerProductName(row.name)}
                 </Text>
               </View>
             </View>
@@ -1012,7 +1013,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
                 <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
                   <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
-                    {row.name}
+                    {managerProductName(row.name)}
                   </Text>
                   {!!reference && (
                     <Text numberOfLines={1} ellipsizeMode="tail" style={styles.referenceText}>

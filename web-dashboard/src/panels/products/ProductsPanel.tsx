@@ -31,6 +31,7 @@ import {
 import { intOrZero, messageOf, normalizeText, numberOrZero } from '../../shared/format';
 import type { Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
 import type { BusinessCategory } from '../../types';
+import { managerProductName } from '../../../../shared/product-display';
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
@@ -328,7 +329,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               return (
                 <tr key={row.productId}>
                   <td className="manager-name-col">
-                    <strong>{row.name}</strong>
+                    <strong>{managerProductName(row.name)}</strong>
                     <small>{productReferenceLabel(row)}</small>
                   </td>
                   {DASHBOARD_COLUMNS.map((column) => {
@@ -417,7 +418,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <tr><td colSpan={(table?.dates.length ?? 0) * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row) => (
               <tr key={row.productId}>
-                <td className="manager-name-col"><strong>{row.name}</strong><small>{productReferenceLabel(row)}</small></td>
+                <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
                 {(table?.dates ?? []).map((date) => {
                   const orderDate = activeBusinessCategory === 'Деликатесы'
                     ? nearestDelicaciesOrderDate(date)

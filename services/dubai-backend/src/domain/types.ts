@@ -29,7 +29,7 @@ export type Shop = {
 export const PRODUCT_CATEGORIES = ['Йогурты', 'Кефир, Ряженка, Снежок', 'Молоко', 'Сметана', 'Творог'] as const;
 export type ProductCategory = string;
 export const DEFAULT_PRODUCT_CATEGORY: ProductCategory = PRODUCT_CATEGORIES[0];
-export const BUSINESS_CATEGORIES = ['Хлеб', 'Молоко', 'Деликатесы', 'Сыр'] as const;
+export const BUSINESS_CATEGORIES = ['Хлеб', 'Молоко', 'Деликатесы', 'Сыр', 'Мороженое'] as const;
 export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number];
 export const DEFAULT_BUSINESS_CATEGORY: BusinessCategory = 'Молоко';
 

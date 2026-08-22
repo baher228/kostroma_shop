@@ -48,6 +48,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     Молоко: [...PRODUCT_CATEGORIES],
     Деликатесы: [],
     Сыр: [],
+    Мороженое: [],
   });
   const [newSubcategoryName, setNewSubcategoryName] = useState('');
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);

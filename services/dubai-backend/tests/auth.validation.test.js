@@ -162,6 +162,18 @@ test('Dubai stock schemas validate operational fields', () => {
   });
   assert.equal(product.name, 'Apples');
   assert.equal(product.unitsInPack, 6);
+  assert.equal(createRowSchema.parse({
+    name: 'Пломбир 15% 70г',
+    businessCategory: 'Мороженое',
+    category: 'Мороженое',
+    packType: 'короб',
+    unitsInPack: 18,
+    packWeightKg: 1.8,
+    shelfLifeDays: 1,
+    unitPriceRubVat: 0,
+    minStockUnits: 0,
+    maxStockUnits: 0,
+  }).businessCategory, 'Мороженое');
   assert.throws(() => createRowSchema.parse({
     name: 'Missing category',
     packType: 'ПЭТ',

@@ -4,7 +4,70 @@ import { Feedback, RefreshButton, Table } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
 import type { Session, StoreTablet, Task } from '../../types';
 
-const statusLabel = (task: Task) => task.status === 'open' ? 'Открыта' : 'Выполнена';
+const statusLabel = (task: Task) => {
+  if (task.photoReviewStatus === 'pending') return 'На проверке';
+  if (task.photoReviewStatus === 'declined') return 'Фото отклонено';
+  if (task.photoReviewStatus === 'approved') return 'Подтверждена';
+  return task.status === 'open' ? 'Открыта' : 'Выполнена';
+};
+
+const photoStatusLabel = (task: Task) => {
+  if (!task.requiresPhotoConfirmation) return '—';
+  if (task.photoReviewStatus === 'pending') return 'Ожидает review';
+  if (task.photoReviewStatus === 'approved') return 'Approved';
+  if (task.photoReviewStatus === 'declined') return 'Declined';
+  return 'Ожидается';
+};
+
+const TaskPhotoPreview = ({ token, task }: { token: string; task: Task }) => {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!task.photoConfirmationUrl) {
+      setPhotoUrl(null);
+      setError('');
+      return;
+    }
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    api.tasks.photoBlob(token, task.id)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPhotoUrl(objectUrl);
+        setError('');
+      })
+      .catch((err) => {
+        if (!cancelled) setError(messageOf(err));
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [task.id, task.photoConfirmationUrl, token]);
+
+  if (!task.photoConfirmationUrl) {
+    return <span>{photoStatusLabel(task)}</span>;
+  }
+
+  if (error) {
+    return <span className="task-photo-error">{error}</span>;
+  }
+
+  if (!photoUrl) {
+    return <span>Загружаем фото...</span>;
+  }
+
+  return (
+    <a className="task-photo-preview" href={photoUrl} target="_blank" rel="noreferrer">
+      <img src={photoUrl} alt={`Фото-подтверждение: ${task.title}`} />
+      <span>{photoStatusLabel(task)}</span>
+    </a>
+  );
+};
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
@@ -237,6 +300,19 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     }
   };
 
+  const reviewPhoto = async (task: Task, decision: 'approve' | 'decline') => {
+    try {
+      setPendingId(task.id);
+      const updated = await api.tasks.reviewPhoto(session.token, task.id, decision);
+      setTasks((current) => current.map((item) => item.id === task.id ? updated : item));
+      setNotice(decision === 'approve' ? 'Фото подтверждено. Оно удалится через час.' : 'Фото отклонено. Задача снова открыта, фото удалится через час.');
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setPendingId(null);
+    }
+  };
+
   const remove = async (task: Task) => {
     if (!window.confirm(`Удалить задачу «${task.title}»?`)) return;
     try {
@@ -316,13 +392,20 @@ export const TasksPanel = ({ session }: { session: Session }) => {
               <tr key={task.id}>
                 <td className="task-name-cell"><strong>{task.title}</strong><small>Создана {formatDateTime(task.createdAt)}</small></td>
                 <td>{task.assigneeDisplayName}</td>
-                <td><span className={`pill ${task.overdue ? 'overdue' : task.status === 'open' ? 'new' : 'processed'}`}>{task.overdue ? 'Просрочена' : statusLabel(task)}</span></td>
+                <td><span className={`pill ${task.overdue ? 'overdue' : task.photoReviewStatus === 'pending' ? 'new' : task.status === 'open' ? 'new' : 'processed'}`}>{task.overdue ? 'Просрочена' : statusLabel(task)}</span></td>
                 <td>{task.deadlineAt ? formatDateTime(task.deadlineAt) : 'Без дедлайна'}</td>
-                <td>{task.photoConfirmationUrl ? <a className="task-photo-link" href={task.photoConfirmationUrl} target="_blank" rel="noreferrer">Открыть фото</a> : task.requiresPhotoConfirmation ? 'Ожидается' : '—'}</td>
+                <td><TaskPhotoPreview token={session.token} task={task} /></td>
                 <td className="actions">
-                  <button className="secondary" onClick={() => void updateStatus(task)} disabled={pendingId === task.id}>
-                    {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
-                  </button>
+                  {task.photoReviewStatus === 'pending' ? (
+                    <>
+                      <button className="secondary" onClick={() => void reviewPhoto(task, 'approve')} disabled={pendingId === task.id}>Approve</button>
+                      <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
+                    </>
+                  ) : (
+                    <button className="secondary" onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
+                      {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
+                    </button>
+                  )}
                   <button className="danger" onClick={() => void remove(task)} disabled={pendingId === task.id}>Удалить</button>
                 </td>
               </tr>

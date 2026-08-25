@@ -58,6 +58,7 @@ services:
       PERSONAL_POSTGRES_PASSWORD: analitika_dev_password
       PERSONAL_POSTGRES_DB: analitika_personal
       PERSONAL_POSTGRES_SSL: "false"
+      TASK_PHOTO_DIR: /tmp/analitika-task-photos
     ports:
       - "4000:4000"
 

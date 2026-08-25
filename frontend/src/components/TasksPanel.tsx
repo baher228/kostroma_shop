@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { tasksApi } from "../api/tasks";
 import { Session, StoreTablet, Task, TaskStatus } from "../types/models";
 
@@ -66,6 +68,14 @@ const toDateKey = (date: Date) => {
 const statusLabel = (status: TaskStatus) =>
   status === "open" ? "Открыта" : "Выполнена";
 
+const reviewLabel = (task: Task) => {
+  if (!task.requiresPhotoConfirmation) return "";
+  if (task.photoReviewStatus === "pending") return "Фото на проверке";
+  if (task.photoReviewStatus === "approved") return "Фото подтверждено";
+  if (task.photoReviewStatus === "declined") return "Фото отклонено";
+  return "Требуется фото-подтверждение";
+};
+
 const monthTitle = (date: Date) =>
   date.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
 
@@ -102,6 +112,8 @@ const buildDeadlineIso = (dateKey: string | null, time: string) => {
 };
 
 export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: TasksPanelProps) => {
+  const cameraRef = useRef<CameraView | null>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,6 +130,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [requiresPhotoConfirmation, setRequiresPhotoConfirmation] = useState(false);
   const [pendingTaskIds, setPendingTaskIds] = useState<Record<string, boolean>>({});
+  const [cameraTaskId, setCameraTaskId] = useState<string | null>(null);
 
   const canManage = session.user.role === "manager";
 
@@ -213,6 +226,67 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
       setError("");
     } catch (updateError) {
       setError(errorMessage(updateError));
+      await loadTasks();
+    } finally {
+      setTaskPending(task.id, false);
+    }
+  };
+
+  const beginPhotoConfirmation = async (task: Task) => {
+    if (cameraPermission?.granted) {
+      setCameraTaskId(task.id);
+      setError("");
+      return;
+    }
+
+    if (cameraPermission && !cameraPermission.canAskAgain) {
+      Alert.alert(
+        "Нет доступа к камере",
+        "Разрешите камеру в настройках устройства, чтобы прикрепить фото к задаче.",
+        [
+          { text: "Отмена", style: "cancel" },
+          { text: "Настройки", onPress: () => void Linking.openSettings() },
+        ],
+      );
+      return;
+    }
+
+    const permission = await requestCameraPermission();
+    if (permission.granted) {
+      setCameraTaskId(task.id);
+      setError("");
+    } else {
+      setError("Камера нужна, чтобы прикрепить фото-подтверждение.");
+    }
+  };
+
+  const completeTask = async (task: Task) => {
+    if (task.requiresPhotoConfirmation && task.photoReviewStatus !== "approved") {
+      await beginPhotoConfirmation(task);
+      return;
+    }
+    await setStatus(task, "done");
+  };
+
+  const captureTaskPhoto = async (task: Task) => {
+    const camera = cameraRef.current;
+    if (!camera) {
+      setError("Камера еще не готова.");
+      return;
+    }
+    try {
+      setTaskPending(task.id, true);
+      const photo = await camera.takePictureAsync({ base64: true, quality: 0.6 });
+      if (!photo?.base64) {
+        setError("Не удалось получить фото. Попробуйте еще раз.");
+        return;
+      }
+      const updated = await tasksApi.uploadPhoto(session.token, task.id, `data:image/jpeg;base64,${photo.base64}`);
+      setTasks((current) => current.map((item) => (item.id === task.id ? updated : item)));
+      setCameraTaskId(null);
+      setError("");
+    } catch (photoError) {
+      setError(errorMessage(photoError));
       await loadTasks();
     } finally {
       setTaskPending(task.id, false);
@@ -522,8 +596,29 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                   <Text style={styles.taskDate}>Выполнена: {formatDate(task.completedAt)}</Text>
                 )}
                 {task.overdue && <Text style={styles.error}>Просрочена</Text>}
-                {task.requiresPhotoConfirmation && (
-                  <Text style={styles.taskMeta}>Требуется фото-подтверждение</Text>
+                {!!reviewLabel(task) && (
+                  <Text style={styles.taskMeta}>{reviewLabel(task)}</Text>
+                )}
+                {cameraTaskId === task.id && (
+                  <View style={styles.photoCameraBox}>
+                    <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
+                    <View style={styles.photoCameraActions}>
+                      <Pressable
+                        style={[styles.actionButton, styles.statusButton]}
+                        onPress={() => void captureTaskPhoto(task)}
+                        disabled={pending}
+                      >
+                        <Text style={styles.actionButtonText}>{pending ? "Отправляем..." : "Снять и отправить"}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.actionButton, styles.cancelButton]}
+                        onPress={() => setCameraTaskId(null)}
+                        disabled={pending}
+                      >
+                        <Text style={styles.cancelButtonText}>Отмена</Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 )}
                 <View style={styles.taskActions}>
                   {canManage ? (
@@ -548,10 +643,15 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                   ) : task.status === "open" ? (
                     <Pressable
                       style={[styles.actionButton, styles.statusButton]}
-                      onPress={() => setStatus(task, "done")}
+                      onPress={() => void completeTask(task)}
+                      disabled={pending}
                     >
-                      <Text style={styles.actionButtonText}>Выполнено</Text>
+                      <Text style={styles.actionButtonText}>
+                        {task.requiresPhotoConfirmation && task.photoReviewStatus !== "approved" ? "Сделать фото" : "Выполнено"}
+                      </Text>
                     </Pressable>
+                  ) : task.photoReviewStatus === "pending" ? (
+                    <Text style={styles.doneText}>На проверке</Text>
                   ) : (
                     <Text style={styles.doneText}>Завершено</Text>
                   )}
@@ -888,8 +988,18 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: "#9f4038",
   },
+  cancelButton: {
+    backgroundColor: "#edf3ee",
+    borderWidth: 1,
+    borderColor: "#c8d3ca",
+  },
   actionButtonText: {
     color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  cancelButtonText: {
+    color: "#334b3d",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -897,5 +1007,22 @@ const styles = StyleSheet.create({
     color: "#496050",
     fontSize: 12,
     fontWeight: "700",
+  },
+  photoCameraBox: {
+    marginTop: 8,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#c6d3c8",
+    backgroundColor: "#17251c",
+  },
+  photoCamera: {
+    height: 260,
+  },
+  photoCameraActions: {
+    flexDirection: "row",
+    gap: 8,
+    padding: 8,
+    backgroundColor: "#ffffff",
   },
 });

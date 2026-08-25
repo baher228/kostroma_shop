@@ -42,6 +42,7 @@ services:
       PERSONAL_POSTGRES_PASSWORD: ${PERSONAL_POSTGRES_PASSWORD:?Set PERSONAL_POSTGRES_PASSWORD}
       PERSONAL_POSTGRES_DB: ${PERSONAL_POSTGRES_DB:-analitika_personal}
       PERSONAL_POSTGRES_SSL: "false"
+      TASK_PHOTO_DIR: /tmp/analitika-task-photos
     ports:
       - "${RU_BACKEND_PUBLIC_PORT:-4000}:4000"
 

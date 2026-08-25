@@ -1,10 +1,23 @@
-import { createTask, deleteTask, listTasks, updateTaskStatus } from '../repositories/taskRepository';
+import {
+  attachTaskPhoto,
+  createTask,
+  deleteTask,
+  detachExpiredTaskPhotos,
+  getTaskPhotoFile,
+  listTasks,
+  reviewTaskPhoto,
+  updateTaskStatus,
+} from '../repositories/taskRepository';
 import { SessionUser, Task } from '../domain/types';
 import { findStoreTabletById } from '../repositories/userRepository';
-import { createTaskSchema, updateTaskStatusSchema } from '../http/validation';
+import { createTaskSchema, reviewTaskPhotoSchema, updateTaskStatusSchema, uploadTaskPhotoSchema } from '../http/validation';
+import { deleteTaskPhotoFile, readTaskPhoto, saveTaskPhoto } from './taskPhotoStorageService';
 import { z } from 'zod';
 
 export const getVisibleTasks = async (user: SessionUser) => {
+  void cleanupExpiredTaskPhotos().catch((error) => {
+    console.error('Failed to clean up expired task photos:', error);
+  });
   const tasks = await listTasks();
   return user.role === 'manager' ? tasks : tasks.filter((task) => task.assigneeId === user.id);
 };
@@ -47,15 +60,93 @@ export const changeTaskStatus = async (
   if (user.role !== 'manager' && payload.status === 'open') {
     return { status: 'forbidden' };
   }
-  if (payload.status === 'done' && target.requiresPhotoConfirmation && !payload.photoConfirmationUrl && !target.photoConfirmationUrl) {
+  if (payload.status === 'done' && target.requiresPhotoConfirmation && target.photoReviewStatus !== 'approved') {
     return { status: 'photo_required' };
   }
 
-  const task = await updateTaskStatus(taskId, payload.status, payload.photoConfirmationUrl);
+  const task = await updateTaskStatus(taskId, payload.status);
   if (!task) {
     return { status: 'not_found' };
   }
   return { status: 'updated', task };
 };
 
-export const removeTask = (taskId: string) => deleteTask(taskId);
+export const uploadTaskPhotoConfirmation = async (
+  user: SessionUser,
+  taskId: string,
+  payload: z.infer<typeof uploadTaskPhotoSchema>,
+): Promise<
+  | { status: 'updated'; task: Task }
+  | { status: 'not_found' | 'forbidden' | 'photo_not_required' }
+> => {
+  const tasks = await listTasks();
+  const target = tasks.find((task) => task.id === taskId);
+  if (!target) return { status: 'not_found' };
+  if (target.assigneeId !== user.id && user.role !== 'manager') return { status: 'forbidden' };
+  if (!target.requiresPhotoConfirmation) return { status: 'photo_not_required' };
+
+  const previousPhoto = await getTaskPhotoFile(taskId);
+  const saved = await saveTaskPhoto(payload.photoDataUrl);
+  const task = await attachTaskPhoto(taskId, saved.fileName, saved.mimeType);
+  if (!task) {
+    await deleteTaskPhotoFile(saved.fileName);
+    return { status: 'not_found' };
+  }
+  if (previousPhoto && previousPhoto.fileName !== saved.fileName) {
+    await deleteTaskPhotoFile(previousPhoto.fileName);
+  }
+  return { status: 'updated', task };
+};
+
+export const reviewTaskPhotoConfirmation = async (
+  user: SessionUser,
+  taskId: string,
+  payload: z.infer<typeof reviewTaskPhotoSchema>,
+): Promise<
+  | { status: 'updated'; task: Task }
+  | { status: 'not_found' | 'forbidden' | 'photo_missing' | 'review_not_ready' }
+> => {
+  if (user.role !== 'manager') return { status: 'forbidden' };
+  const tasks = await listTasks();
+  const target = tasks.find((task) => task.id === taskId);
+  if (!target) return { status: 'not_found' };
+  if (!target.photoConfirmationUrl) return { status: 'photo_missing' };
+  if (target.photoReviewStatus !== 'pending') return { status: 'review_not_ready' };
+
+  const task = await reviewTaskPhoto(taskId, payload.decision);
+  if (!task) return { status: 'not_found' };
+  return { status: 'updated', task };
+};
+
+export const readTaskPhotoConfirmation = async (
+  user: SessionUser,
+  taskId: string,
+): Promise<
+  | { status: 'found'; photo: Buffer; mimeType: string }
+  | { status: 'not_found' | 'forbidden' }
+> => {
+  const tasks = await listTasks();
+  const target = tasks.find((task) => task.id === taskId);
+  if (!target) return { status: 'not_found' };
+  if (user.role !== 'manager' && target.assigneeId !== user.id) return { status: 'forbidden' };
+
+  const photoFile = await getTaskPhotoFile(taskId);
+  if (!photoFile) return { status: 'not_found' };
+  const photo = await readTaskPhoto(photoFile.fileName);
+  if (!photo) return { status: 'not_found' };
+  return { status: 'found', photo, mimeType: photoFile.mimeType };
+};
+
+export const cleanupExpiredTaskPhotos = async () => {
+  const expiredFileNames = await detachExpiredTaskPhotos();
+  await Promise.all(expiredFileNames.map((fileName) => deleteTaskPhotoFile(fileName)));
+};
+
+export const removeTask = async (taskId: string) => {
+  const photoFile = await getTaskPhotoFile(taskId);
+  const removed = await deleteTask(taskId);
+  if (removed && photoFile) {
+    await deleteTaskPhotoFile(photoFile.fileName);
+  }
+  return removed;
+};

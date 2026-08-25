@@ -61,20 +61,48 @@ test('task service assigns tasks to store tablets and enforces ownership rules',
     requiresPhotoConfirmation: true,
     photoConfirmationUrl: null,
     photoConfirmedAt: null,
+    photoReviewStatus: 'none',
+    photoReviewedAt: null,
+    photoDeletesAt: null,
     overdue: false,
   };
-  const { changeTaskStatus, createManagedTask } = loadWithMock('../dist/services/taskService', {
+  let currentTask = baseTask;
+  let attachedPhoto = null;
+  let reviewedDecision = null;
+  const { changeTaskStatus, createManagedTask, reviewTaskPhotoConfirmation, uploadTaskPhotoConfirmation } = loadWithMock('../dist/services/taskService', {
     '../dist/repositories/taskRepository': {
+      attachTaskPhoto: async (_id, fileName, mimeType) => {
+        attachedPhoto = { fileName, mimeType };
+        currentTask = { ...baseTask, status: 'done', photoConfirmationUrl: '/api/tasks/task_1/photo', photoReviewStatus: 'pending' };
+        return currentTask;
+      },
       createTask: async (input) => {
         createdTaskInput = input;
         return { ...baseTask, ...input, id: 'task_created', status: 'open' };
       },
       deleteTask: async () => false,
-      listTasks: async () => [baseTask],
+      detachExpiredTaskPhotos: async () => [],
+      getTaskPhotoFile: async () => null,
+      listTasks: async () => [currentTask],
+      reviewTaskPhoto: async (_id, decision) => {
+        reviewedDecision = decision;
+        return {
+          ...baseTask,
+          status: decision === 'approve' ? 'done' : 'open',
+          photoConfirmationUrl: '/api/tasks/task_1/photo',
+          photoReviewStatus: decision === 'approve' ? 'approved' : 'declined',
+          photoDeletesAt: '2026-05-17T08:00:00.000Z',
+        };
+      },
       updateTaskStatus: async () => ({ ...baseTask, status: 'done' }),
     },
     '../dist/repositories/userRepository': {
       findStoreTabletById: async (id) => (id === tablet.id ? tablet : null),
+    },
+    '../dist/services/taskPhotoStorageService': {
+      deleteTaskPhotoFile: async () => undefined,
+      readTaskPhoto: async () => null,
+      saveTaskPhoto: async () => ({ fileName: 'photo.jpg', mimeType: 'image/jpeg' }),
     },
   });
 
@@ -91,12 +119,18 @@ test('task service assigns tasks to store tablets and enforces ownership rules',
     { status: 'photo_required' },
   );
 
-  const updated = await changeTaskStatus(manager, 'task_1', {
-    status: 'done',
-    photoConfirmationUrl: 'https://example.com/photo.jpg',
+  const uploaded = await uploadTaskPhotoConfirmation(tablet, 'task_1', {
+    photoDataUrl: 'data:image/jpeg;base64,aGVsbG8=',
   });
-  assert.equal(updated.status, 'updated');
-  assert.equal(updated.task.status, 'done');
+  assert.equal(uploaded.status, 'updated');
+  assert.equal(uploaded.task.status, 'done');
+  assert.equal(uploaded.task.photoReviewStatus, 'pending');
+  assert.deepEqual(attachedPhoto, { fileName: 'photo.jpg', mimeType: 'image/jpeg' });
+
+  const reviewed = await reviewTaskPhotoConfirmation(manager, 'task_1', { decision: 'approve' });
+  assert.equal(reviewed.status, 'updated');
+  assert.equal(reviewed.task.photoReviewStatus, 'approved');
+  assert.equal(reviewedDecision, 'approve');
 
   const created = await createManagedTask(manager, {
     title: 'Check delivery',
@@ -157,6 +191,9 @@ test('task notification sounds on the tasks channel and removes invalid devices'
       requiresPhotoConfirmation: false,
       photoConfirmationUrl: null,
       photoConfirmedAt: null,
+      photoReviewStatus: 'none',
+      photoReviewedAt: null,
+      photoDeletesAt: null,
       overdue: false,
     };
 

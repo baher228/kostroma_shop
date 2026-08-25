@@ -134,6 +134,20 @@ const makeBlobRequest = async (baseUrl: string, path: string, bearerToken: strin
   return response.blob();
 };
 
+const makeImageBlobRequest = async (baseUrl: string, path: string, bearerToken: string): Promise<Blob> => {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: {
+      Accept: 'image/*',
+      Authorization: `Bearer ${bearerToken}`,
+    },
+  });
+  if (!response.ok) {
+    const parsed = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new ApiError(parsed?.message || 'Request failed.', response.status);
+  }
+  return response.blob();
+};
+
 const makeDownloadBlobRequest = async (
   baseUrl: string,
   path: string,
@@ -285,6 +299,10 @@ export const api = {
     ) => (await ruRequest<{ task: Task }>('/api/tasks', { method: 'POST', token, body: payload })).task,
     updateStatus: async (token: string, taskId: string, status: TaskStatus) =>
       (await ruRequest<{ task: Task }>(`/api/tasks/${taskId}/status`, { method: 'PATCH', token, body: { status } })).task,
+    reviewPhoto: async (token: string, taskId: string, decision: 'approve' | 'decline') =>
+      (await ruRequest<{ task: Task }>(`/api/tasks/${taskId}/photo/review`, { method: 'PATCH', token, body: { decision } })).task,
+    photoBlob: async (token: string, taskId: string) =>
+      makeImageBlobRequest(RU_API_BASE_URL, `/api/tasks/${taskId}/photo`, token),
     delete: async (token: string, taskId: string) => {
       await ruRequest<{}>(`/api/tasks/${taskId}`, { method: 'DELETE', token });
     },

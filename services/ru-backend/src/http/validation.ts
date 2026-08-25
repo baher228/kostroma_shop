@@ -105,7 +105,16 @@ export const createTaskSchema = z.object({
 
 export const updateTaskStatusSchema = z.object({
   status: z.enum(['open', 'done']),
-  photoConfirmationUrl: z.string().trim().url().optional().nullable(),
+});
+
+export const uploadTaskPhotoSchema = z.object({
+  photoDataUrl: z
+    .string()
+    .regex(/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\s]+$/, 'Invalid photo payload.'),
+});
+
+export const reviewTaskPhotoSchema = z.object({
+  decision: z.enum(['approve', 'decline']),
 });
 
 export const pushTokenSchema = z.object({

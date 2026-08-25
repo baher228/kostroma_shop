@@ -2735,6 +2735,32 @@ input[type='datetime-local'] {
   text-underline-offset: 3px;
 }
 
+.task-photo-preview {
+  display: grid;
+  width: 136px;
+  gap: 6px;
+  color: var(--color-primary-hover);
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.task-photo-preview img {
+  display: block;
+  width: 136px;
+  height: 92px;
+  border: 1px solid #d9e4dc;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f2f6f2;
+}
+
+.task-photo-error {
+  color: #9f4038;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 1560px) {
   .site-header {
     grid-template-columns: minmax(0, 1fr) max-content;

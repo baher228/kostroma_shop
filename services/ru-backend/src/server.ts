@@ -1,9 +1,18 @@
 import { config } from './config/config';
 import { runMigrations } from './db/migrate';
 import { createRussiaApp } from './app/russiaApp';
+import { cleanupExpiredTaskPhotos } from './services/taskService';
 
 const startServer = async () => {
   await runMigrations();
+  void cleanupExpiredTaskPhotos().catch((error) => {
+    console.error('Failed to clean up expired task photos:', error);
+  });
+  setInterval(() => {
+    void cleanupExpiredTaskPhotos().catch((error) => {
+      console.error('Failed to clean up expired task photos:', error);
+    });
+  }, 5 * 60 * 1000).unref();
   const app = createRussiaApp();
   app.listen(config.port, () => {
     console.log(`RU backend started on port ${config.port}`);

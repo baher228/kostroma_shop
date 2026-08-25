@@ -1,5 +1,5 @@
 import { personalDb } from '../db/personalDb';
-import { Task, TaskStatus } from '../domain/types';
+import { Task, TaskPhotoReviewStatus, TaskStatus } from '../domain/types';
 
 type TaskDbRow = {
   id: string;
@@ -14,7 +14,13 @@ type TaskDbRow = {
   deadline_at: Date | string | null;
   requires_photo_confirmation: boolean;
   photo_confirmation_url: string | null;
+  photo_confirmation_file_name: string | null;
+  photo_confirmation_mime_type: string | null;
+  photo_confirmation_uploaded_at: Date | string | null;
   photo_confirmed_at: Date | string | null;
+  photo_review_status: TaskPhotoReviewStatus;
+  photo_reviewed_at: Date | string | null;
+  photo_deletes_at: Date | string | null;
 };
 
 const normalizeTitle = (value: string) => value.trim().replace(/\s+/g, ' ').slice(0, 240);
@@ -44,8 +50,11 @@ const mapTask = (row: TaskDbRow): Task => ({
   completedAt: toIso(row.completed_at),
   deadlineAt: toIso(row.deadline_at),
   requiresPhotoConfirmation: row.requires_photo_confirmation,
-  photoConfirmationUrl: row.photo_confirmation_url,
+  photoConfirmationUrl: row.photo_confirmation_file_name ? `/api/tasks/${encodeURIComponent(row.id)}/photo` : row.photo_confirmation_url,
   photoConfirmedAt: toIso(row.photo_confirmed_at),
+  photoReviewStatus: row.photo_review_status,
+  photoReviewedAt: toIso(row.photo_reviewed_at),
+  photoDeletesAt: toIso(row.photo_deletes_at),
   overdue: isOverdue(row),
 });
 
@@ -62,7 +71,13 @@ const selectFields = `
   deadline_at,
   requires_photo_confirmation,
   photo_confirmation_url,
-  photo_confirmed_at
+  photo_confirmation_file_name,
+  photo_confirmation_mime_type,
+  photo_confirmation_uploaded_at,
+  photo_confirmed_at,
+  photo_review_status,
+  photo_reviewed_at,
+  photo_deletes_at
 `;
 
 export const listTasks = async (): Promise<Task[]> => {
@@ -85,8 +100,10 @@ export const createTask = async (input: {
       INSERT INTO tasks (
         id, title, assignee_id, assignee_display_name, created_by_id, created_by_display_name,
         status, created_at, completed_at, deadline_at, requires_photo_confirmation,
-        photo_confirmation_url, photo_confirmed_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL,$7,$8,NULL,NULL,NOW())
+        photo_confirmation_url, photo_confirmation_file_name, photo_confirmation_mime_type,
+        photo_confirmation_uploaded_at, photo_confirmed_at, photo_review_status,
+        photo_reviewed_at, photo_deletes_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL,$7,$8,NULL,NULL,NULL,NULL,'none',NULL,NULL,NOW())
       RETURNING ${selectFields};
     `,
     [
@@ -106,7 +123,6 @@ export const createTask = async (input: {
 export const updateTaskStatus = async (
   id: string,
   status: TaskStatus,
-  photoConfirmationUrl?: string | null,
 ): Promise<Task | null> => {
   const result = await personalDb.query<TaskDbRow>(
     `
@@ -114,16 +130,115 @@ export const updateTaskStatus = async (
       SET
         status = $2,
         completed_at = CASE WHEN $2 = 'done' THEN NOW() ELSE NULL END,
-        photo_confirmation_url = COALESCE($3, photo_confirmation_url),
-        photo_confirmed_at = CASE WHEN $3 IS NOT NULL THEN NOW() ELSE photo_confirmed_at END,
+        photo_review_status = CASE
+          WHEN $2 = 'open' THEN 'none'
+          ELSE photo_review_status
+        END,
         updated_at = NOW()
       WHERE id = $1
       RETURNING ${selectFields};
     `,
-    [id, status, photoConfirmationUrl ?? null],
+    [id, status],
   );
   if (result.rowCount === 0) return null;
   return mapTask(result.rows[0]);
+};
+
+export const attachTaskPhoto = async (
+  id: string,
+  fileName: string,
+  mimeType: string,
+): Promise<Task | null> => {
+  const result = await personalDb.query<TaskDbRow>(
+    `
+      UPDATE tasks
+      SET
+        status = 'done',
+        completed_at = COALESCE(completed_at, NOW()),
+        photo_confirmation_url = NULL,
+        photo_confirmation_file_name = $2,
+        photo_confirmation_mime_type = $3,
+        photo_confirmation_uploaded_at = NOW(),
+        photo_confirmed_at = NOW(),
+        photo_review_status = 'pending',
+        photo_reviewed_at = NULL,
+        photo_deletes_at = NULL,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING ${selectFields};
+    `,
+    [id, fileName, mimeType],
+  );
+  if (result.rowCount === 0) return null;
+  return mapTask(result.rows[0]);
+};
+
+export const reviewTaskPhoto = async (
+  id: string,
+  decision: 'approve' | 'decline',
+): Promise<Task | null> => {
+  const nextStatus: TaskStatus = decision === 'approve' ? 'done' : 'open';
+  const nextPhotoReviewStatus: TaskPhotoReviewStatus = decision === 'approve' ? 'approved' : 'declined';
+  const result = await personalDb.query<TaskDbRow>(
+    `
+      UPDATE tasks
+      SET
+        status = $2,
+        completed_at = CASE WHEN $2 = 'done' THEN completed_at ELSE NULL END,
+        photo_review_status = $3,
+        photo_reviewed_at = NOW(),
+        photo_deletes_at = NOW() + INTERVAL '1 hour',
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING ${selectFields};
+    `,
+    [id, nextStatus, nextPhotoReviewStatus],
+  );
+  if (result.rowCount === 0) return null;
+  return mapTask(result.rows[0]);
+};
+
+export const getTaskPhotoFile = async (id: string): Promise<{
+  fileName: string;
+  mimeType: string;
+} | null> => {
+  const result = await personalDb.query<Pick<TaskDbRow, 'photo_confirmation_file_name' | 'photo_confirmation_mime_type'>>(
+    `
+      SELECT photo_confirmation_file_name, photo_confirmation_mime_type
+      FROM tasks
+      WHERE id = $1 AND photo_confirmation_file_name IS NOT NULL;
+    `,
+    [id],
+  );
+  const row = result.rows[0];
+  if (!row?.photo_confirmation_file_name) return null;
+  return {
+    fileName: row.photo_confirmation_file_name,
+    mimeType: row.photo_confirmation_mime_type || 'application/octet-stream',
+  };
+};
+
+export const detachExpiredTaskPhotos = async (): Promise<string[]> => {
+  const result = await personalDb.query<Pick<TaskDbRow, 'photo_confirmation_file_name'>>(
+    `
+      UPDATE tasks
+      SET
+        photo_confirmation_file_name = NULL,
+        photo_confirmation_mime_type = NULL,
+        photo_confirmation_uploaded_at = NULL,
+        photo_confirmation_url = NULL,
+        photo_deletes_at = NULL,
+        updated_at = NOW()
+      WHERE photo_confirmation_file_name IS NOT NULL
+        AND photo_deletes_at IS NOT NULL
+        AND photo_deletes_at <= NOW()
+      RETURNING photo_confirmation_file_name;
+    `,
+  );
+  const rows = result.rows as Array<Pick<TaskDbRow, 'photo_confirmation_file_name'>>;
+  return rows
+    .map((row: Pick<TaskDbRow, 'photo_confirmation_file_name'>) => row.photo_confirmation_file_name)
+    .filter((fileName: string | null): fileName is string => Boolean(fileName));
 };
 
 export const deleteTask = async (id: string): Promise<boolean> => {

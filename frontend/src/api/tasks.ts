@@ -32,12 +32,23 @@ export const tasksApi = {
     token: string,
     taskId: string,
     status: TaskStatus,
-    photoConfirmationUrl?: string | null,
   ): Promise<Task> => {
     const result = await request<TaskResponse>(`/api/tasks/${taskId}/status`, {
       method: 'PATCH',
       token,
-      body: { status, photoConfirmationUrl: photoConfirmationUrl ?? null },
+      body: { status },
+    });
+    return result.task;
+  },
+  uploadPhoto: async (
+    token: string,
+    taskId: string,
+    photoDataUrl: string,
+  ): Promise<Task> => {
+    const result = await request<TaskResponse>(`/api/tasks/${taskId}/photo`, {
+      method: 'POST',
+      token,
+      body: { photoDataUrl },
     });
     return result.task;
   },

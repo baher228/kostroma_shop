@@ -95,6 +95,7 @@ export type StockTable = {
 };
 
 export type TaskStatus = 'open' | 'done';
+export type TaskPhotoReviewStatus = 'none' | 'pending' | 'approved' | 'declined';
 
 export type Task = {
   id: string;
@@ -110,6 +111,9 @@ export type Task = {
   requiresPhotoConfirmation: boolean;
   photoConfirmationUrl: string | null;
   photoConfirmedAt: string | null;
+  photoReviewStatus: TaskPhotoReviewStatus;
+  photoReviewedAt: string | null;
+  photoDeletesAt: string | null;
   overdue: boolean;
 };
 

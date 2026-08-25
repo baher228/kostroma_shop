@@ -11,5 +11,5 @@ export const applyAppMiddleware = (app: Express) => {
       credentials: false,
     }),
   );
-  app.use(json({ limit: '200kb' }));
+  app.use(json({ limit: '8mb' }));
 };

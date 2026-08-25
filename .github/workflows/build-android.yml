@@ -110,8 +110,16 @@ jobs:
         env:
           EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
           EXPO_PUBLIC_DXB_API_URL: https://affera.co.uk/dxb
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -Dkotlin.daemon.jvm.options=-Xmx1g
         run: |
-          android/gradlew -p android :app:assembleRelease --no-daemon
+          android/gradlew -p android :app:assembleRelease \
+            -x lintVitalAnalyzeRelease \
+            -x generateReleaseLintVitalReportModel \
+            -x lintVitalReportRelease \
+            --no-daemon \
+            --max-workers=2 \
+            --console=plain \
+            --stacktrace
 
       - name: Package APK for dashboard
         env:

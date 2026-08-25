@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: EAS build profile
+        description: APK build profile
         required: true
         default: preview
         type: choice
@@ -17,6 +17,7 @@ on:
       - 'App.tsx'
       - 'index.ts'
       - 'app.json'
+      - 'app.config.js'
       - 'eas.json'
       - 'package.json'
       - 'package-lock.json'
@@ -45,20 +46,15 @@ jobs:
             apk_prefix: analitika-fob
             manifest_name: analitika-worker-latest.json
     env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EXPO_WORKER_EAS_PROJECT_ID: ${{ vars.EXPO_WORKER_EAS_PROJECT_ID }}
       BUILD_PROFILE: ${{ inputs.profile || 'preview' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Preflight Expo config
+      - name: Preflight Android build config
         shell: bash
         run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "::error::EXPO_TOKEN is not configured for the expo-production environment"
-            exit 1
-          fi
           if [ "${{ matrix.key }}" = "worker" ] && [ -z "$EXPO_WORKER_EAS_PROJECT_ID" ]; then
             echo "::error::EXPO_WORKER_EAS_PROJECT_ID is not configured for the expo-production environment"
             exit 1
@@ -68,18 +64,24 @@ jobs:
             exit 1
           fi
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: ${{ matrix.lockfile }}
-
-      - name: Setup Expo and EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
         working-directory: ${{ matrix.directory }}
@@ -95,11 +97,21 @@ jobs:
             npm run frontend:typecheck
           fi
 
-      - name: Build Android APK with EAS
+      - name: Generate Android project
         working-directory: ${{ matrix.directory }}
+        env:
+          EXPO_UPDATE_CHANNEL: ${{ env.BUILD_PROFILE }}
+          EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
+          EXPO_PUBLIC_DXB_API_URL: https://affera.co.uk/dxb
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Build Android APK with Gradle
+        working-directory: ${{ matrix.directory }}
+        env:
+          EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
+          EXPO_PUBLIC_DXB_API_URL: https://affera.co.uk/dxb
         run: |
-          eas build --platform android --profile "$BUILD_PROFILE" --non-interactive --wait --json > eas-build.json
-          cat eas-build.json
+          android/gradlew -p android :app:assembleRelease --no-daemon
 
       - name: Package APK for dashboard
         env:
@@ -114,22 +126,9 @@ jobs:
           APP_VERSION="$(node -p "require('./${APP_DIR}/app.json').expo.version")"
           SHORT_SHA="${GITHUB_SHA::7}"
           APK_NAME="${APK_PREFIX}-v${APP_VERSION}-${SHORT_SHA}.apk"
-          BUILD_JSON="${APP_DIR}/eas-build.json"
-          APK_URL="$(BUILD_JSON="$BUILD_JSON" node <<'NODE'
-          const fs = require('fs');
-          const raw = fs.readFileSync(process.env.BUILD_JSON, 'utf8');
-          const start = raw.search(/[\[{]/);
-          const data = JSON.parse(start >= 0 ? raw.slice(start) : raw);
-          const build = Array.isArray(data) ? data[0] : data;
-          const url = build?.artifacts?.buildUrl || build?.artifactUrl || build?.buildUrl;
-          if (!url) {
-            console.error('Could not find APK artifact URL in EAS output.');
-            process.exit(1);
-          }
-          process.stdout.write(url);
-          NODE
-          )"
-          curl --fail --location --show-error "$APK_URL" --output "$OUTPUT_DIR/$APK_NAME"
+          APK_SOURCE="${APP_DIR}/android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_SOURCE"
+          cp "$APK_SOURCE" "$OUTPUT_DIR/$APK_NAME"
           APP_VERSION="$APP_VERSION" APK_NAME="$APK_NAME" SHORT_SHA="$SHORT_SHA" \
             MANIFEST_NAME="$MANIFEST_NAME" OUTPUT_DIR="$OUTPUT_DIR" node <<'NODE'
           const fs = require('fs');

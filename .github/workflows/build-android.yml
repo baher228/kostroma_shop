@@ -113,6 +113,7 @@ jobs:
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -Dkotlin.daemon.jvm.options=-Xmx1g
         run: |
           android/gradlew -p android :app:assembleRelease \
+            -x lintVitalRelease \
             -x lintVitalAnalyzeRelease \
             -x generateReleaseLintVitalReportModel \
             -x lintVitalReportRelease \

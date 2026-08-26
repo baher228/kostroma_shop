@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, PageHeader, RefreshButton } from '../../components/ui';
 import { BUSINESS_CATEGORIES, DEFAULT_BUSINESS_CATEGORY, MACHINE_NUMBERS, PRODUCT_CATEGORIES, type MachineGroup } from '../../dashboardConfig';
@@ -36,6 +36,9 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
 
   const load = async (targetDate = date): Promise<OrderSheet | null> => {
     setLoading(true);
@@ -132,6 +135,24 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
   const machineGroups = useMemo<MachineGroup[]>(() => {
     return groupShopsByMachine(sheet);
   }, [sheet]);
+
+  useEffect(() => {
+    const scrollArea = tableScrollRef.current;
+    if (!scrollArea) return;
+    const updateScrollWidth = () => setTableScrollWidth(scrollArea.scrollWidth);
+    updateScrollWidth();
+    const observer = new ResizeObserver(updateScrollWidth);
+    observer.observe(scrollArea);
+    const table = scrollArea.querySelector('table');
+    if (table) observer.observe(table);
+    return () => observer.disconnect();
+  }, [sheet]);
+
+  const syncHorizontalScroll = (source: HTMLDivElement, target: HTMLDivElement | null) => {
+    if (target && target.scrollLeft !== source.scrollLeft) {
+      target.scrollLeft = source.scrollLeft;
+    }
+  };
 
   const rowValue = (row: OrderSheetRow, shopId: string): number => row.shopValues[shopId] ?? 0;
   const machineTotal = (row: OrderSheetRow, shops: Shop[]): number =>
@@ -274,7 +295,20 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
             <strong>Заказ на {formatDateLabel(sheet.date)}</strong>
             <span>Магазинов: {sheet.shops.length}</span>
           </div>
-          <div className="order-sheet-scroll">
+          <div
+            ref={topScrollRef}
+            className="order-sheet-top-scroll"
+            aria-label="Горизонтальная прокрутка таблицы заказов"
+            tabIndex={0}
+            onScroll={(event) => syncHorizontalScroll(event.currentTarget, tableScrollRef.current)}
+          >
+            <div style={{ width: tableScrollWidth }} />
+          </div>
+          <div
+            ref={tableScrollRef}
+            className="order-sheet-scroll"
+            onScroll={(event) => syncHorizontalScroll(event.currentTarget, topScrollRef.current)}
+          >
             <table className="order-sheet-table">
               <thead>
                 <tr className="machine-row">

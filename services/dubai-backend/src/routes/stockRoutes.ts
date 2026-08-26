@@ -192,8 +192,9 @@ export const registerStockRoutes = (app: Express) => {
     }
   });
 
-  app.get('/api/stock/order-values', requireOpsRole('manager'), requireOpsScope('orders:read'), async (req: Request, res: Response) => {
+  app.get('/api/stock/order-values', requireOpsScope('orders:read'), async (req: Request, res: Response) => {
     try {
+      const viewer = (req as AuthorizedOpsRequest).ops;
       const shopId = toStringParam(req.query.shopId);
       const from = toStringParam(req.query.from);
       const to = toStringParam(req.query.to);
@@ -203,7 +204,11 @@ export const registerStockRoutes = (app: Express) => {
         return;
       }
       const query = listStockTableQuerySchema.pick({ businessCategory: true }).parse({ businessCategory });
-      const orderValues = await getShopOrderValues(shopId, from, to, query.businessCategory);
+      const orderValues = await getShopOrderValues(viewer, shopId, from, to, query.businessCategory);
+      if (!orderValues) {
+        res.status(403).json({ message: 'Not enough Dubai API permissions.' });
+        return;
+      }
       res.json({ orderValues });
     } catch {
       res.status(500).json({ message: 'Failed to load order values.' });

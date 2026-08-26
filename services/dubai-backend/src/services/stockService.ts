@@ -54,8 +54,18 @@ export const setStockValue = (
   payload: z.infer<typeof upsertStockValueSchema>,
 ) => upsertStockValue(viewer, payload);
 
-export const getShopOrderValues = (shopId: string, from: string, to: string, businessCategory?: BusinessCategory) =>
-  listOrderSheetValues(shopId, from, to, businessCategory);
+export const getShopOrderValues = (
+  viewer: OpsTokenClaims,
+  shopId: string,
+  from: string,
+  to: string,
+  businessCategory?: BusinessCategory,
+) => {
+  if (viewer.role === 'worker' && !viewer.shopIds.includes(shopId)) {
+    return null;
+  }
+  return listOrderSheetValues(shopId, from, to, businessCategory);
+};
 
 export const setShopOrderValue = (payload: z.infer<typeof upsertOrderSheetValueSchema>) =>
   upsertOrderSheetValue({

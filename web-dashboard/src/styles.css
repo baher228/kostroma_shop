@@ -879,6 +879,22 @@ td.sticky {
   min-width: 0;
 }
 
+.order-sheet-top-scroll {
+  height: 18px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: #e6ece7;
+  scrollbar-color: #9aae9f #e6ece7;
+  scrollbar-width: thin;
+}
+
+.order-sheet-top-scroll > div {
+  height: 1px;
+}
+
 .order-sheet-meta {
   display: flex;
   align-items: center;
@@ -903,7 +919,8 @@ td.sticky {
 
 .order-sheet-scroll {
   max-width: 100%;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid #b7c5b8;
   border-radius: 8px;
   background: #dce4dc;

@@ -155,6 +155,11 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   const [metaUnitsByProduct, setMetaUnitsByProduct] = useState<Record<string, string>>({});
   const [metaMinByProduct, setMetaMinByProduct] = useState<Record<string, string>>({});
   const [metaMaxByProduct, setMetaMaxByProduct] = useState<Record<string, string>>({});
+  const orderDate = activeBusinessCategory === 'Молоко'
+    ? nextOrderDate()
+    : activeBusinessCategory === 'Деликатесы'
+      ? nextDelicaciesDeliveryDate()
+      : tomorrowDate();
 
   const loadData = async () => {
     try {
@@ -164,6 +169,10 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
         ordersApi.list(session.token, activeBusinessCategory),
         stockApi.list(session.token, { businessCategory: activeBusinessCategory, range: 'week' }),
       ]);
+      const shopId = session.user.shopId ?? nextTable.shop.id;
+      const savedOrderValues = canManage || !shopId
+        ? []
+        : await stockApi.listShopOrderValues(session.token, shopId, orderDate, orderDate, activeBusinessCategory);
       setOrders(nextOrders);
       setTable(nextTable);
       setMetaUnitsByProduct(
@@ -182,13 +191,16 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
         return;
       }
 
+      const savedPacksByProduct = Object.fromEntries(
+        savedOrderValues.map((entry) => [entry.productId, String(entry.packs)]),
+      );
       const defaults: Record<string, string> = {};
       for (const row of nextTable.rows) {
         const stock = parseStock(row.values[preferred]);
         const suggested = activeBusinessCategory === 'Деликатесы'
           ? suggestDelicaciesPacks(row, stock, preferred, nextOrders)
           : suggestPacks(row, stock);
-        defaults[row.productId] = suggested > 0 ? String(suggested) : '';
+        defaults[row.productId] = savedPacksByProduct[row.productId] ?? (suggested > 0 ? String(suggested) : '');
       }
       setPacksByProduct(defaults);
     } catch (loadError) {
@@ -203,11 +215,6 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   }, [session.token, activeBusinessCategory]);
 
   const stockDate = useMemo(() => (table ? preferredDate(table.dates) : null), [table]);
-  const orderDate = activeBusinessCategory === 'Молоко'
-    ? nextOrderDate()
-    : activeBusinessCategory === 'Деликатесы'
-      ? nextDelicaciesDeliveryDate()
-      : tomorrowDate();
   const orderTargetLabel = `Заказ упаковок на ${formatTargetWeekday(orderDate)} ${formatDateShort(orderDate)}`;
 
   const saveMeta = async (productId: string) => {

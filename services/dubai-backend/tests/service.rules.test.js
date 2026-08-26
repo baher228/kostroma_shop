@@ -88,6 +88,32 @@ test('stock service delegates order values to repository without route-specific 
   });
 });
 
+test('stock service exposes saved order values only to the assigned store tablet', async () => {
+  let queries = 0;
+  const { getShopOrderValues } = loadWithMock('../dist/services/stockService', {
+    '../dist/repositories/orderSheetRepository': {
+      listOrderSheetValues: async () => {
+        queries += 1;
+        return [{ productId: 'prod_a', packs: 2 }];
+      },
+      upsertOrderSheetValue: async () => true,
+    },
+    '../dist/repositories/stockRepository': {
+      createProduct: async () => null,
+      deleteProduct: async () => false,
+      getStockTable: async () => null,
+      updateProduct: async () => null,
+      updateProductMeta: async () => null,
+      upsertStockValue: async () => false,
+    },
+  });
+
+  const viewer = { role: 'worker', shopIds: ['shop_a'], scopes: ['orders:read'], jti: 'tablet' };
+  assert.deepEqual(await getShopOrderValues(viewer, 'shop_a', '2026-05-12', '2026-05-12'), [{ productId: 'prod_a', packs: 2 }]);
+  assert.equal(await getShopOrderValues(viewer, 'shop_b', '2026-05-12', '2026-05-12'), null);
+  assert.equal(queries, 1);
+});
+
 test('order service delegates seller order creation and preserves not-found outcome', async () => {
   let capturedViewer = null;
   let capturedPayload = null;

@@ -75,6 +75,7 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const minute = index % 2 ? '30' : '00';
   return `${hour}:${minute}`;
 });
+const ALL_STORE_TABLETS_ID = '__all_store_tablets__';
 
 const toDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -258,15 +259,17 @@ const TabletPicker = ({
   describedBy?: string;
 }) => {
   const selectedTablet = tablets.find((tablet) => tablet.id === value) ?? null;
+  const selectedAll = value === ALL_STORE_TABLETS_ID;
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = query.trim().toLowerCase();
+  const allStoresMatches = !normalizedQuery || 'все магазины все планшеты всем'.includes(normalizedQuery);
   const filteredTablets = normalizedQuery
     ? tablets.filter((tablet) => tabletSearchText(tablet, shopsById).includes(normalizedQuery))
     : tablets;
-  const displayValue = open && query ? query : selectedTablet ? tabletLabel(selectedTablet, shopsById) : '';
+  const displayValue = open && query ? query : selectedAll ? 'Все магазины' : selectedTablet ? tabletLabel(selectedTablet, shopsById) : '';
 
   useEffect(() => {
     if (!open) return;
@@ -292,6 +295,13 @@ const TabletPicker = ({
 
   const chooseTablet = (tablet: StoreTablet) => {
     onChange(tablet.id);
+    setQuery('');
+    setOpen(false);
+    inputRef.current?.focus();
+  };
+
+  const chooseAll = () => {
+    onChange(ALL_STORE_TABLETS_ID);
     setQuery('');
     setOpen(false);
     inputRef.current?.focus();
@@ -331,6 +341,18 @@ const TabletPicker = ({
       </button>
       {open && (
         <div className="tablet-picker-menu" role="listbox" aria-label="Планшеты магазинов">
+          {allStoresMatches && (
+            <button
+              type="button"
+              className={`tablet-picker-all${selectedAll ? ' selected' : ''}`}
+              onClick={chooseAll}
+              role="option"
+              aria-selected={selectedAll}
+            >
+              <strong>Все магазины</strong>
+              <span>{tablets.length} планшетов получат задачу</span>
+            </button>
+          )}
           {filteredTablets.length ? filteredTablets.map((tablet) => (
             <button
               key={tablet.id}
@@ -400,17 +422,26 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       setError('Выберите планшет магазина.');
       return;
     }
+    const assigneeIds = form.assigneeId === ALL_STORE_TABLETS_ID
+      ? storeTablets.map((tablet) => tablet.id)
+      : [form.assigneeId];
+    if (assigneeIds.length === 0) {
+      setError('Нет планшетов магазинов для назначения задачи.');
+      return;
+    }
     try {
       setSaving(true);
-      const task = await api.tasks.create(session.token, {
+      const payload = {
         title: form.title.trim(),
-        assigneeId: form.assigneeId,
         deadlineAt: form.deadlineAt ? new Date(form.deadlineAt).toISOString() : null,
         requiresPhotoConfirmation: form.requiresPhotoConfirmation,
-      });
-      setTasks((current) => [task, ...current]);
+      };
+      const createdTasks = await Promise.all(
+        assigneeIds.map((assigneeId) => api.tasks.create(session.token, { ...payload, assigneeId })),
+      );
+      setTasks((current) => [...createdTasks, ...current]);
       setForm({ ...emptyForm, assigneeId: form.assigneeId });
-      setNotice('Задача назначена.');
+      setNotice(form.assigneeId === ALL_STORE_TABLETS_ID ? `Задача назначена всем магазинам: ${createdTasks.length}.` : 'Задача назначена.');
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -508,8 +539,8 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           </div>
         </div>
         <footer className="task-composer-footer">
-          <p id="task-form-hint">{storeTablets.length === 0 && !loading ? 'Сначала создайте планшет магазина, чтобы назначить задачу.' : 'Дедлайн можно оставить пустым, если задача без срока.'}</p>
-          <button aria-describedby="task-form-hint" disabled={saving || storeTablets.length === 0}>{saving ? 'Назначаем...' : 'Назначить задачу'}</button>
+          <p id="task-form-hint">{storeTablets.length === 0 && !loading ? 'Сначала создайте планшет магазина, чтобы назначить задачу.' : 'Можно выбрать один планшет или все магазины сразу.'}</p>
+          <button aria-describedby="task-form-hint" disabled={saving || storeTablets.length === 0}>{saving ? 'Назначаем...' : form.assigneeId === ALL_STORE_TABLETS_ID ? 'Назначить всем' : 'Назначить задачу'}</button>
         </footer>
       </form>
       {loading ? <p className="tasks-loading">Загружаем задачи...</p> : tasks.length === 0 ? (

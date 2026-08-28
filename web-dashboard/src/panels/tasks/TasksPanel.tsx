@@ -234,7 +234,7 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
 const tabletShopLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) => {
   const shop = tablet.shopId ? shopsById[tablet.shopId] : null;
   if (!shop) return 'Магазин не назначен';
-  return `Машина ${shop.machineNumber}: ${shop.name}`;
+  return shop.name;
 };
 
 const tabletSearchText = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>

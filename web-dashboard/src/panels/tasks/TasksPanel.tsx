@@ -230,6 +230,120 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
   );
 };
 
+const tabletSearchText = (tablet: StoreTablet) =>
+  `${tablet.fullName} ${tablet.username}`.trim().toLowerCase();
+
+const tabletLabel = (tablet: StoreTablet) =>
+  tablet.username ? `${tablet.fullName} @${tablet.username}` : tablet.fullName;
+
+const TabletPicker = ({
+  tablets,
+  value,
+  onChange,
+  invalid,
+  describedBy,
+}: {
+  tablets: StoreTablet[];
+  value: string;
+  onChange: (value: string) => void;
+  invalid: boolean;
+  describedBy?: string;
+}) => {
+  const selectedTablet = tablets.find((tablet) => tablet.id === value) ?? null;
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredTablets = normalizedQuery
+    ? tablets.filter((tablet) => tabletSearchText(tablet).includes(normalizedQuery))
+    : tablets;
+  const displayValue = open && query ? query : selectedTablet ? tabletLabel(selectedTablet) : '';
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      setQuery('');
+      inputRef.current?.blur();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const chooseTablet = (tablet: StoreTablet) => {
+    onChange(tablet.id);
+    setQuery('');
+    setOpen(false);
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div className="tablet-picker" ref={pickerRef}>
+      <input
+        ref={inputRef}
+        required
+        aria-autocomplete="list"
+        aria-describedby={describedBy}
+        aria-expanded={open}
+        aria-invalid={invalid}
+        aria-label="Планшет магазина"
+        autoComplete="off"
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Начните вводить имя или логин"
+        role="combobox"
+        value={displayValue}
+      />
+      <button
+        type="button"
+        className="tablet-picker-toggle"
+        aria-label="Открыть список планшетов"
+        onClick={() => {
+          setQuery('');
+          setOpen((current) => !current);
+          inputRef.current?.focus();
+        }}
+      >
+        ▾
+      </button>
+      {open && (
+        <div className="tablet-picker-menu" role="listbox" aria-label="Планшеты магазинов">
+          {filteredTablets.length ? filteredTablets.map((tablet) => (
+            <button
+              key={tablet.id}
+              type="button"
+              className={tablet.id === value ? 'selected' : ''}
+              onClick={() => chooseTablet(tablet)}
+              role="option"
+              aria-selected={tablet.id === value}
+            >
+              <strong>{tablet.fullName}</strong>
+              <span>@{tablet.username}</span>
+            </button>
+          )) : (
+            <p>Ничего не найдено</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const TasksPanel = ({ session }: { session: Session }) => {
   const emptyForm = { title: '', assigneeId: '', deadlineAt: '', requiresPhotoConfirmation: false };
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -354,10 +468,13 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           </label>
           <label className="task-field">
             <span>Планшет магазина</span>
-            <select required aria-invalid={Boolean(error)} aria-describedby={error ? 'tasks-feedback' : undefined} value={form.assigneeId} onChange={(event) => setForm({ ...form, assigneeId: event.target.value })}>
-              <option value="">Выберите планшет</option>
-              {storeTablets.map((tablet) => <option key={tablet.id} value={tablet.id}>{tablet.fullName}</option>)}
-            </select>
+            <TabletPicker
+              tablets={storeTablets}
+              value={form.assigneeId}
+              onChange={(assigneeId) => setForm({ ...form, assigneeId })}
+              invalid={Boolean(error)}
+              describedBy={error ? 'tasks-feedback' : undefined}
+            />
           </label>
           <div className="task-deadline-row">
             <label className="task-field task-deadline-field">

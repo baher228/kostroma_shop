@@ -2388,6 +2388,97 @@ td.sticky {
   min-height: 48px;
 }
 
+.tablet-picker {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.tablet-picker input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.tablet-picker-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: grid;
+  width: 42px;
+  height: calc(100% - 2px);
+  min-height: 46px;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+  color: var(--color-primary-hover);
+  font-size: 16px;
+  padding: 0;
+}
+
+.tablet-picker-toggle:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+  box-shadow: none;
+  transform: none;
+}
+
+.tablet-picker-menu {
+  position: absolute;
+  z-index: 13;
+  top: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 14px rgba(31, 42, 35, 0.12);
+  padding: 6px;
+}
+
+.tablet-picker-menu button {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  gap: 2px;
+  justify-items: start;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.tablet-picker-menu button:hover:not(:disabled) {
+  border-color: #c6d8cc;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+.tablet-picker-menu button.selected,
+.tablet-picker-menu button.selected:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.tablet-picker-menu strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.tablet-picker-menu span,
+.tablet-picker-menu p {
+  margin: 0;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .deadline-picker {
   position: relative;
   display: grid;

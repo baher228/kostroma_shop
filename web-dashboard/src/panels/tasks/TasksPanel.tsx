@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, RefreshButton, Table } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
-import type { Session, StoreTablet, Task } from '../../types';
+import type { Session, Shop, StoreTablet, Task } from '../../types';
 
 const statusLabel = (task: Task) => {
   if (task.photoReviewStatus === 'pending') return 'На проверке';
@@ -230,20 +230,28 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
   );
 };
 
-const tabletSearchText = (tablet: StoreTablet) =>
-  `${tablet.fullName} ${tablet.username}`.trim().toLowerCase();
+const tabletShopLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) => {
+  const shop = tablet.shopId ? shopsById[tablet.shopId] : null;
+  if (!shop) return 'Магазин не назначен';
+  return `Машина ${shop.machineNumber}: ${shop.name}`;
+};
 
-const tabletLabel = (tablet: StoreTablet) =>
-  tablet.username ? `${tablet.fullName} @${tablet.username}` : tablet.fullName;
+const tabletSearchText = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
+  `${tablet.fullName} ${tablet.username} ${tabletShopLabel(tablet, shopsById)}`.trim().toLowerCase();
+
+const tabletLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
+  `${tablet.fullName} - ${tabletShopLabel(tablet, shopsById)}`;
 
 const TabletPicker = ({
   tablets,
+  shopsById,
   value,
   onChange,
   invalid,
   describedBy,
 }: {
   tablets: StoreTablet[];
+  shopsById: Record<string, Shop>;
   value: string;
   onChange: (value: string) => void;
   invalid: boolean;
@@ -256,9 +264,9 @@ const TabletPicker = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredTablets = normalizedQuery
-    ? tablets.filter((tablet) => tabletSearchText(tablet).includes(normalizedQuery))
+    ? tablets.filter((tablet) => tabletSearchText(tablet, shopsById).includes(normalizedQuery))
     : tablets;
-  const displayValue = open && query ? query : selectedTablet ? tabletLabel(selectedTablet) : '';
+  const displayValue = open && query ? query : selectedTablet ? tabletLabel(selectedTablet, shopsById) : '';
 
   useEffect(() => {
     if (!open) return;
@@ -305,7 +313,7 @@ const TabletPicker = ({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Начните вводить имя или логин"
+        placeholder="Начните вводить имя, магазин или логин"
         role="combobox"
         value={displayValue}
       />
@@ -333,7 +341,8 @@ const TabletPicker = ({
               aria-selected={tablet.id === value}
             >
               <strong>{tablet.fullName}</strong>
-              <span>@{tablet.username}</span>
+              <span>{tabletShopLabel(tablet, shopsById)}</span>
+              <small>@{tablet.username}</small>
             </button>
           )) : (
             <p>Ничего не найдено</p>
@@ -348,6 +357,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const emptyForm = { title: '', assigneeId: '', deadlineAt: '', requiresPhotoConfirmation: false };
   const [tasks, setTasks] = useState<Task[]>([]);
   const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
+  const [shops, setShops] = useState<Shop[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -356,14 +366,20 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const [notice, setNotice] = useState('');
   const openCount = tasks.filter((task) => task.status === 'open').length;
   const overdueCount = tasks.filter((task) => task.overdue).length;
+  const shopsById = Object.fromEntries(shops.map((shop) => [shop.id, shop]));
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const [nextTasks, nextStoreTablets] = await Promise.all([api.tasks.list(session.token), api.tasks.listStoreTablets(session.token)]);
+      const [nextTasks, nextStoreTablets, nextShops] = await Promise.all([
+        api.tasks.list(session.token),
+        api.tasks.listStoreTablets(session.token),
+        api.shops.list(session.token),
+      ]);
       setTasks(nextTasks);
       setStoreTablets(nextStoreTablets);
+      setShops(nextShops);
       setForm((current) => current.assigneeId || !nextStoreTablets[0] ? current : { ...current, assigneeId: nextStoreTablets[0].id });
     } catch (err) {
       setError(messageOf(err));
@@ -470,6 +486,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
             <span>Планшет магазина</span>
             <TabletPicker
               tablets={storeTablets}
+              shopsById={shopsById}
               value={form.assigneeId}
               onChange={(assigneeId) => setForm({ ...form, assigneeId })}
               invalid={Boolean(error)}

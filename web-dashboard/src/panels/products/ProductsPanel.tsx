@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, Modal, NumberInput, PageHeader, RefreshButton } from '../../components/ui';
 import {
@@ -52,10 +52,16 @@ const viewDatesForWindowStart = (weekStart: string): string[] => {
   return buildDateRange(from, getTwoWeeksEnd(from));
 };
 
-const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => {
-  const dates = viewDatesForWindowStart(weekStart);
-  return { from: dates[0], to: dates[dates.length - 1] };
-};
+const bufferedWeekStartsFor = (weekStart: string): string[] => [
+  addDays(weekStart, -WEEK_DAYS),
+  weekStart,
+  addDays(weekStart, WEEK_DAYS),
+];
+
+const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
+  from: addDays(weekStart, -WEEK_DAYS * 2),
+  to: addDays(weekStart, WEEK_DAYS * 2 - 1),
+});
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
@@ -83,6 +89,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const centeredWeekRef = useRef('');
 
   const load = async (shopId = selectedShopId, nextWindowStart = windowStart, force = false) => {
     const cachedShopId = shopId || shops[0]?.id || '';
@@ -144,7 +152,12 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     void load(selectedShopId, windowStart);
   }, [session.token, selectedShopId, windowStart, activeBusinessCategory]);
 
-  const viewDates = useMemo(() => viewDatesForWindowStart(windowStart), [windowStart]);
+  const loadedDates = useMemo(() => {
+    const range = stockRangeForWindowStart(windowStart);
+    return buildDateRange(range.from, range.to);
+  }, [windowStart]);
+  const dashboardWeekStarts = useMemo(() => bufferedWeekStartsFor(windowStart), [windowStart]);
+  const activeViewDates = useMemo(() => viewDatesForWindowStart(windowStart), [windowStart]);
 
   const visibleRows = useMemo(() => {
     const normalized = normalizeText(query);
@@ -161,9 +174,22 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const isMilkTable = activeBusinessCategory === 'Молоко';
 
   const dashboardWeeks: DashboardWeeks = useMemo(
-    () => (table ? deriveDashboardWeeks(viewDates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
-    [table, viewDates],
+    () => (table ? deriveDashboardWeeks(activeViewDates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
+    [activeViewDates, table],
   );
+  const dashboardWeeksForStart = (weekStart: string): DashboardWeeks => deriveDashboardWeeks(viewDatesForWindowStart(weekStart));
+
+  useEffect(() => {
+    const scroller = tableScrollRef.current;
+    if (!scroller || !table || centeredWeekRef.current === windowStart) {
+      return;
+    }
+    const currentWeekCell = scroller.querySelector<HTMLElement>(`[data-week-start="${windowStart}"]`);
+    if (currentWeekCell) {
+      scroller.scrollLeft = Math.max(0, currentWeekCell.offsetLeft - 160);
+      centeredWeekRef.current = windowStart;
+    }
+  }, [table, windowStart]);
 
   const shiftWeek = (direction: -1 | 1) => {
     setWindowStart((current) => addDays(current, direction * WEEK_DAYS));
@@ -278,11 +304,14 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       'Срок годности, сут',
       'Цена в руб, с НДС',
       ...(isMilkTable
-        ? DASHBOARD_COLUMNS.map((column) => {
-          const subtitle = dashboardHeaderSubtitle(dashboardWeeks, column).replace('\n', ' ');
-          return subtitle ? `${column.title} (${subtitle})` : column.title;
+        ? dashboardWeekStarts.flatMap((weekStart) => {
+          const weeks = dashboardWeeksForStart(weekStart);
+          return DASHBOARD_COLUMNS.map((column) => {
+            const subtitle = dashboardHeaderSubtitle(weeks, column).replace('\n', ' ');
+            return subtitle ? `${column.title} (${subtitle})` : column.title;
+          });
         })
-        : viewDates.flatMap((date) => [
+        : loadedDates.flatMap((date) => [
           `Остаток (${formatDateLabel(date)})`,
           `Заказ (${formatDateLabel(activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1))})`,
           `Продано (${formatDateLabel(date)})`,
@@ -298,8 +327,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         row.shelfLifeDays !== null ? String(row.shelfLifeDays) : '',
         row.unitPriceRubVat !== null && row.unitPriceRubVat !== undefined ? String(row.unitPriceRubVat) : '',
         ...(isMilkTable
-          ? DASHBOARD_COLUMNS.map((column) => rowValuesFor(row)[column.key] ?? '')
-          : viewDates.flatMap((date) => {
+          ? dashboardWeekStarts.flatMap((weekStart) => {
+            const values = rowValuesFor(row, dashboardWeeksForStart(weekStart));
+            return DASHBOARD_COLUMNS.map((column) => values[column.key] ?? '');
+          })
+          : loadedDates.flatMap((date) => {
             const orderDate = activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1);
             return [row.values[date] ?? '', orderPacksForDate(row.productId, orderDate), soldFor(row, date)];
           })),
@@ -309,7 +341,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(`manager_dashboard_${table.shop.name}_${viewDates[0]}_${viewDates[viewDates.length - 1]}`)}.csv`;
+    link.download = `${safeFileName(`manager_dashboard_${table.shop.name}_${loadedDates[0]}_${loadedDates[loadedDates.length - 1]}`)}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -346,56 +378,65 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDashboardTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll">
+      <div className="manager-table-scroll" ref={tableScrollRef}>
         <table className="manager-stock-table manager-dashboard-table">
           <colgroup>
             <col className="manager-name-col-width" />
-            {DASHBOARD_COLUMNS.map((column) => (
-              <col key={column.key} className="dashboard-data-col-width" />
-            ))}
+            {dashboardWeekStarts.flatMap((weekStart) => DASHBOARD_COLUMNS.map((column) => (
+              <col key={`${weekStart}:${column.key}`} className="dashboard-data-col-width" />
+            )))}
           </colgroup>
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>
-              {DASHBOARD_COLUMNS.map((column) => (
-                <th key={column.key} className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}>
-                  <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
-                  {dashboardHeaderSubtitle(dashboardWeeks, column) && <small>{dashboardHeaderSubtitle(dashboardWeeks, column)}</small>}
-                </th>
-              ))}
+              {dashboardWeekStarts.flatMap((weekStart) => {
+                const weeks = dashboardWeeksForStart(weekStart);
+                return DASHBOARD_COLUMNS.map((column, index) => (
+                  <th
+                    key={`${weekStart}:${column.key}`}
+                    className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}
+                    data-week-start={index === 0 ? weekStart : undefined}
+                  >
+                    <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
+                    {dashboardHeaderSubtitle(weeks, column) && <small>{dashboardHeaderSubtitle(weeks, column)}</small>}
+                  </th>
+                ));
+              })}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={DASHBOARD_COLUMNS.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={dashboardWeekStarts.length * DASHBOARD_COLUMNS.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row) => {
-              const values = rowValuesFor(row);
               return (
                 <tr key={row.productId}>
                   <td className="manager-name-col">
                     <strong>{managerProductName(row.name)}</strong>
                     <small>{productReferenceLabel(row)}</small>
                   </td>
-                  {DASHBOARD_COLUMNS.map((column) => {
+                  {dashboardWeekStarts.flatMap((weekStart) => {
+                    const weeks = dashboardWeeksForStart(weekStart);
+                    const values = rowValuesFor(row, weeks);
+                    return DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
                       const manualOrderKey = column.key;
                       return (
-                        <td key={column.key} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                        <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
                           <input
                             className="dashboard-order-input"
                             value={value}
                             maxLength={MAX_ORDER_VALUE_LEN}
                             placeholder="-"
-                            onChange={(event) => setOrderCellValue(row.productId, manualOrderKey, event.target.value)}
+                            onChange={(event) => setOrderCellValue(row.productId, manualOrderKey, event.target.value, weeks)}
                           />
                         </td>
                       );
                     }
                     if (column.kind === 'stock' && isManualStockKey(column.key)) {
-                      const date = currentStockDateForColumn(column.key);
+                      const date = currentStockDateForColumn(column.key, weeks);
                       return (
-                        <td key={column.key} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                        <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
                           <button className="stock-cell-button" onClick={() => date && openEditCell(row, date)}>
                             {value || '-'}
                           </button>
@@ -403,12 +444,13 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                       );
                     }
                     return (
-                      <td key={column.key} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                      <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
                         <span className={column.kind === 'stock' ? 'dashboard-stock-value' : column.kind === 'order' ? 'dashboard-order-value' : ''}>
                           {value || '-'}
                         </span>
                       </td>
                     );
+                    });
                   })}
                 </tr>
               );
@@ -439,14 +481,14 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDailyTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll">
+      <div className="manager-table-scroll" ref={tableScrollRef}>
         <table className="manager-stock-table manager-dashboard-table">
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>
-              {viewDates.map((date) => (
+              {loadedDates.map((date) => (
                 <React.Fragment key={date}>
-                  <th>{formatDateLabel(date)}<small>Остаток</small></th>
+                  <th data-week-start={date === windowStart ? windowStart : undefined}>{formatDateLabel(date)}<small>Остаток</small></th>
                   <th>
                     {formatDateLabel(activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1))}
                     <small>Заказ</small>
@@ -458,11 +500,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={viewDates.length * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={loadedDates.length * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row) => (
               <tr key={row.productId}>
                 <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
-                {viewDates.map((date) => {
+                {loadedDates.map((date) => {
                   const orderDate = activeBusinessCategory === 'Деликатесы'
                     ? nearestDelicaciesOrderDate(date)
                     : addDays(date, 1);
@@ -539,7 +581,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       <div className="manager-meta-row">
         <strong>Позиций: {visibleRows.length}</strong>
-        <strong>{loadedRange ? `${activeBusinessCategory}: ${viewDates[0]} - ${viewDates[viewDates.length - 1]}` : ''}</strong>
+        <strong>{loadedRange ? `${activeBusinessCategory}: ${activeViewDates[0]} - ${activeViewDates[activeViewDates.length - 1]}` : ''}</strong>
         {loadingMore && <strong>Подгружаем период...</strong>}
       </div>
 

@@ -307,28 +307,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     return nextRows;
   }, [table, query]);
 
-  const rowsByCategory = useMemo(() => {
-    const categories = table?.subcategories?.length ? table.subcategories : [...PRODUCT_CATEGORIES];
-    const grouped = categories.reduce(
-      (acc, category) => {
-        acc[category] = [];
-        return acc;
-      },
-      {} as Record<ProductCategory, StockTableRow[]>,
-    );
-    for (const row of visibleRows) {
-      const category = categories.includes(row.category) ? row.category : categories[0] ?? DEFAULT_PRODUCT_CATEGORY;
-      if (!grouped[category]) {
-        grouped[category] = [];
-      }
-      grouped[category].push(row);
-    }
-    for (const category of categories) {
-      grouped[category] = sortStockTableRowsLikeImage(grouped[category]);
-    }
-    return grouped;
-  }, [table?.subcategories, visibleRows]);
-
   const activeSubcategories = useMemo(
     () => (table?.subcategories?.length ? table.subcategories : [...PRODUCT_CATEGORIES]),
     [table?.subcategories],
@@ -337,8 +315,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const isMilkTable = activeBusinessCategory === 'Молоко';
 
   const orderedRows = useMemo(
-    () => activeSubcategories.flatMap((category) => rowsByCategory[category] ?? []),
-    [activeSubcategories, rowsByCategory],
+    () => sortStockTableRowsLikeImage(visibleRows),
+    [visibleRows],
   );
 
   const dashboardWeeks = useMemo(() => {
@@ -731,11 +709,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     ]);
   };
 
-  const renderCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
-    <View key={category} style={styles.categoryBlock}>
-      <View style={styles.categoryTitleRow}>
-        <Text style={[styles.categoryTitle, styles.workerCategoryTitle]}>{category}</Text>
-      </View>
+  const renderTable = (rows: StockTableRow[]) => (
+    <View style={styles.categoryBlock}>
       <View style={styles.categoryTable}>
         <View style={[styles.stickyColumn, styles.workerStickyColumn]}>
           <View style={styles.headerRow}>
@@ -855,11 +830,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     });
   };
 
-  const renderDailyManagerCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
-    <View key={category} style={styles.categoryBlock}>
-      <View style={styles.categoryTitleRow}>
-        <Text style={styles.categoryTitle}>{category}</Text>
-      </View>
+  const renderDailyManagerTable = (rows: StockTableRow[]) => (
+    <View style={styles.categoryBlock}>
       <View style={styles.categoryTable}>
         <View style={styles.stickyColumn}>
           <View style={styles.headerRow}>
@@ -995,11 +967,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     column.kind === 'order' && styles.valueTextOrder,
   ];
 
-  const renderDashboardCategoryTable = (category: ProductCategory, rows: StockTableRow[]) => (
-    <View key={category} style={styles.categoryBlock}>
-      <View style={styles.categoryTitleRow}>
-        <Text style={styles.categoryTitle}>{category}</Text>
-      </View>
+  const renderDashboardTable = (rows: StockTableRow[]) => (
+    <View style={styles.categoryBlock}>
       <View style={styles.categoryTable}>
         <View style={styles.stickyColumn}>
           <View style={styles.headerRow}>
@@ -1184,13 +1153,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
       <View style={styles.tableWrap}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
-          {activeSubcategories.map((category) =>
-            canManage && isMilkTable
-              ? renderDashboardCategoryTable(category, rowsByCategory[category] ?? [])
-              : canManage
-                ? renderDailyManagerCategoryTable(category, rowsByCategory[category] ?? [])
-              : renderCategoryTable(category, rowsByCategory[category] ?? []),
-          )}
+          {canManage && isMilkTable
+            ? renderDashboardTable(orderedRows)
+            : canManage
+              ? renderDailyManagerTable(orderedRows)
+              : renderTable(orderedRows)}
         </ScrollView>
       </View>
     </>

@@ -14,7 +14,6 @@ import {
   BUSINESS_CATEGORIES,
   DEFAULT_BUSINESS_CATEGORY,
   MACHINE_NUMBERS,
-  PRODUCT_CATEGORIES,
   type MachineNumber,
 } from '../constants/dashboard';
 import { sortProductsLikeImage } from '../constants/productOrdering';
@@ -168,41 +167,22 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     void loadSheet(next);
   };
 
-  const orderSheetCategories = useMemo(() => {
-    if (activeBusinessCategory === 'Молоко') {
-      return [...PRODUCT_CATEGORIES];
-    }
-    return Array.from(new Set((sheet?.rows ?? []).map((row) => row.category))).filter(Boolean);
-  }, [activeBusinessCategory, sheet]);
-
-  const rowsByCategory = useMemo(() => {
+  const visibleRows = useMemo(() => {
     if (!sheet) {
-      return {} as Record<string, OrderSheetRow[]>;
+      return [];
     }
     const normalizedQuery = query.trim().toLowerCase();
-    const grouped: Record<string, OrderSheetRow[]> = {};
-    for (const category of orderSheetCategories) {
-      grouped[category] = [];
-    }
+    const rows: OrderSheetRow[] = [];
     for (const row of sheet.rows) {
       if (normalizedQuery && !row.productName.toLowerCase().includes(normalizedQuery)) {
         continue;
       }
-      const category = orderSheetCategories.includes(row.category)
-        ? row.category
-        : orderSheetCategories[0];
-      if (!category) {
-        continue;
-      }
-      grouped[category].push(row);
+      rows.push(row);
     }
-    for (const category of orderSheetCategories) {
-      grouped[category] = sortProductsLikeImage(
-        grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category })),
-      ).map(({ name: _name, ...row }) => row as OrderSheetRow);
-    }
-    return grouped;
-  }, [orderSheetCategories, query, sheet]);
+    return sortProductsLikeImage(
+      rows.map((row) => ({ ...row, name: row.productName, category: row.category })),
+    ).map(({ name: _name, ...row }) => row as OrderSheetRow);
+  }, [query, sheet]);
 
   const shopsByMachine = useMemo(() => {
     const grouped: Record<MachineNumber, Shop[]> = {
@@ -266,28 +246,9 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     </View>
   );
 
-  const renderMachineColumns = (row: OrderSheetRow, group: MachineGroup, isCategoryRow: boolean) => {
+  const renderMachineColumns = (row: OrderSheetRow, group: MachineGroup) => {
     const total = machineTotal(row, group.shops);
     const weight = formatWeight(total, row.packWeightKg);
-
-    if (isCategoryRow) {
-      return (
-        <View key={`category-group:${group.machineNumber}`} style={styles.machineGroup}>
-          {group.shops.map((shop) => (
-            <View
-              key={`category:${group.machineNumber}:${shop.id}`}
-              style={[styles.categoryCell, styles.shopCol]}
-            />
-          ))}
-          <View style={[styles.categoryCell, styles.totalCol, styles.totalHeaderBg]}>
-            <Text style={styles.totalHeaderText} />
-          </View>
-          <View style={[styles.categoryCell, styles.weightCol, styles.totalHeaderBg]}>
-            <Text style={styles.totalHeaderText} />
-          </View>
-        </View>
-      );
-    }
 
     return (
       <View key={`${row.productId}:${group.machineNumber}`} style={styles.machineGroup}>
@@ -310,7 +271,6 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
     if (!sheet) {
       return null;
     }
-    const visibleRows = Object.values(rowsByCategory).flat();
 
     return (
       <ScrollView horizontal keyboardShouldPersistTaps="handled">
@@ -346,51 +306,16 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
           </View>
 
           <ScrollView style={styles.bodyScroll} nestedScrollEnabled>
-            {orderSheetCategories.map((category) => {
-              const rows = rowsByCategory[category];
-              if (!rows || rows.length === 0) {
-                return null;
-              }
-              return (
-                <View key={category}>
-                  <View style={styles.categoryRow}>
-                    <View style={[styles.categoryCell, styles.nameColumn]}>
-                      <Text style={styles.categoryText}>{category}</Text>
-                    </View>
-                    {machineGroups.map((group) =>
-                      renderMachineColumns(
-                        {
-                          productId: `category-${category}`,
-                          productName: category,
-                          businessCategory: activeBusinessCategory,
-                          category,
-                          packType: null,
-                          unitsInPack: null,
-                          packWeightKg: null,
-                          shelfLifeDays: null,
-                          unitPriceRubVat: null,
-                          shopValues: {},
-                          total: 0,
-                        },
-                        group,
-                        true,
-                      ),
-                    )}
-                  </View>
-
-                  {rows.map((row) => (
-                    <View key={row.productId} style={styles.dataRow}>
-                      <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
-                        <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
-                          {row.productName}
-                        </Text>
-                      </View>
-                      {machineGroups.map((group) => renderMachineColumns(row, group, false))}
-                    </View>
-                  ))}
+            {visibleRows.map((row) => (
+              <View key={row.productId} style={styles.dataRow}>
+                <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
+                  <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
+                    {row.productName}
+                  </Text>
                 </View>
-              );
-            })}
+                {machineGroups.map((group) => renderMachineColumns(row, group))}
+              </View>
+            ))}
             <View style={styles.machineWeightRow}>
               <View style={[styles.cell, styles.nameColumn, styles.machineWeightCell]}>
                 <Text style={styles.machineWeightText}>ОБЩИЙ ВЕС ПО МАШИНАМ</Text>

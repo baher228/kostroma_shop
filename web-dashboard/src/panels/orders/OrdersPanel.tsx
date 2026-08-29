@@ -86,36 +86,22 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     void load(next);
   };
 
-  const groupRowsByCategory = (targetSheet: OrderSheet | null) => {
-    const categories = activeBusinessCategory === 'Молоко'
-      ? [...PRODUCT_CATEGORIES]
-      : Array.from(new Set((targetSheet?.rows ?? []).map((row) => row.category))).filter(Boolean);
-    const grouped = categories.reduce((acc, category) => {
-      acc[category] = [];
-      return acc;
-    }, {} as Record<ProductCategory, OrderSheetRow[]>);
-
+  const getVisibleRows = (targetSheet: OrderSheet | null) => {
     if (!targetSheet) {
-      return grouped;
+      return [];
     }
 
     const normalizedQuery = query.trim().toLowerCase();
+    const rows: OrderSheetRow[] = [];
     for (const row of targetSheet.rows) {
       if (normalizedQuery && !row.productName.toLowerCase().includes(normalizedQuery)) {
         continue;
       }
-      const category = categories.includes(row.category) ? row.category : categories[0];
-      if (!category) {
-        continue;
-      }
-      grouped[category].push(row);
+      rows.push(row);
     }
-    for (const category of categories) {
-      grouped[category] = sortProductsLikeImage(
-        grouped[category].map((row) => ({ ...row, name: row.productName, category: row.category as ProductCategory })),
-      ).map(({ name: _name, ...row }) => row as OrderSheetRow);
-    }
-    return grouped;
+    return sortProductsLikeImage(
+      rows.map((row) => ({ ...row, name: row.productName, category: row.category as ProductCategory })),
+    ).map(({ name: _name, ...row }) => row as OrderSheetRow);
   };
 
   const groupShopsByMachine = (targetSheet: OrderSheet | null): MachineGroup[] => {
@@ -128,9 +114,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     })).filter((group) => group.shops.length > 0);
   };
 
-  const rowsByCategory = useMemo(() => {
-    return groupRowsByCategory(sheet);
-  }, [activeBusinessCategory, query, sheet]);
+  const visibleRows = useMemo(() => getVisibleRows(sheet), [query, sheet]);
 
   const machineGroups = useMemo<MachineGroup[]>(() => {
     return groupShopsByMachine(sheet);
@@ -180,8 +164,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     }
 
     const targetGroups = groupShopsByMachine(targetSheet);
-    const targetRowsByCategory = groupRowsByCategory(targetSheet);
-    const targetRows = Object.values(targetRowsByCategory).flat();
+    const targetRows = getVisibleRows(targetSheet);
     const rows: XlsxCell[][] = [
       [
         { value: '', style: 1 },
@@ -207,33 +190,21 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       currentColumn = endColumn + 1;
     }
 
-    for (const category of Object.keys(targetRowsByCategory)) {
-      const categoryRows = targetRowsByCategory[category];
-      if (!categoryRows.length) {
-        continue;
-      }
+    for (const row of targetRows) {
       rows.push([
-        { value: category, style: 2 },
-        ...targetGroups.flatMap((group) =>
-          Array.from({ length: group.shops.length + 2 }, () => ({ value: '', style: 2 })),
-        ),
+        { value: row.productName },
+        ...targetGroups.flatMap((group) => {
+          const total = machineTotal(row, group.shops);
+          return [
+            ...group.shops.map((shop) => {
+              const value = rowValue(row, shop.id);
+              return { value: value || '', style: 3, type: value ? 'number' as const : 'string' as const };
+            }),
+            { value: total || '', style: 3, type: total ? 'number' as const : 'string' as const },
+            { value: formatWeight(total, row.packWeightKg), style: 3 },
+          ];
+        }),
       ]);
-      for (const row of categoryRows) {
-        rows.push([
-          { value: row.productName },
-          ...targetGroups.flatMap((group) => {
-            const total = machineTotal(row, group.shops);
-            return [
-              ...group.shops.map((shop) => {
-                const value = rowValue(row, shop.id);
-                return { value: value || '', style: 3, type: value ? 'number' as const : 'string' as const };
-              }),
-              { value: total || '', style: 3, type: total ? 'number' as const : 'string' as const },
-              { value: formatWeight(total, row.packWeightKg), style: 3 },
-            ];
-          }),
-        ]);
-      }
     }
 
     rows.push([
@@ -331,40 +302,24 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                 </tr>
               </thead>
               <tbody>
-                {Object.keys(rowsByCategory).map((category) => {
-                  const rows = rowsByCategory[category];
-                  if (!rows.length) {
-                    return null;
-                  }
-                  return (
-                    <React.Fragment key={category}>
-                      <tr className="category-row">
-                        <td className="sticky order-name-col">{category}</td>
-                        {machineGroups.map((group) => (
-                          <td key={group.machineNumber} colSpan={group.shops.length + 2} />
-                        ))}
-                      </tr>
-                      {rows.map((row) => (
-                        <tr key={row.productId}>
-                          <td className="sticky order-name-col product-name">{row.productName}</td>
-                          {machineGroups.flatMap((group) => {
-                            const total = machineTotal(row, group.shops);
-                            return [
-                              ...group.shops.map((shop) => {
-                                const value = rowValue(row, shop.id);
-                                return <td key={`${row.productId}:${shop.id}`} className="number-cell">{value || ''}</td>;
-                              }),
-                              <td key={`${row.productId}:${group.machineNumber}:total`} className="number-cell total-cell">{total || ''}</td>,
-                              <td key={`${row.productId}:${group.machineNumber}:weight`} className="number-cell weight-cell">
-                                {formatWeight(total, row.packWeightKg)}
-                              </td>,
-                            ];
-                          })}
-                        </tr>
-                      ))}
-                    </React.Fragment>
-                  );
-                })}
+                {visibleRows.map((row) => (
+                  <tr key={row.productId}>
+                    <td className="sticky order-name-col product-name">{row.productName}</td>
+                    {machineGroups.flatMap((group) => {
+                      const total = machineTotal(row, group.shops);
+                      return [
+                        ...group.shops.map((shop) => {
+                          const value = rowValue(row, shop.id);
+                          return <td key={`${row.productId}:${shop.id}`} className="number-cell">{value || ''}</td>;
+                        }),
+                        <td key={`${row.productId}:${group.machineNumber}:total`} className="number-cell total-cell">{total || ''}</td>,
+                        <td key={`${row.productId}:${group.machineNumber}:weight`} className="number-cell weight-cell">
+                          {formatWeight(total, row.packWeightKg)}
+                        </td>,
+                      ];
+                    })}
+                  </tr>
+                ))}
               </tbody>
               <tfoot>
                 <tr className="machine-weight-row">
@@ -373,7 +328,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                     ...group.shops.map((shop) => <td key={`weight:${group.machineNumber}:${shop.id}`} />),
                     <td key={`weight:${group.machineNumber}:label`} className="total-cell">ОБЩИЙ ВЕС, КГ</td>,
                     <td key={`weight:${group.machineNumber}:value`} className="weight-cell">
-                      {formatWeight(1, machineWeight(Object.values(rowsByCategory).flat(), group.shops))}
+                      {formatWeight(1, machineWeight(visibleRows, group.shops))}
                     </td>,
                   ])}
                 </tr>

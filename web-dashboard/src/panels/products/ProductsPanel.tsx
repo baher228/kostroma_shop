@@ -32,6 +32,7 @@ import { intOrZero, messageOf, normalizeText, numberOrZero } from '../../shared/
 import type { Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
 import type { BusinessCategory } from '../../types';
 import { managerProductName } from '../../../../shared/product-display';
+import { sortProductsLikeImage } from '../../productOrdering';
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
@@ -105,21 +106,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     return (table?.rows ?? []).filter((row) => !normalized || normalizeText(row.name).includes(normalized));
   }, [query, table]);
 
-  const rowsByCategory = useMemo(() => {
-    const categories = table?.subcategories?.length ? table.subcategories : subcategories[activeBusinessCategory] ?? [DEFAULT_PRODUCT_CATEGORY];
-    const grouped = categories.reduce((acc, category) => {
-      acc[category] = [] as Product[];
-      return acc;
-    }, {} as Record<ProductCategory, Product[]>);
-    for (const row of visibleRows) {
-      const category = categories.includes(row.category) ? row.category : categories[0] ?? DEFAULT_PRODUCT_CATEGORY;
-      if (!grouped[category]) {
-        grouped[category] = [];
-      }
-      grouped[category].push(row);
-    }
-    return grouped;
-  }, [activeBusinessCategory, subcategories, table?.subcategories, visibleRows]);
+  const orderedRows = useMemo(() => sortProductsLikeImage(visibleRows), [visibleRows]);
 
   const activeSubcategories = useMemo(
     () => table?.subcategories?.length ? table.subcategories : subcategories[activeBusinessCategory] ?? [DEFAULT_PRODUCT_CATEGORY],
@@ -247,7 +234,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         return subtitle ? `${column.title} (${subtitle})` : column.title;
       }),
     ];
-    const rows = activeSubcategories.flatMap((category) => rowsByCategory[category] ?? []).map((row) => {
+    const rows = orderedRows.map((row) => {
       const values = rowValuesFor(row);
       return [
         row.category,
@@ -299,9 +286,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     }
   };
 
-  const renderDashboardCategory = (category: ProductCategory, rows: Product[]) => (
-    <section key={category} className="manager-category-block">
-      <div className="manager-category-title">{category}</div>
+  const renderDashboardTable = (rows: Product[]) => (
+    <section className="manager-category-block">
       <div className="manager-table-scroll">
         <table className="manager-stock-table manager-dashboard-table">
           <colgroup>
@@ -394,9 +380,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     return String(Math.max(0, previous - current));
   };
 
-  const renderDailyCategory = (category: ProductCategory, rows: Product[]) => (
-    <section key={category} className="manager-category-block">
-      <div className="manager-category-title">{category}</div>
+  const renderDailyTable = (rows: Product[]) => (
+    <section className="manager-category-block">
       <div className="manager-table-scroll">
         <table className="manager-stock-table manager-dashboard-table">
           <thead>
@@ -501,11 +486,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       </div>
 
       <div className="manager-table-wrap">
-        {loading ? <p className="manager-loading">Загружаем остатки...</p> : activeSubcategories.map((category) =>
-          isMilkTable
-            ? renderDashboardCategory(category, rowsByCategory[category] ?? [])
-            : renderDailyCategory(category, rowsByCategory[category] ?? []),
-        )}
+        {loading
+          ? <p className="manager-loading">Загружаем остатки...</p>
+          : isMilkTable
+            ? renderDashboardTable(orderedRows)
+            : renderDailyTable(orderedRows)}
       </div>
 
       {isAddProductOpen && (

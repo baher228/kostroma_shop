@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, Modal, NumberInput, PageHeader, RefreshButton } from '../../components/ui';
 import {
@@ -34,6 +34,53 @@ import type { BusinessCategory } from '../../types';
 import { managerProductName } from '../../../../shared/product-display';
 import { sortProductsLikeImage } from '../../productOrdering';
 
+const PRELOADED_WEEK_RADIUS = 2;
+
+type LoadedWeekRange = {
+  from: string;
+  to: string;
+};
+
+const buildDateRange = (from: string, to: string): string[] => {
+  const dates: string[] = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    dates.push(date);
+  }
+  return dates;
+};
+
+const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
+  from: addDays(weekStart, -(PRELOADED_WEEK_RADIUS + 1) * WEEK_DAYS),
+  to: addDays(weekStart, (PRELOADED_WEEK_RADIUS + 1) * WEEK_DAYS - 1),
+});
+
+const viewDatesForWindowStart = (weekStart: string): string[] => {
+  const from = addDays(weekStart, -WEEK_DAYS);
+  return buildDateRange(from, getTwoWeeksEnd(from));
+};
+
+const isWindowCovered = (range: LoadedWeekRange | null, weekStart: string): boolean => {
+  if (!range) {
+    return false;
+  }
+  const dates = viewDatesForWindowStart(weekStart);
+  return range.from <= dates[0] && range.to >= dates[dates.length - 1];
+};
+
+const shouldExpandRange = (range: LoadedWeekRange | null, weekStart: string): boolean => {
+  if (!range) {
+    return true;
+  }
+  const firstWindowStart = addDays(range.from, WEEK_DAYS);
+  const lastWindowStart = addDays(range.to, -(WEEK_DAYS - 1));
+  return weekStart <= addDays(firstWindowStart, WEEK_DAYS) || weekStart >= addDays(lastWindowStart, -WEEK_DAYS);
+};
+
+const mergeRange = (current: LoadedWeekRange | null, next: LoadedWeekRange): LoadedWeekRange => ({
+  from: current && current.from < next.from ? current.from : next.from,
+  to: current && current.to > next.to ? current.to : next.to,
+});
+
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
@@ -42,6 +89,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const [selectedShopId, setSelectedShopId] = useState('');
   const [query, setQuery] = useState('');
   const [windowStart, setWindowStart] = useState(currentWeekStart);
+  const [loadedRange, setLoadedRange] = useState<LoadedWeekRange | null>(null);
+  const [loadedKey, setLoadedKey] = useState('');
   const [orderValues, setOrderValues] = useState<Record<string, string>>({});
   const [form, setForm] = useState<ProductPayload>(productToForm());
   const [subcategories, setSubcategories] = useState<Record<BusinessCategory, string[]>>({
@@ -57,8 +106,22 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const [editingValue, setEditingValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const lastWeekWheelAtRef = useRef(0);
 
-  const load = async (shopId = selectedShopId, nextWindowStart = windowStart) => {
+  const load = async (shopId = selectedShopId, nextWindowStart = windowStart, force = false) => {
+    const cachedShopId = shopId || shops[0]?.id || '';
+    const cachedLoadedKey = cachedShopId ? `${cachedShopId}:${activeBusinessCategory}` : '';
+    if (
+      !force &&
+      cachedLoadedKey &&
+      table &&
+      loadedKey === cachedLoadedKey &&
+      isWindowCovered(loadedRange, nextWindowStart) &&
+      !shouldExpandRange(loadedRange, nextWindowStart)
+    ) {
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
@@ -71,11 +134,20 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         return;
       }
 
-      const dashboardFrom = addDays(nextWindowStart, -WEEK_DAYS);
-      const from = dashboardFrom;
-      const to = getTwoWeeksEnd(dashboardFrom);
+      const nextLoadedKey = `${resolvedShopId}:${activeBusinessCategory}`;
+      const canUseLoadedRange = loadedKey === nextLoadedKey;
+      const targetRange = stockRangeForWindowStart(nextWindowStart);
+      if (!force && table && canUseLoadedRange && isWindowCovered(loadedRange, nextWindowStart) && !shouldExpandRange(loadedRange, nextWindowStart)) {
+        return;
+      }
+
+      const mergedRange = force || !canUseLoadedRange ? targetRange : mergeRange(loadedRange, targetRange);
+      const from = mergedRange.from;
+      const to = mergedRange.to;
       const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, businessCategory: activeBusinessCategory, from, to });
       setTable(nextTable);
+      setLoadedRange(mergedRange);
+      setLoadedKey(nextLoadedKey);
       const nextSubcategories = await api.stock.listSubcategories(session.token);
       setSubcategories(nextSubcategories);
 
@@ -101,6 +173,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     void load();
   }, [session.token, selectedShopId, windowStart, activeBusinessCategory]);
 
+  const viewDates = useMemo(() => viewDatesForWindowStart(windowStart), [windowStart]);
+
   const visibleRows = useMemo(() => {
     const normalized = normalizeText(query);
     return (table?.rows ?? []).filter((row) => !normalized || normalizeText(row.name).includes(normalized));
@@ -116,9 +190,27 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const isMilkTable = activeBusinessCategory === 'Молоко';
 
   const dashboardWeeks: DashboardWeeks = useMemo(
-    () => (table ? deriveDashboardWeeks(table.dates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
-    [table],
+    () => (table ? deriveDashboardWeeks(viewDates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
+    [table, viewDates],
   );
+
+  const shiftWeek = (direction: -1 | 1) => {
+    setWindowStart((current) => addDays(current, direction * WEEK_DAYS));
+  };
+
+  const handleWeekWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : 0;
+    if (Math.abs(delta) < 40) {
+      return;
+    }
+    event.preventDefault();
+    const now = Date.now();
+    if (now - lastWeekWheelAtRef.current < 450) {
+      return;
+    }
+    lastWeekWheelAtRef.current = now;
+    shiftWeek(delta > 0 ? 1 : -1);
+  };
 
   const orderDateForKey = (key: DashboardManualOrderKey): string | undefined => {
     if (key === 'orderPackThu') return dashboardWeeks.current.thu;
@@ -251,7 +343,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(`manager_dashboard_${table.shop.name}_${table.from}_${table.to}`)}.csv`;
+    link.download = `${safeFileName(`manager_dashboard_${table.shop.name}_${viewDates[0]}_${viewDates[viewDates.length - 1]}`)}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -288,7 +380,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDashboardTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll">
+      <div className="manager-table-scroll" onWheel={handleWeekWheel}>
         <table className="manager-stock-table manager-dashboard-table">
           <colgroup>
             <col className="manager-name-col-width" />
@@ -382,12 +474,12 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDailyTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll">
+      <div className="manager-table-scroll" onWheel={handleWeekWheel}>
         <table className="manager-stock-table manager-dashboard-table">
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>
-              {(table?.dates ?? []).map((date) => (
+              {viewDates.map((date) => (
                 <React.Fragment key={date}>
                   <th>{formatDateLabel(date)}<small>Остаток</small></th>
                   <th>
@@ -401,11 +493,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={(table?.dates.length ?? 0) * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={viewDates.length * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row) => (
               <tr key={row.productId}>
                 <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
-                {(table?.dates ?? []).map((date) => {
+                {viewDates.map((date) => {
                   const orderDate = activeBusinessCategory === 'Деликатесы'
                     ? nearestDelicaciesOrderDate(date)
                     : addDays(date, 1);
@@ -449,7 +541,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   return (
     <section className="page-section stock-page-section">
-      <PageHeader title="Остатки" subtitle="Менеджерская таблица остатков, заказов и продаж по магазину." action={<RefreshButton onClick={() => load()} />} />
+      <PageHeader title="Остатки" subtitle="Менеджерская таблица остатков, заказов и продаж по магазину." action={<RefreshButton onClick={() => load(selectedShopId, windowStart, true)} />} />
       <Feedback error={error} />
 
       <div className="manager-controls">
@@ -472,9 +564,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
             {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
           </select>
-          <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, -WEEK_DAYS))}>-1 нед.</button>
+          <button className="secondary" onClick={() => shiftWeek(-1)}>-1 нед.</button>
           <button className="secondary" onClick={() => setWindowStart(startOfWeek())}>Текущая нед.</button>
-          <button className="secondary" onClick={() => setWindowStart((current) => addDays(current, WEEK_DAYS))}>+1 нед.</button>
+          <button className="secondary" onClick={() => shiftWeek(1)}>+1 нед.</button>
           <button onClick={() => setIsAddProductOpen(true)}>Добавить товар</button>
           <button className="secondary" onClick={exportDashboard}>Экспорт в Excel</button>
         </div>

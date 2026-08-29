@@ -53,13 +53,12 @@ const viewDatesForWindowStart = (weekStart: string): string[] => {
 };
 
 const bufferedWeekStartsFor = (weekStart: string): string[] => [
-  addDays(weekStart, -WEEK_DAYS),
   weekStart,
   addDays(weekStart, WEEK_DAYS),
 ];
 
 const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
-  from: addDays(weekStart, -WEEK_DAYS * 2),
+  from: addDays(weekStart, -WEEK_DAYS),
   to: addDays(weekStart, WEEK_DAYS * 2 - 1),
 });
 
@@ -445,7 +444,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                     }
                     return (
                       <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
-                        <span className={column.kind === 'stock' ? 'dashboard-stock-value' : column.kind === 'order' ? 'dashboard-order-value' : ''}>
+                        <span className={`dashboard-cell-value ${column.kind === 'stock' ? 'dashboard-stock-value' : column.kind === 'order' ? 'dashboard-order-value' : ''}`}>
                           {value || '-'}
                         </span>
                       </td>

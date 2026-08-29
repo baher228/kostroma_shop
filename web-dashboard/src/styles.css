@@ -806,18 +806,27 @@ td.sticky {
   background: #c7e4ef;
 }
 
-.dashboard-stock-value,
-.stock-cell-button {
-  color: #223528;
-  font-size: 20px;
-  font-weight: 400;
-}
-
-.dashboard-order-value,
+.dashboard-cell-value,
+.stock-cell-button,
 .dashboard-order-input {
   color: #223528;
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 18px;
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dashboard-stock-value,
+.dashboard-order-value {
+  min-height: 38px;
 }
 
 .dashboard-order-input {
@@ -826,6 +835,7 @@ td.sticky {
   background: transparent;
   padding: 0;
   text-align: center;
+  text-overflow: clip;
 }
 
 .stock-cell-button {

@@ -225,10 +225,8 @@ export const buildDashboardRowValues = <T extends DashboardProductLike>({
   const soldMonWedCurrent = computeSold(stockAt(row, previous?.sun), prevOrderTueUnits, stockAt(row, current.wed));
   const curOrderThuUnits = orderUnitsFromPacks(orderPacks(row.productId, current.thu), row.unitsInPack);
   const soldWedFriCurrent = computeSold(stockAt(row, current.tue), curOrderThuUnits, stockAt(row, current.fri));
-  const prevOrderSatUnits = previous?.thu
-    ? orderUnitsFromPacks(orderPacks(row.productId, addDays(previous.thu, 2)), row.unitsInPack)
-    : '';
-  const soldFriMonCurrent = computeSold(stockAt(row, previous?.thu), prevOrderSatUnits, stockAt(row, current.mon));
+  const curOrderSatUnits = orderUnitsFromPacks(orderPackSat, row.unitsInPack);
+  const soldFriMonCurrent = computeSold(stockAt(row, current.thu), curOrderSatUnits, stockAt(row, current.mon));
   const soldMonWedPrevious = previous ? diffStocks(stockAt(row, previous.mon), stockAt(row, previous.wed)) : '';
   const prevOrderThuUnits = previous?.thu ? orderUnitsFromPacks(orderPacks(row.productId, previous.thu), row.unitsInPack) : '';
   const soldWedFriPrevious = previous ? computeSold(stockAt(row, previous.tue), prevOrderThuUnits, stockAt(row, previous.fri)) : '';

@@ -1,5 +1,5 @@
 ﻿import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -147,53 +147,6 @@ const nextDelicaciesDeliveryDate = (dateKey: string): string => {
 
 const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
 
-const PRELOADED_WEEK_RADIUS = 2;
-
-type LoadedWeekRange = {
-  from: string;
-  to: string;
-};
-
-const buildDateRange = (from: string, to: string): string[] => {
-  const dates: string[] = [];
-  for (let date = from; date <= to; date = shiftDateKey(date, 1)) {
-    dates.push(date);
-  }
-  return dates;
-};
-
-const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
-  from: shiftDateKey(weekStart, -(PRELOADED_WEEK_RADIUS + 1) * WEEK_DAYS),
-  to: shiftDateKey(weekStart, (PRELOADED_WEEK_RADIUS + 1) * WEEK_DAYS - 1),
-});
-
-const viewDatesForWindowStart = (weekStart: string): string[] => {
-  const from = shiftDateKey(weekStart, -WEEK_DAYS);
-  return buildDateRange(from, getTwoWeeksEnd(from));
-};
-
-const isWindowCovered = (range: LoadedWeekRange | null, weekStart: string): boolean => {
-  if (!range) {
-    return false;
-  }
-  const dates = viewDatesForWindowStart(weekStart);
-  return range.from <= dates[0] && range.to >= dates[dates.length - 1];
-};
-
-const shouldExpandRange = (range: LoadedWeekRange | null, weekStart: string): boolean => {
-  if (!range) {
-    return true;
-  }
-  const firstWindowStart = shiftDateKey(range.from, WEEK_DAYS);
-  const lastWindowStart = shiftDateKey(range.to, -(WEEK_DAYS - 1));
-  return weekStart <= shiftDateKey(firstWindowStart, WEEK_DAYS) || weekStart >= shiftDateKey(lastWindowStart, -WEEK_DAYS);
-};
-
-const mergeRange = (current: LoadedWeekRange | null, next: LoadedWeekRange): LoadedWeekRange => ({
-  from: current && current.from < next.from ? current.from : next.from,
-  to: current && current.to > next.to ? current.to : next.to,
-});
-
 const formatOptionalPrice = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
     return '';
@@ -236,8 +189,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(session.user.shopId ?? null);
   const [managerWindowStart, setManagerWindowStart] = useState<string>(currentWeekStart());
-  const [loadedRange, setLoadedRange] = useState<LoadedWeekRange | null>(null);
-  const [loadedKey, setLoadedKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -261,7 +212,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
-  const weekScrollDragRef = useRef(false);
 
   useEffect(() => {
     if (!canManage && activeTab === 'users') {
@@ -291,21 +241,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
   };
 
-  const loadTable = async (force = false) => {
-    const targetShopId = selectedShopId ?? '';
-    const nextLoadedKey = `${targetShopId}:${activeBusinessCategory}`;
-    const canUseLoadedRange = canManage && loadedKey === nextLoadedKey;
-    const targetRange = stockRangeForWindowStart(managerWindowStart);
-    if (!force && table && canUseLoadedRange && isWindowCovered(loadedRange, managerWindowStart) && !shouldExpandRange(loadedRange, managerWindowStart)) {
-      return;
-    }
-
+  const loadTable = async () => {
     try {
       setLoading(true);
       setError('');
-      const mergedRange = force || !canUseLoadedRange ? targetRange : mergeRange(loadedRange, targetRange);
-      const from = canManage ? mergedRange.from : undefined;
-      const to = canManage ? mergedRange.to : undefined;
+      const dashboardFrom = shiftDateKey(managerWindowStart, -WEEK_DAYS);
+      const dashboardTo = getTwoWeeksEnd(dashboardFrom);
+      const from = canManage ? dashboardFrom : undefined;
+      const to = canManage ? dashboardTo : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
         businessCategory: activeBusinessCategory,
@@ -314,10 +257,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         range: canManage ? undefined : 'week',
       });
       setTable(nextTable);
-      if (canManage) {
-        setLoadedRange(mergedRange);
-        setLoadedKey(nextLoadedKey);
-      }
       if (!selectedShopId) {
         setSelectedShopId(nextTable.shop.id);
       }
@@ -355,8 +294,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     void loadTable();
   }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory]);
 
-  const viewDates = useMemo(() => viewDatesForWindowStart(managerWindowStart), [managerWindowStart]);
-
   const visibleRows = useMemo(() => {
     if (!table) {
       return [];
@@ -391,43 +328,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         previousStart: undefined as string | undefined,
       };
     }
-    return deriveDashboardWeeks(viewDates);
-  }, [table, viewDates]);
-
-  const shiftManagerWeek = (direction: -1 | 1) => {
-    setManagerWindowStart((current) => shiftDateKey(current, direction * WEEK_DAYS));
-  };
-
-  const handleWeekScrollEnd = (event: {
-    nativeEvent: {
-      contentOffset: { x: number };
-      contentSize: { width: number };
-      layoutMeasurement: { width: number };
-    };
-  }) => {
-    if (!weekScrollDragRef.current) {
-      return;
-    }
-    weekScrollDragRef.current = false;
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    if (contentOffset.x <= 8) {
-      shiftManagerWeek(-1);
-      return;
-    }
-    if (contentOffset.x + layoutMeasurement.width >= contentSize.width - 8) {
-      shiftManagerWeek(1);
-    }
-  };
-
-  const weekScrollProps = canManage
-    ? {
-      onScrollBeginDrag: () => {
-        weekScrollDragRef.current = true;
-      },
-      onMomentumScrollEnd: handleWeekScrollEnd,
-      onScrollEndDrag: handleWeekScrollEnd,
-    }
-    : {};
+    return deriveDashboardWeeks(table.dates);
+  }, [table]);
 
   const productReferenceLabel = (row: StockTableRow): string => {
     const parts: string[] = [];
@@ -947,10 +849,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           ))}
         </View>
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns} {...weekScrollProps}>
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
           <View>
             <View style={styles.headerRow}>
-              {viewDates.map((date) => (
+              {table?.dates.map((date) => (
                 <View key={date} style={styles.dailyHeaderGroup}>
                   <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
                   <Text style={styles.dateDayText}>{formatDate(date)}</Text>
@@ -970,7 +872,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             ) : (
               rows.map((row) => (
                 <View key={row.productId} style={[styles.row, styles.dashboardDataRow]}>
-                  {viewDates.map((date) => {
+                  {table?.dates.map((date) => {
                     const orderDate = activeBusinessCategory === 'Деликатесы'
                       ? nextDelicaciesDeliveryDate(date)
                       : shiftDateKey(date, 1);
@@ -1092,7 +994,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             );
           })}
         </View>
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns} {...weekScrollProps}>
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.scrollableColumns}>
           <View>
             <View style={styles.headerRow}>
               {DASHBOARD_COLUMNS.map((column) => (
@@ -1222,7 +1124,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               <View style={styles.rangeButtons}>
                 <Pressable
                   style={styles.calendarNavButton}
-                  onPress={() => shiftManagerWeek(-1)}
+                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, -WEEK_DAYS))}
                 >
                   <Text style={styles.calendarNavButtonText}>-1 нед.</Text>
                 </Pressable>
@@ -1231,7 +1133,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                 </Pressable>
                 <Pressable
                   style={styles.calendarNavButton}
-                  onPress={() => shiftManagerWeek(1)}
+                  onPress={() => setManagerWindowStart((current) => shiftDateKey(current, WEEK_DAYS))}
                 >
                   <Text style={styles.calendarNavButtonText}>+1 нед.</Text>
                 </Pressable>

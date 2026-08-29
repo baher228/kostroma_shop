@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, Modal, NumberInput, PageHeader, RefreshButton } from '../../components/ui';
 import {
@@ -34,8 +34,6 @@ import type { BusinessCategory } from '../../types';
 import { managerProductName } from '../../../../shared/product-display';
 import { sortProductsLikeImage } from '../../productOrdering';
 
-const PRELOADED_WEEK_RADIUS = 2;
-
 type LoadedWeekRange = {
   from: string;
   to: string;
@@ -49,37 +47,15 @@ const buildDateRange = (from: string, to: string): string[] => {
   return dates;
 };
 
-const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
-  from: addDays(weekStart, -(PRELOADED_WEEK_RADIUS + 1) * WEEK_DAYS),
-  to: addDays(weekStart, (PRELOADED_WEEK_RADIUS + 1) * WEEK_DAYS - 1),
-});
-
 const viewDatesForWindowStart = (weekStart: string): string[] => {
   const from = addDays(weekStart, -WEEK_DAYS);
   return buildDateRange(from, getTwoWeeksEnd(from));
 };
 
-const isWindowCovered = (range: LoadedWeekRange | null, weekStart: string): boolean => {
-  if (!range) {
-    return false;
-  }
+const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => {
   const dates = viewDatesForWindowStart(weekStart);
-  return range.from <= dates[0] && range.to >= dates[dates.length - 1];
+  return { from: dates[0], to: dates[dates.length - 1] };
 };
-
-const shouldExpandRange = (range: LoadedWeekRange | null, weekStart: string): boolean => {
-  if (!range) {
-    return true;
-  }
-  const firstWindowStart = addDays(range.from, WEEK_DAYS);
-  const lastWindowStart = addDays(range.to, -(WEEK_DAYS - 1));
-  return weekStart <= addDays(firstWindowStart, WEEK_DAYS) || weekStart >= addDays(lastWindowStart, -WEEK_DAYS);
-};
-
-const mergeRange = (current: LoadedWeekRange | null, next: LoadedWeekRange): LoadedWeekRange => ({
-  from: current && current.from < next.from ? current.from : next.from,
-  to: current && current.to > next.to ? current.to : next.to,
-});
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
@@ -105,24 +81,20 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const [editingCell, setEditingCell] = useState<{ productId: string; date: string; productName: string } | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const lastWeekWheelAtRef = useRef(0);
 
   const load = async (shopId = selectedShopId, nextWindowStart = windowStart, force = false) => {
     const cachedShopId = shopId || shops[0]?.id || '';
     const cachedLoadedKey = cachedShopId ? `${cachedShopId}:${activeBusinessCategory}` : '';
-    if (
-      !force &&
-      cachedLoadedKey &&
-      table &&
-      loadedKey === cachedLoadedKey &&
-      isWindowCovered(loadedRange, nextWindowStart) &&
-      !shouldExpandRange(loadedRange, nextWindowStart)
-    ) {
+    const targetRange = stockRangeForWindowStart(nextWindowStart);
+    if (!force && cachedLoadedKey && table && loadedKey === cachedLoadedKey && loadedRange && loadedRange.from === targetRange.from && loadedRange.to === targetRange.to) {
       return;
     }
 
-    setLoading(true);
+    const hasCurrentTable = Boolean(table);
+    setLoading(!hasCurrentTable);
+    setLoadingMore(hasCurrentTable);
     setError('');
     try {
       const nextShops = await api.shops.list(session.token);
@@ -136,17 +108,15 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       const nextLoadedKey = `${resolvedShopId}:${activeBusinessCategory}`;
       const canUseLoadedRange = loadedKey === nextLoadedKey;
-      const targetRange = stockRangeForWindowStart(nextWindowStart);
-      if (!force && table && canUseLoadedRange && isWindowCovered(loadedRange, nextWindowStart) && !shouldExpandRange(loadedRange, nextWindowStart)) {
+      if (!force && table && canUseLoadedRange && loadedRange && loadedRange.from === targetRange.from && loadedRange.to === targetRange.to) {
         return;
       }
 
-      const mergedRange = force || !canUseLoadedRange ? targetRange : mergeRange(loadedRange, targetRange);
-      const from = mergedRange.from;
-      const to = mergedRange.to;
+      const from = targetRange.from;
+      const to = targetRange.to;
       const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, businessCategory: activeBusinessCategory, from, to });
       setTable(nextTable);
-      setLoadedRange(mergedRange);
+      setLoadedRange(targetRange);
       setLoadedKey(nextLoadedKey);
       const nextSubcategories = await api.stock.listSubcategories(session.token);
       setSubcategories(nextSubcategories);
@@ -166,11 +136,12 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       setError(messageOf(err));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    void load();
+    void load(selectedShopId, windowStart);
   }, [session.token, selectedShopId, windowStart, activeBusinessCategory]);
 
   const viewDates = useMemo(() => viewDatesForWindowStart(windowStart), [windowStart]);
@@ -198,39 +169,24 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     setWindowStart((current) => addDays(current, direction * WEEK_DAYS));
   };
 
-  const handleWeekWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : 0;
-    if (Math.abs(delta) < 40) {
-      return;
-    }
-    event.preventDefault();
-    const now = Date.now();
-    if (now - lastWeekWheelAtRef.current < 450) {
-      return;
-    }
-    lastWeekWheelAtRef.current = now;
-    shiftWeek(delta > 0 ? 1 : -1);
-  };
-
-  const orderDateForKey = (key: DashboardManualOrderKey): string | undefined => {
-    if (key === 'orderPackThu') return dashboardWeeks.current.thu;
-    if (key === 'orderPackSat') return dashboardWeeks.current.thu ? addDays(dashboardWeeks.current.thu, 2) : undefined;
-    if (key === 'orderPackTue') return dashboardWeeks.current.sun ? addDays(dashboardWeeks.current.sun, 2) : undefined;
+  const orderDateForKey = (key: DashboardManualOrderKey, weeks = dashboardWeeks): string | undefined => {
+    if (key === 'orderPackThu') return weeks.current.thu;
+    if (key === 'orderPackSat') return weeks.current.thu ? addDays(weeks.current.thu, 2) : undefined;
+    if (key === 'orderPackTue') return weeks.current.sun ? addDays(weeks.current.sun, 2) : undefined;
     return undefined;
   };
 
   const orderPacksForDate = (productId: string, date?: string): string => (date ? orderValues[`${productId}:${date}`] ?? '' : '');
-  const orderCellValue = (productId: string, key: DashboardManualOrderKey): string => orderPacksForDate(productId, orderDateForKey(key));
 
-  const rowValuesFor = (row: Product) =>
+  const rowValuesFor = (row: Product, weeks = dashboardWeeks) =>
     buildDashboardRowValues({
       row,
-      weeks: dashboardWeeks,
+      weeks,
       orderPacks: orderPacksForDate,
     });
 
-  const setOrderCellValue = (productId: string, key: DashboardManualOrderKey, value: string) => {
-    const date = orderDateForKey(key);
+  const setOrderCellValue = (productId: string, key: DashboardManualOrderKey, value: string, weeks = dashboardWeeks) => {
+    const date = orderDateForKey(key, weeks);
     if (!date || !selectedShopId) {
       return;
     }
@@ -245,13 +201,13 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     }).catch((err) => setError(messageOf(err)));
   };
 
-  const currentStockDateForColumn = (key: DashboardColumnKey): string | undefined => {
-    if (key === 'currentTue') return dashboardWeeks.current.tue;
-    if (key === 'currentWed') return dashboardWeeks.current.wed;
-    if (key === 'currentThu') return dashboardWeeks.current.thu;
-    if (key === 'currentFri') return dashboardWeeks.current.fri;
-    if (key === 'currentSun') return dashboardWeeks.current.sun;
-    if (key === 'currentMon') return dashboardWeeks.current.mon;
+  const currentStockDateForColumn = (key: DashboardColumnKey, weeks = dashboardWeeks): string | undefined => {
+    if (key === 'currentTue') return weeks.current.tue;
+    if (key === 'currentWed') return weeks.current.wed;
+    if (key === 'currentThu') return weeks.current.thu;
+    if (key === 'currentFri') return weeks.current.fri;
+    if (key === 'currentSun') return weeks.current.sun;
+    if (key === 'currentMon') return weeks.current.mon;
     return undefined;
   };
 
@@ -321,13 +277,18 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       'Вес упаковки, кг',
       'Срок годности, сут',
       'Цена в руб, с НДС',
-      ...DASHBOARD_COLUMNS.map((column) => {
-        const subtitle = dashboardHeaderSubtitle(dashboardWeeks, column).replace('\n', ' ');
-        return subtitle ? `${column.title} (${subtitle})` : column.title;
-      }),
+      ...(isMilkTable
+        ? DASHBOARD_COLUMNS.map((column) => {
+          const subtitle = dashboardHeaderSubtitle(dashboardWeeks, column).replace('\n', ' ');
+          return subtitle ? `${column.title} (${subtitle})` : column.title;
+        })
+        : viewDates.flatMap((date) => [
+          `Остаток (${formatDateLabel(date)})`,
+          `Заказ (${formatDateLabel(activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1))})`,
+          `Продано (${formatDateLabel(date)})`,
+        ])),
     ];
     const rows = orderedRows.map((row) => {
-      const values = rowValuesFor(row);
       return [
         row.category,
         row.name,
@@ -336,7 +297,12 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         row.packWeightKg !== null ? String(row.packWeightKg) : '',
         row.shelfLifeDays !== null ? String(row.shelfLifeDays) : '',
         row.unitPriceRubVat !== null && row.unitPriceRubVat !== undefined ? String(row.unitPriceRubVat) : '',
-        ...DASHBOARD_COLUMNS.map((column) => values[column.key] ?? ''),
+        ...(isMilkTable
+          ? DASHBOARD_COLUMNS.map((column) => rowValuesFor(row)[column.key] ?? '')
+          : viewDates.flatMap((date) => {
+            const orderDate = activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1);
+            return [row.values[date] ?? '', orderPacksForDate(row.productId, orderDate), soldFor(row, date)];
+          })),
       ];
     });
     const blob = new Blob([`\uFEFF${buildCsv([headers, ...rows])}`], { type: 'text/csv;charset=utf-8;' });
@@ -380,14 +346,13 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDashboardTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll" onWheel={handleWeekWheel}>
+      <div className="manager-table-scroll">
         <table className="manager-stock-table manager-dashboard-table">
           <colgroup>
             <col className="manager-name-col-width" />
             {DASHBOARD_COLUMNS.map((column) => (
               <col key={column.key} className="dashboard-data-col-width" />
             ))}
-            <col className="manager-action-col-width" />
           </colgroup>
           <thead>
             <tr>
@@ -474,7 +439,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDailyTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll" onWheel={handleWeekWheel}>
+      <div className="manager-table-scroll">
         <table className="manager-stock-table manager-dashboard-table">
           <thead>
             <tr>
@@ -564,9 +529,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
             {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
           </select>
-          <button className="secondary" onClick={() => shiftWeek(-1)}>-1 нед.</button>
-          <button className="secondary" onClick={() => setWindowStart(startOfWeek())}>Текущая нед.</button>
-          <button className="secondary" onClick={() => shiftWeek(1)}>+1 нед.</button>
+          <button className="secondary" onClick={() => shiftWeek(-1)} disabled={loadingMore}>Прогрузить назад</button>
+          <button className="secondary" onClick={() => setWindowStart(startOfWeek())} disabled={loadingMore}>Текущая неделя</button>
+          <button className="secondary" onClick={() => shiftWeek(1)} disabled={loadingMore}>Прогрузить дальше</button>
           <button onClick={() => setIsAddProductOpen(true)}>Добавить товар</button>
           <button className="secondary" onClick={exportDashboard}>Экспорт в Excel</button>
         </div>
@@ -574,7 +539,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       <div className="manager-meta-row">
         <strong>Позиций: {visibleRows.length}</strong>
-        <strong>{table ? `${activeBusinessCategory}: ${windowStart} - ${addDays(windowStart, WEEK_DAYS - 1)}` : ''}</strong>
+        <strong>{loadedRange ? `${activeBusinessCategory}: ${viewDates[0]} - ${viewDates[viewDates.length - 1]}` : ''}</strong>
+        {loadingMore && <strong>Подгружаем период...</strong>}
       </div>
 
       <div className="manager-table-wrap">

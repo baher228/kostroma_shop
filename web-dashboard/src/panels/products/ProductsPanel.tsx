@@ -89,6 +89,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const topScrollRef = useRef<HTMLDivElement | null>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
   const centeredWeekRef = useRef('');
 
   const load = async (shopId = selectedShopId, nextWindowStart = windowStart, force = false) => {
@@ -189,6 +191,46 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       centeredWeekRef.current = windowStart;
     }
   }, [table, windowStart]);
+
+  useEffect(() => {
+    const scroller = tableScrollRef.current;
+    const tableElement = scroller?.querySelector('table');
+    if (!scroller || !tableElement) {
+      setTableScrollWidth(0);
+      return;
+    }
+
+    const updateScrollWidth = () => setTableScrollWidth(tableElement.scrollWidth);
+    updateScrollWidth();
+
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateScrollWidth);
+    resizeObserver?.observe(tableElement);
+    resizeObserver?.observe(scroller);
+    window.addEventListener('resize', updateScrollWidth);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updateScrollWidth);
+    };
+  }, [activeBusinessCategory, dashboardWeekStarts, loadedDates, orderedRows, table]);
+
+  const syncScrollLeft = (source: HTMLDivElement | null, target: HTMLDivElement | null) => {
+    if (!source || !target || source.scrollLeft === target.scrollLeft) {
+      return;
+    }
+    target.scrollLeft = source.scrollLeft;
+  };
+
+  const renderTopScrollbar = () => (
+    <div
+      aria-hidden="true"
+      className="manager-table-top-scroll"
+      onScroll={() => syncScrollLeft(topScrollRef.current, tableScrollRef.current)}
+      ref={topScrollRef}
+    >
+      <div className="manager-table-top-spacer" style={{ width: tableScrollWidth || '100%' }} />
+    </div>
+  );
 
   const shiftWeek = (direction: -1 | 1) => {
     setWindowStart((current) => addDays(current, direction * WEEK_DAYS));
@@ -377,7 +419,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDashboardTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll" ref={tableScrollRef}>
+      {renderTopScrollbar()}
+      <div className="manager-table-scroll" onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)} ref={tableScrollRef}>
         <table className="manager-stock-table manager-dashboard-table">
           <colgroup>
             <col className="manager-name-col-width" />
@@ -480,7 +523,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   const renderDailyTable = (rows: Product[]) => (
     <section className="manager-category-block">
-      <div className="manager-table-scroll" ref={tableScrollRef}>
+      {renderTopScrollbar()}
+      <div className="manager-table-scroll" onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)} ref={tableScrollRef}>
         <table className="manager-stock-table manager-dashboard-table">
           <thead>
             <tr>

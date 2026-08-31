@@ -2007,6 +2007,31 @@ td.sticky {
   scrollbar-width: thin;
 }
 
+.manager-table-top-scroll {
+  max-width: 100%;
+  height: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid #c8d5cd;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: #eef3ef;
+  scrollbar-color: #8fa697 #e0e8e2;
+  scrollbar-width: thin;
+}
+
+.manager-table-top-spacer {
+  height: 1px;
+}
+
+.manager-table-scroll {
+  scrollbar-width: none;
+}
+
+.manager-table-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .manager-stock-table {
   color: var(--color-text);
 }

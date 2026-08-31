@@ -5,10 +5,9 @@ import test from 'node:test';
 test('current Fri-Mon sold formula uses current Thursday stock and Saturday order', async () => {
   const source = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
 
-  assert.match(source, /const curOrderSatUnits = orderUnitsFromPacks\(orderPackSat, row\.unitsInPack\);/);
   assert.match(
     source,
-    /const soldFriMonCurrent = computeDashboardSold\(stockAt\(row, current\.thu\), curOrderSatUnits, stockAt\(row, current\.mon\)\);/,
+    /const soldFriMonCurrent = soldFriMonForWeek\(row, current, orderPacks\);/,
   );
   assert.doesNotMatch(
     source,
@@ -19,10 +18,9 @@ test('current Fri-Mon sold formula uses current Thursday stock and Saturday orde
 test('current Mon-Wed sold formula uses previous Sunday stock and Tuesday order', async () => {
   const source = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
 
-  assert.match(source, /const curOrderTueUnits = orderUnitsFromPacks\(orderPacks\(row\.productId, current\.tue\), row\.unitsInPack\);/);
   assert.match(
     source,
-    /const soldMonWedCurrent = computeDashboardSold\(stockAt\(row, previous\?\.sun\), curOrderTueUnits, stockAt\(row, current\.wed\)\);/,
+    /const soldMonWedCurrent = soldMonWedForWeek\(row, current, previous\?\.sun, orderPacks\);/,
   );
   assert.doesNotMatch(
     source,
@@ -38,4 +36,26 @@ test('dashboard sold formulas treat blank cells as zero and clamp negatives', as
   assert.match(source, /const delivery = parseStockNumber\(deliveryRaw\) \?\? 0;/);
   assert.match(source, /const end = parseStockNumber\(endRaw\) \?\? 0;/);
   assert.match(source, /return String\(Math\.max\(0, start \+ delivery - end\)\);/);
+});
+
+test('previous sold columns are wired to the matching previous week sold calculations', async () => {
+  const source = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /const previousWeekSunday = previous\?\.mon \? addDays\(previous\.mon, -1\) : undefined;/);
+  assert.match(
+    source,
+    /const soldMonWedPrevious = previous \? soldMonWedForWeek\(row, previous, previousWeekSunday, orderPacks\) : '';/,
+  );
+  assert.match(
+    source,
+    /const soldWedFriPrevious = previous \? soldWedFriForWeek\(row, previous, orderPacks\) : '';/,
+  );
+  assert.match(
+    source,
+    /const soldFriMonPrevious = previous \? soldFriMonForWeek\(row, previous, orderPacks\) : '';/,
+  );
+  assert.doesNotMatch(source, /const soldMonWedPrevious = previous \? computeDashboardSold\(stockAt\(row, previous\.mon\)/);
+  assert.match(source, /soldPrevMonWed: copiedSoldMonWedPrevious \|\| soldMonWedPrevious,/);
+  assert.match(source, /soldPrevWedFri: copiedSoldWedFriPrevious \|\| soldWedFriPrevious,/);
+  assert.match(source, /soldPrevFriMon: copiedSoldFriMonPrevious \|\| soldFriMonPrevious,/);
 });

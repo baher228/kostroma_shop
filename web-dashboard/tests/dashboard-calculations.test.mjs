@@ -8,24 +8,34 @@ test('current Fri-Mon sold formula uses current Thursday stock and Saturday orde
   assert.match(source, /const curOrderSatUnits = orderUnitsFromPacks\(orderPackSat, row\.unitsInPack\);/);
   assert.match(
     source,
-    /const soldFriMonCurrent = computeSold\(stockAt\(row, current\.thu\), curOrderSatUnits, stockAt\(row, current\.mon\)\);/,
+    /const soldFriMonCurrent = computeDashboardSold\(stockAt\(row, current\.thu\), curOrderSatUnits, stockAt\(row, current\.mon\)\);/,
   );
   assert.doesNotMatch(
     source,
-    /const soldFriMonCurrent = computeSold\(stockAt\(row, previous\?\.thu\)/,
+    /const soldFriMonCurrent = computeDashboardSold\(stockAt\(row, previous\?\.thu\)/,
   );
 });
 
-test('current Mon-Wed sold formula uses current Sunday stock and Tuesday order', async () => {
+test('current Mon-Wed sold formula uses previous Sunday stock and Tuesday order', async () => {
   const source = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
 
   assert.match(source, /const curOrderTueUnits = orderUnitsFromPacks\(orderPacks\(row\.productId, current\.tue\), row\.unitsInPack\);/);
   assert.match(
     source,
-    /const soldMonWedCurrent = computeSold\(stockAt\(row, current\.sun\), curOrderTueUnits, stockAt\(row, current\.wed\)\);/,
+    /const soldMonWedCurrent = computeDashboardSold\(stockAt\(row, previous\?\.sun\), curOrderTueUnits, stockAt\(row, current\.wed\)\);/,
   );
   assert.doesNotMatch(
     source,
-    /const soldMonWedCurrent = computeSold\(stockAt\(row, previous\?\.sun\)/,
+    /const soldMonWedCurrent = computeDashboardSold\(stockAt\(row, current\.sun\)/,
   );
+});
+
+test('dashboard sold formulas treat blank cells as zero and clamp negatives', async () => {
+  const source = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /const computeDashboardSold = \(startRaw\?: string, deliveryRaw\?: string, endRaw\?: string\): string => \{/);
+  assert.match(source, /const start = parseStockNumber\(startRaw\) \?\? 0;/);
+  assert.match(source, /const delivery = parseStockNumber\(deliveryRaw\) \?\? 0;/);
+  assert.match(source, /const end = parseStockNumber\(endRaw\) \?\? 0;/);
+  assert.match(source, /return String\(Math\.max\(0, start \+ delivery - end\)\);/);
 });

@@ -69,21 +69,40 @@ const PRODUCT_RANK_BY_CATEGORY = new Map(
   ]),
 );
 
+const PRODUCT_CATEGORY_RANK = new Map(
+  Object.keys(PRODUCT_ORDER_BY_CATEGORY).map((category, index) => [category, index]),
+);
+
+const compareOptionalNumbers = (left: number | undefined, right: number | undefined): number | null => {
+  if (left !== undefined && right !== undefined && left !== right) {
+    return left - right;
+  }
+  if (left !== undefined && right === undefined) {
+    return -1;
+  }
+  if (left === undefined && right !== undefined) {
+    return 1;
+  }
+  return null;
+};
+
 export const sortProductsLikeImage = <T extends ProductOrderLike>(rows: T[]): T[] => {
   const withIndex = rows.map((row, index) => ({ row, index }));
   withIndex.sort((left, right) => {
+    const leftCategoryRank = PRODUCT_CATEGORY_RANK.get(left.row.category);
+    const rightCategoryRank = PRODUCT_CATEGORY_RANK.get(right.row.category);
+    const categoryComparison = compareOptionalNumbers(leftCategoryRank, rightCategoryRank);
+    if (categoryComparison !== null) {
+      return categoryComparison;
+    }
+
     const leftRank = PRODUCT_RANK_BY_CATEGORY.get(left.row.category)?.get(left.row.name);
     const rightRank = PRODUCT_RANK_BY_CATEGORY.get(right.row.category)?.get(right.row.name);
+    const productComparison = compareOptionalNumbers(leftRank, rightRank);
+    if (productComparison !== null) {
+      return productComparison;
+    }
 
-    if (leftRank !== undefined && rightRank !== undefined && leftRank !== rightRank) {
-      return leftRank - rightRank;
-    }
-    if (leftRank !== undefined) {
-      return -1;
-    }
-    if (rightRank !== undefined) {
-      return 1;
-    }
     return left.index - right.index;
   });
   return withIndex.map(({ row }) => row);

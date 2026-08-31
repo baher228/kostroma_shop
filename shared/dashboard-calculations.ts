@@ -221,8 +221,8 @@ export const buildDashboardRowValues = <T extends DashboardProductLike>({
   const orderPackSat = current.thu ? orderPacks(row.productId, addDays(current.thu, 2)) : '';
   const orderPackTue = current.sun ? orderPacks(row.productId, addDays(current.sun, 2)) : '';
 
-  const prevOrderTueUnits = orderUnitsFromPacks(orderPacks(row.productId, current.tue), row.unitsInPack);
-  const soldMonWedCurrent = computeSold(stockAt(row, previous?.sun), prevOrderTueUnits, stockAt(row, current.wed));
+  const curOrderTueUnits = orderUnitsFromPacks(orderPacks(row.productId, current.tue), row.unitsInPack);
+  const soldMonWedCurrent = computeSold(stockAt(row, current.sun), curOrderTueUnits, stockAt(row, current.wed));
   const curOrderThuUnits = orderUnitsFromPacks(orderPacks(row.productId, current.thu), row.unitsInPack);
   const soldWedFriCurrent = computeSold(stockAt(row, current.tue), curOrderThuUnits, stockAt(row, current.fri));
   const curOrderSatUnits = orderUnitsFromPacks(orderPackSat, row.unitsInPack);

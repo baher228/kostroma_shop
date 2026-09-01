@@ -152,6 +152,60 @@ test('task service assigns tasks to store tablets and enforces ownership rules',
   );
 });
 
+test('task repository create insert covers photo review columns', async () => {
+  let insertSql = '';
+  let insertParams = null;
+  const { createTask } = loadWithMock('../dist/repositories/taskRepository', {
+    '../dist/db/personalDb': {
+      personalDb: {
+        query: async (sql, params) => {
+          insertSql = sql;
+          insertParams = params;
+          return {
+            rows: [{
+              id: 'task_created',
+              title: 'Check fridge',
+              assignee_id: 'tablet_1',
+              assignee_display_name: 'Shop Tablet',
+              created_by_id: 'manager_1',
+              created_by_display_name: 'Main Manager',
+              status: 'open',
+              created_at: '2026-05-17T07:00:00.000Z',
+              completed_at: null,
+              deadline_at: null,
+              requires_photo_confirmation: false,
+              photo_confirmation_url: null,
+              photo_confirmation_file_name: null,
+              photo_confirmation_mime_type: null,
+              photo_confirmation_uploaded_at: null,
+              photo_confirmed_at: null,
+              photo_review_status: 'none',
+              photo_reviewed_at: null,
+              photo_deletes_at: null,
+            }],
+            rowCount: 1,
+          };
+        },
+      },
+    },
+  });
+
+  const task = await createTask({
+    title: 'Check fridge',
+    assigneeId: 'tablet_1',
+    assigneeDisplayName: 'Shop Tablet',
+    createdById: 'manager_1',
+    createdByDisplayName: 'Main Manager',
+    deadlineAt: null,
+    requiresPhotoConfirmation: false,
+  });
+
+  assert.equal(task.id, 'task_created');
+  assert.equal(insertParams.length, 8);
+  assert.match(insertSql, /photo_confirmation_uploaded_at,\s*photo_confirmed_at,\s*photo_review_status/);
+  assert.match(insertSql, /NULL,NULL,NULL,'none',NULL,NULL,NOW\(\)/);
+});
+
 test('task notification sounds on the tasks channel and removes invalid devices', async () => {
   const originalFetch = global.fetch;
   const removedTokens = [];

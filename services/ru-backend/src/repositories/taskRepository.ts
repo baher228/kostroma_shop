@@ -103,7 +103,7 @@ export const createTask = async (input: {
         photo_confirmation_url, photo_confirmation_file_name, photo_confirmation_mime_type,
         photo_confirmation_uploaded_at, photo_confirmed_at, photo_review_status,
         photo_reviewed_at, photo_deletes_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL,$7,$8,NULL,NULL,NULL,NULL,'none',NULL,NULL,NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL,$7,$8,NULL,NULL,NULL,NULL,NULL,'none',NULL,NULL,NOW())
       RETURNING ${selectFields};
     `,
     [

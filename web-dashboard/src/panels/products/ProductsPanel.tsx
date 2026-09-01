@@ -62,11 +62,69 @@ const visibleStockRangeForWindowStart = (weekStart: string): LoadedWeekRange => 
   to: addDays(weekStart, WEEK_DAYS * 2 - 1),
 });
 
+const rangeFromDates = (dates: Array<string | undefined>, fallback: LoadedWeekRange): LoadedWeekRange => {
+  const sortedDates = dates.filter((date): date is string => Boolean(date)).sort();
+  return {
+    from: sortedDates[0] && sortedDates[0] < fallback.from ? sortedDates[0] : fallback.from,
+    to: sortedDates[sortedDates.length - 1] && sortedDates[sortedDates.length - 1] > fallback.to
+      ? sortedDates[sortedDates.length - 1]
+      : fallback.to,
+  };
+};
+
+const dashboardFormulaStockRangeForWindowStart = (weekStart: string): LoadedWeekRange => {
+  const visibleRange = visibleStockRangeForWindowStart(weekStart);
+  const formulaDates = bufferedWeekStartsFor(weekStart).flatMap((start) => {
+    const weeks = deriveDashboardWeeks(viewDatesForWindowStart(start));
+    const previousSundayBeforeWeek = weeks.previous?.mon ? addDays(weeks.previous.mon, -1) : undefined;
+    return [
+      previousSundayBeforeWeek,
+      weeks.previous?.mon,
+      weeks.previous?.tue,
+      weeks.previous?.wed,
+      weeks.previous?.thu,
+      weeks.previous?.fri,
+      weeks.previous?.sun,
+      weeks.current.mon,
+      weeks.current.tue,
+      weeks.current.wed,
+      weeks.current.thu,
+      weeks.current.fri,
+      weeks.current.sun,
+    ];
+  });
+  return rangeFromDates(formulaDates, visibleRange);
+};
+
+const dashboardFormulaOrderRangeForWindowStart = (weekStart: string): LoadedWeekRange => {
+  const stockRange = dashboardFormulaStockRangeForWindowStart(weekStart);
+  const formulaDates = bufferedWeekStartsFor(weekStart).flatMap((start) => {
+    const weeks = deriveDashboardWeeks(viewDatesForWindowStart(start));
+    return [
+      weeks.previous?.tue,
+      weeks.previous?.thu,
+      weeks.previous?.thu ? addDays(weeks.previous.thu, 2) : undefined,
+      weeks.current.tue,
+      weeks.current.thu,
+      weeks.current.thu ? addDays(weeks.current.thu, 2) : undefined,
+      weeks.current.sun ? addDays(weeks.current.sun, 2) : undefined,
+    ];
+  });
+  return rangeFromDates(formulaDates, stockRange);
+};
+
 const stockFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
-  const range = visibleStockRangeForWindowStart(weekStart);
   return businessCategory === 'Молоко'
-    ? { ...range, from: addDays(range.from, -1) }
-    : range;
+    ? dashboardFormulaStockRangeForWindowStart(weekStart)
+    : visibleStockRangeForWindowStart(weekStart);
+};
+
+const orderFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
+  if (businessCategory === 'Молоко') {
+    return dashboardFormulaOrderRangeForWindowStart(weekStart);
+  }
+  const range = visibleStockRangeForWindowStart(weekStart);
+  return { ...range, to: addDays(range.to, 2) };
 };
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
@@ -139,8 +197,14 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       try {
         const loaded: Record<string, string> = {};
-        const orderValuesTo = addDays(to, 2);
-        const nextOrderValues = await api.stock.listShopOrderValues(session.token, resolvedShopId, from, orderValuesTo, activeBusinessCategory);
+        const orderRange = orderFetchRangeForWindowStart(nextWindowStart, activeBusinessCategory);
+        const nextOrderValues = await api.stock.listShopOrderValues(
+          session.token,
+          resolvedShopId,
+          orderRange.from,
+          orderRange.to,
+          activeBusinessCategory,
+        );
         for (const entry of nextOrderValues) {
           loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
         }

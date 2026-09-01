@@ -236,6 +236,17 @@ const soldFriMonForWeek = <T extends DashboardProductLike>(
   return computeDashboardSold(stockAt(row, week.thu), orderSatUnits, stockAt(row, week.mon));
 };
 
+const soldValuesForWeek = <T extends DashboardProductLike>(
+  row: T,
+  week: WeekDateMap,
+  previousSunday: string | undefined,
+  orderPacks: (productId: string, date?: string) => string,
+): Pick<DashboardRowValues, 'soldMonWed' | 'soldWedFri' | 'soldFriMon'> => ({
+  soldMonWed: soldMonWedForWeek(row, week, previousSunday, orderPacks),
+  soldWedFri: soldWedFriForWeek(row, week, orderPacks),
+  soldFriMon: soldFriMonForWeek(row, week, orderPacks),
+});
+
 export type DashboardRowInput<T extends DashboardProductLike> = {
   row: T;
   weeks: DashboardWeeks;
@@ -260,13 +271,9 @@ export const buildDashboardRowValues = <T extends DashboardProductLike>({
   const orderPackSat = current.thu ? orderPacks(row.productId, addDays(current.thu, 2)) : '';
   const orderPackTue = current.sun ? orderPacks(row.productId, addDays(current.sun, 2)) : '';
 
-  const soldMonWedCurrent = soldMonWedForWeek(row, current, previous?.sun, orderPacks);
-  const soldWedFriCurrent = soldWedFriForWeek(row, current, orderPacks);
-  const soldFriMonCurrent = soldFriMonForWeek(row, current, orderPacks);
+  const currentSold = soldValuesForWeek(row, current, previous?.sun, orderPacks);
   const previousWeekSunday = previous?.mon ? addDays(previous.mon, -1) : undefined;
-  const soldMonWedPrevious = previous ? soldMonWedForWeek(row, previous, previousWeekSunday, orderPacks) : '';
-  const soldWedFriPrevious = previous ? soldWedFriForWeek(row, previous, orderPacks) : '';
-  const soldFriMonPrevious = previous ? soldFriMonForWeek(row, previous, orderPacks) : '';
+  const previousSold = previous ? soldValuesForWeek(row, previous, previousWeekSunday, orderPacks) : null;
   const copiedSoldMonWedPrevious = previousWeekSoldValue('soldMonWed');
   const copiedSoldWedFriPrevious = previousWeekSoldValue('soldWedFri');
   const copiedSoldFriMonPrevious = previousWeekSoldValue('soldFriMon');
@@ -276,22 +283,22 @@ export const buildDashboardRowValues = <T extends DashboardProductLike>({
     orderPackThu,
     orderUnitsThu: orderUnitsFromPacks(orderPackThu, row.unitsInPack),
     prevWed: previous ? stockAt(row, previous.wed) : '',
-    soldPrevMonWed: copiedSoldMonWedPrevious || soldMonWedPrevious,
-    soldMonWed: soldMonWedCurrent,
+    soldPrevMonWed: copiedSoldMonWedPrevious || previousSold?.soldMonWed || '',
+    soldMonWed: currentSold.soldMonWed,
     currentWed: stockAt(row, current.wed),
     currentThu: stockAt(row, current.thu),
     orderPackSat,
     orderUnitsSat: orderUnitsFromPacks(orderPackSat, row.unitsInPack),
     prevFri: previous ? stockAt(row, previous.fri) : '',
-    soldPrevWedFri: copiedSoldWedFriPrevious || soldWedFriPrevious,
-    soldWedFri: soldWedFriCurrent,
+    soldPrevWedFri: copiedSoldWedFriPrevious || previousSold?.soldWedFri || '',
+    soldWedFri: currentSold.soldWedFri,
     currentFri: stockAt(row, current.fri),
     currentSun: stockAt(row, current.sun),
     orderPackTue,
     orderUnitsTue: orderUnitsFromPacks(orderPackTue, row.unitsInPack),
     prevMon: previous ? stockAt(row, previous.mon) : '',
-    soldPrevFriMon: copiedSoldFriMonPrevious || soldFriMonPrevious,
-    soldFriMon: soldFriMonCurrent,
+    soldPrevFriMon: copiedSoldFriMonPrevious || previousSold?.soldFriMon || '',
+    soldFriMon: currentSold.soldFriMon,
     currentMon: stockAt(row, current.mon),
   };
   const withOverrides = applyDashboardOverrides(base, row, weeks.currentStart);

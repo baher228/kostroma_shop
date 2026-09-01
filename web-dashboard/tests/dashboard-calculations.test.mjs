@@ -7,11 +7,11 @@ test('current Fri-Mon sold formula uses current Thursday stock and Saturday orde
 
   assert.match(
     source,
-    /const soldFriMonCurrent = soldFriMonForWeek\(row, current, orderPacks\);/,
+    /const currentSold = soldValuesForWeek\(row, current, previous\?\.sun, orderPacks\);/,
   );
   assert.doesNotMatch(
     source,
-    /const soldFriMonCurrent = computeDashboardSold\(stockAt\(row, previous\?\.thu\)/,
+    /soldFriMon: computeDashboardSold\(stockAt\(row, previous\?\.thu\)/,
   );
 });
 
@@ -20,11 +20,11 @@ test('current Mon-Wed sold formula uses previous Sunday stock and Tuesday order'
 
   assert.match(
     source,
-    /const soldMonWedCurrent = soldMonWedForWeek\(row, current, previous\?\.sun, orderPacks\);/,
+    /const currentSold = soldValuesForWeek\(row, current, previous\?\.sun, orderPacks\);/,
   );
   assert.doesNotMatch(
     source,
-    /const soldMonWedCurrent = computeDashboardSold\(stockAt\(row, current\.sun\)/,
+    /soldMonWed: computeDashboardSold\(stockAt\(row, current\.sun\)/,
   );
 });
 
@@ -41,29 +41,42 @@ test('dashboard sold formulas treat blank cells as zero and clamp negatives', as
 test('previous sold columns are wired to the matching previous week sold calculations', async () => {
   const source = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
 
+  assert.match(source, /const currentSold = soldValuesForWeek\(row, current, previous\?\.sun, orderPacks\);/);
   assert.match(source, /const previousWeekSunday = previous\?\.mon \? addDays\(previous\.mon, -1\) : undefined;/);
   assert.match(
     source,
-    /const soldMonWedPrevious = previous \? soldMonWedForWeek\(row, previous, previousWeekSunday, orderPacks\) : '';/,
-  );
-  assert.match(
-    source,
-    /const soldWedFriPrevious = previous \? soldWedFriForWeek\(row, previous, orderPacks\) : '';/,
-  );
-  assert.match(
-    source,
-    /const soldFriMonPrevious = previous \? soldFriMonForWeek\(row, previous, orderPacks\) : '';/,
+    /const previousSold = previous \? soldValuesForWeek\(row, previous, previousWeekSunday, orderPacks\) : null;/,
   );
   assert.doesNotMatch(source, /const soldMonWedPrevious = previous \? computeDashboardSold\(stockAt\(row, previous\.mon\)/);
-  assert.match(source, /soldPrevMonWed: copiedSoldMonWedPrevious \|\| soldMonWedPrevious,/);
-  assert.match(source, /soldPrevWedFri: copiedSoldWedFriPrevious \|\| soldWedFriPrevious,/);
-  assert.match(source, /soldPrevFriMon: copiedSoldFriMonPrevious \|\| soldFriMonPrevious,/);
+  assert.match(source, /soldPrevMonWed: copiedSoldMonWedPrevious \|\| previousSold\?\.soldMonWed \|\| '',/);
+  assert.match(source, /soldPrevWedFri: copiedSoldWedFriPrevious \|\| previousSold\?\.soldWedFri \|\| '',/);
+  assert.match(source, /soldPrevFriMon: copiedSoldFriMonPrevious \|\| previousSold\?\.soldFriMon \|\| '',/);
 });
 
-test('milk dashboard fetches one hidden Sunday before the visible window', async () => {
+test('previous sold columns use the same formula helper as the sold columns', async () => {
+  const source = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /const soldValuesForWeek = <T extends DashboardProductLike>\([\s\S]*soldMonWed: soldMonWedForWeek\(row, week, previousSunday, orderPacks\),[\s\S]*soldWedFri: soldWedFriForWeek\(row, week, orderPacks\),[\s\S]*soldFriMon: soldFriMonForWeek\(row, week, orderPacks\),[\s\S]*\}\);/,
+  );
+  assert.match(source, /soldPrevMonWed: copiedSoldMonWedPrevious \|\| previousSold\?\.soldMonWed \|\| '',/);
+  assert.match(source, /soldMonWed: currentSold\.soldMonWed,/);
+  assert.match(source, /soldPrevWedFri: copiedSoldWedFriPrevious \|\| previousSold\?\.soldWedFri \|\| '',/);
+  assert.match(source, /soldWedFri: currentSold\.soldWedFri,/);
+  assert.match(source, /soldPrevFriMon: copiedSoldFriMonPrevious \|\| previousSold\?\.soldFriMon \|\| '',/);
+  assert.match(source, /soldFriMon: currentSold\.soldFriMon,/);
+});
+
+test('milk dashboard fetch ranges come from formula dependencies, not visible columns only', async () => {
   const source = await readFile(new URL('../src/panels/products/ProductsPanel.tsx', import.meta.url), 'utf8');
 
+  assert.match(source, /const dashboardFormulaStockRangeForWindowStart = \(weekStart: string\): LoadedWeekRange => \{/);
+  assert.match(source, /const dashboardFormulaOrderRangeForWindowStart = \(weekStart: string\): LoadedWeekRange => \{/);
   assert.match(source, /const stockFetchRangeForWindowStart = \(weekStart: string, businessCategory: BusinessCategory\): LoadedWeekRange => \{/);
-  assert.match(source, /businessCategory === 'Молоко'[\s\S]*from: addDays\(range\.from, -1\)/);
+  assert.match(source, /businessCategory === 'Молоко'[\s\S]*dashboardFormulaStockRangeForWindowStart\(weekStart\)/);
+  assert.match(source, /const orderFetchRangeForWindowStart = \(weekStart: string, businessCategory: BusinessCategory\): LoadedWeekRange => \{/);
+  assert.match(source, /dashboardFormulaOrderRangeForWindowStart\(weekStart\)/);
+  assert.match(source, /previousSundayBeforeWeek/);
   assert.match(source, /const range = visibleStockRangeForWindowStart\(windowStart\);/);
 });

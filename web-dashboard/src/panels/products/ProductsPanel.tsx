@@ -113,18 +113,29 @@ const dashboardFormulaOrderRangeForWindowStart = (weekStart: string): LoadedWeek
   return rangeFromDates(formulaDates, stockRange);
 };
 
+const dailyFormulaStockRangeForWindowStart = (weekStart: string): LoadedWeekRange => {
+  const range = visibleStockRangeForWindowStart(weekStart);
+  return { ...range, from: addDays(range.from, -1) };
+};
+
+const dailyFormulaOrderRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
+  const stockRange = dailyFormulaStockRangeForWindowStart(weekStart);
+  const orderDates = buildDateRange(stockRange.from, stockRange.to).map((date) =>
+    businessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1));
+  return rangeFromDates(orderDates, stockRange);
+};
+
 const stockFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
   return businessCategory === 'Молоко'
     ? dashboardFormulaStockRangeForWindowStart(weekStart)
-    : visibleStockRangeForWindowStart(weekStart);
+    : dailyFormulaStockRangeForWindowStart(weekStart);
 };
 
 const orderFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
   if (businessCategory === 'Молоко') {
     return dashboardFormulaOrderRangeForWindowStart(weekStart);
   }
-  const range = visibleStockRangeForWindowStart(weekStart);
-  return { ...range, to: addDays(range.to, 2) };
+  return dailyFormulaOrderRangeForWindowStart(weekStart, businessCategory);
 };
 
 export const ProductsPanel = ({ session }: { session: Session }) => {

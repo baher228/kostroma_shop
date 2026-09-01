@@ -80,3 +80,14 @@ test('milk dashboard fetch ranges come from formula dependencies, not visible co
   assert.match(source, /previousSundayBeforeWeek/);
   assert.match(source, /const range = visibleStockRangeForWindowStart\(windowStart\);/);
 });
+
+test('daily stock tables fetch hidden previous-day dependencies for sold formulas', async () => {
+  const source = await readFile(new URL('../src/panels/products/ProductsPanel.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const dailyFormulaStockRangeForWindowStart = \(weekStart: string\): LoadedWeekRange => \{/);
+  assert.match(source, /return \{ \.\.\.range, from: addDays\(range\.from, -1\) \};/);
+  assert.match(source, /const dailyFormulaOrderRangeForWindowStart = \(weekStart: string, businessCategory: BusinessCategory\): LoadedWeekRange => \{/);
+  assert.match(source, /businessCategory === 'Деликатесы' \? nearestDelicaciesOrderDate\(date\) : addDays\(date, 1\)/);
+  assert.match(source, /: dailyFormulaStockRangeForWindowStart\(weekStart\);/);
+  assert.match(source, /return dailyFormulaOrderRangeForWindowStart\(weekStart, businessCategory\);/);
+});

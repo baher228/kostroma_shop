@@ -59,3 +59,11 @@ test('previous sold columns are wired to the matching previous week sold calcula
   assert.match(source, /soldPrevWedFri: copiedSoldWedFriPrevious \|\| soldWedFriPrevious,/);
   assert.match(source, /soldPrevFriMon: copiedSoldFriMonPrevious \|\| soldFriMonPrevious,/);
 });
+
+test('milk dashboard fetches one hidden Sunday before the visible window', async () => {
+  const source = await readFile(new URL('../src/panels/products/ProductsPanel.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const stockFetchRangeForWindowStart = \(weekStart: string, businessCategory: BusinessCategory\): LoadedWeekRange => \{/);
+  assert.match(source, /businessCategory === 'Молоко'[\s\S]*from: addDays\(range\.from, -1\)/);
+  assert.match(source, /const range = visibleStockRangeForWindowStart\(windowStart\);/);
+});

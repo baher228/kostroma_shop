@@ -57,10 +57,17 @@ const bufferedWeekStartsFor = (weekStart: string): string[] => [
   addDays(weekStart, WEEK_DAYS),
 ];
 
-const stockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
+const visibleStockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
   from: addDays(weekStart, -WEEK_DAYS),
   to: addDays(weekStart, WEEK_DAYS * 2 - 1),
 });
+
+const stockFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
+  const range = visibleStockRangeForWindowStart(weekStart);
+  return businessCategory === 'Молоко'
+    ? { ...range, from: addDays(range.from, -1) }
+    : range;
+};
 
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
@@ -96,7 +103,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   const load = async (shopId = selectedShopId, nextWindowStart = windowStart, force = false) => {
     const cachedShopId = shopId || shops[0]?.id || '';
     const cachedLoadedKey = cachedShopId ? `${cachedShopId}:${activeBusinessCategory}` : '';
-    const targetRange = stockRangeForWindowStart(nextWindowStart);
+    const targetRange = stockFetchRangeForWindowStart(nextWindowStart, activeBusinessCategory);
     if (!force && cachedLoadedKey && table && loadedKey === cachedLoadedKey && loadedRange && loadedRange.from === targetRange.from && loadedRange.to === targetRange.to) {
       return;
     }
@@ -154,7 +161,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   }, [session.token, selectedShopId, windowStart, activeBusinessCategory]);
 
   const loadedDates = useMemo(() => {
-    const range = stockRangeForWindowStart(windowStart);
+    const range = visibleStockRangeForWindowStart(windowStart);
     return buildDateRange(range.from, range.to);
   }, [windowStart]);
   const dashboardWeekStarts = useMemo(() => bufferedWeekStartsFor(windowStart), [windowStart]);

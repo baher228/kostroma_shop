@@ -1841,7 +1841,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   nameColumn: {
-    width: 224,
+    width: 320,
     alignItems: 'flex-start',
     paddingHorizontal: 10,
     backgroundColor: '#f7f7f7',
@@ -1968,13 +1968,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#90c7da',
   },
   dashboardDataRow: {
-    height: 58,
+    height: 68,
   },
   dashboardNameCell: {
-    height: 58,
+    height: 68,
   },
   dashboardValueCell: {
-    height: 58,
+    height: 68,
     backgroundColor: '#f4f6f4',
   },
   dailyHeaderGroup: {
@@ -2005,7 +2005,7 @@ const styles = StyleSheet.create({
   },
   dailyValueCell: {
     width: 56,
-    height: 58,
+    height: 68,
     backgroundColor: '#f4f6f4',
   },
   dashboardValueNeutral: {

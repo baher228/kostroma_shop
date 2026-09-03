@@ -2860,22 +2860,27 @@ input[type='datetime-local'] {
   box-shadow: none;
 }
 
-.task-name-cell {
+.task-name-cell,
+.task-assignee-cell {
   min-width: 260px;
   white-space: normal;
 }
 
 .task-name-cell strong,
-.task-name-cell small {
+.task-name-cell small,
+.task-assignee-cell strong,
+.task-assignee-cell small {
   display: block;
 }
 
-.task-name-cell strong {
+.task-name-cell strong,
+.task-assignee-cell strong {
   color: var(--color-text);
   line-height: 1.35;
 }
 
-.task-name-cell small {
+.task-name-cell small,
+.task-assignee-cell small {
   margin-top: 4px;
   color: var(--color-text-soft);
   font-size: 12px;

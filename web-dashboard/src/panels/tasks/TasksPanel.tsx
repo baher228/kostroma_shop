@@ -243,6 +243,19 @@ const tabletSearchText = (tablet: StoreTablet, shopsById: Record<string, Shop>) 
 const tabletLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
   `${tablet.fullName} - ${tabletShopLabel(tablet, shopsById)}`;
 
+const taskAssigneeLabel = (
+  task: Task,
+  tabletsById: Record<string, StoreTablet>,
+  shopsById: Record<string, Shop>,
+) => {
+  const tablet = tabletsById[task.assigneeId];
+  const shop = tablet?.shopId ? shopsById[tablet.shopId] : null;
+  return {
+    primary: shop?.name ?? task.assigneeDisplayName,
+    secondary: shop ? task.assigneeDisplayName : null,
+  };
+};
+
 const TabletPicker = ({
   tablets,
   shopsById,
@@ -389,6 +402,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const openCount = tasks.filter((task) => task.status === 'open').length;
   const overdueCount = tasks.filter((task) => task.overdue).length;
   const shopsById = Object.fromEntries(shops.map((shop) => [shop.id, shop]));
+  const tabletsById = Object.fromEntries(storeTablets.map((tablet) => [tablet.id, tablet]));
 
   const load = async () => {
     setLoading(true);
@@ -551,30 +565,33 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       ) : (
         <div className="tasks-table">
           <Table>
-          <thead><tr><th scope="col">Задача</th><th scope="col">Планшет</th><th scope="col">Статус</th><th scope="col">Дедлайн</th><th scope="col">Фото</th><th scope="col">Действия</th></tr></thead>
+          <thead><tr><th scope="col">Задача</th><th scope="col">Точка</th><th scope="col">Статус</th><th scope="col">Дедлайн</th><th scope="col">Фото</th><th scope="col">Действия</th></tr></thead>
           <tbody>
-            {tasks.map((task) => (
-              <tr key={task.id}>
-                <td className="task-name-cell"><strong>{task.title}</strong><small>Создана {formatDateTime(task.createdAt)}</small></td>
-                <td>{task.assigneeDisplayName}</td>
-                <td><span className={`pill ${task.overdue ? 'overdue' : task.photoReviewStatus === 'pending' ? 'new' : task.status === 'open' ? 'new' : 'processed'}`}>{task.overdue ? 'Просрочена' : statusLabel(task)}</span></td>
-                <td>{task.deadlineAt ? formatDateTime(task.deadlineAt) : 'Без дедлайна'}</td>
-                <td><TaskPhotoPreview token={session.token} task={task} /></td>
-                <td className="actions">
-                  {task.photoReviewStatus === 'pending' ? (
-                    <>
-                      <button className="secondary" onClick={() => void reviewPhoto(task, 'approve')} disabled={pendingId === task.id}>Approve</button>
-                      <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
-                    </>
-                  ) : (
-                    <button className="secondary" onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
-                      {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
-                    </button>
-                  )}
-                  <button className="danger" onClick={() => void remove(task)} disabled={pendingId === task.id}>Удалить</button>
-                </td>
-              </tr>
-            ))}
+            {tasks.map((task) => {
+              const assignee = taskAssigneeLabel(task, tabletsById, shopsById);
+              return (
+                <tr key={task.id}>
+                  <td className="task-name-cell"><strong>{task.title}</strong><small>Создана {formatDateTime(task.createdAt)}</small></td>
+                  <td className="task-assignee-cell"><strong>{assignee.primary}</strong>{assignee.secondary && <small>{assignee.secondary}</small>}</td>
+                  <td><span className={`pill ${task.overdue ? 'overdue' : task.photoReviewStatus === 'pending' ? 'new' : task.status === 'open' ? 'new' : 'processed'}`}>{task.overdue ? 'Просрочена' : statusLabel(task)}</span></td>
+                  <td>{task.deadlineAt ? formatDateTime(task.deadlineAt) : 'Без дедлайна'}</td>
+                  <td><TaskPhotoPreview token={session.token} task={task} /></td>
+                  <td className="actions">
+                    {task.photoReviewStatus === 'pending' ? (
+                      <>
+                        <button className="secondary" onClick={() => void reviewPhoto(task, 'approve')} disabled={pendingId === task.id}>Approve</button>
+                        <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
+                      </>
+                    ) : (
+                      <button className="secondary" onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
+                        {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
+                      </button>
+                    )}
+                    <button className="danger" onClick={() => void remove(task)} disabled={pendingId === task.id}>Удалить</button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
           </Table>
         </div>

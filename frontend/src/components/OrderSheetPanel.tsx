@@ -107,6 +107,9 @@ const formatWeight = (total: number, packWeightKg: number | null): string => {
 
 const cellKey = (productId: string, shopId: string) => `${productId}:${shopId}`;
 
+const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
+  index > 0 && rows[index - 1]?.category !== rows[index]?.category;
+
 export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
   const [date, setDate] = useState(nearestAllowedOrderDate(todayDateKey()));
   const [inputDate, setInputDate] = useState(nearestAllowedOrderDate(todayDateKey()));
@@ -306,8 +309,8 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
           </View>
 
           <ScrollView style={styles.bodyScroll} nestedScrollEnabled>
-            {visibleRows.map((row) => (
-              <View key={row.productId} style={styles.dataRow}>
+            {visibleRows.map((row, index) => (
+              <View key={row.productId} style={[styles.dataRow, startsNewSubcategory(visibleRows, index) && styles.subcategoryStartRow]}>
                 <View style={[styles.cell, styles.nameColumn, styles.nameCell]}>
                   <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
                     {row.productName}
@@ -618,6 +621,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#d0d0d0',
+  },
+  subcategoryStartRow: {
+    borderTopWidth: 4,
+    borderTopColor: '#526557',
   },
   cell: {
     paddingHorizontal: 5,

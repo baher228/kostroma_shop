@@ -2041,6 +2041,11 @@ td.sticky {
   border-color: #8b9b90;
 }
 
+.manager-stock-table tbody tr.subcategory-start-row > td,
+.order-sheet-table tbody tr.subcategory-start-row > td {
+  border-top: 4px solid #526557;
+}
+
 .manager-stock-table th {
   background: #f0f4f1;
   color: #233228;

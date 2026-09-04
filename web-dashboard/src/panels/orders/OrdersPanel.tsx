@@ -27,6 +27,9 @@ const nextOrderDateForCategory = (category: BusinessCategory): string => {
   return addDays(today, 1);
 };
 
+const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
+  index > 0 && rows[index - 1]?.category !== rows[index]?.category;
+
 export const OrdersPanel = ({ session }: { session: Session }) => {
   const initialDate = nextOrderDateForCategory(DEFAULT_BUSINESS_CATEGORY);
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
@@ -302,8 +305,8 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map((row) => (
-                  <tr key={row.productId}>
+                {visibleRows.map((row, index) => (
+                  <tr key={row.productId} className={startsNewSubcategory(visibleRows, index) ? 'subcategory-start-row' : undefined}>
                     <td className="sticky order-name-col product-name">{row.productName}</td>
                     {machineGroups.flatMap((group) => {
                       const total = machineTotal(row, group.shops);

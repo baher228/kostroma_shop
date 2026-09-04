@@ -138,6 +138,9 @@ const orderFetchRangeForWindowStart = (weekStart: string, businessCategory: Busi
   return dailyFormulaOrderRangeForWindowStart(weekStart, businessCategory);
 };
 
+const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
+  index > 0 && rows[index - 1]?.category !== rows[index]?.category;
+
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
@@ -531,9 +534,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           <tbody>
             {rows.length === 0 ? (
               <tr><td colSpan={dashboardWeekStarts.length * DASHBOARD_COLUMNS.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
-            ) : rows.map((row) => {
+            ) : rows.map((row, index) => {
               return (
-                <tr key={row.productId}>
+                <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
                   <td className="manager-name-col">
                     <strong>{managerProductName(row.name)}</strong>
                     <small>{productReferenceLabel(row)}</small>
@@ -626,8 +629,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           <tbody>
             {rows.length === 0 ? (
               <tr><td colSpan={loadedDates.length * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
-            ) : rows.map((row) => (
-              <tr key={row.productId}>
+            ) : rows.map((row, index) => (
+              <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
                 <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
                 {loadedDates.map((date) => {
                   const orderDate = activeBusinessCategory === 'Деликатесы'

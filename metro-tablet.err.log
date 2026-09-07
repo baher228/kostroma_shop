@@ -1,0 +1,22 @@
+C:\Users\george\kostroma_shop-1\node_modules\expo\node_modules\@expo\cli\build\src\utils\errors.js:130
+    throw error;
+    ^
+
+Error: UNKNOWN: unknown error, lstat 'C:\Users\george\kostroma_shop-1\android\.gradle\8.14.3\vcsMetadata\?\C:\Users\george\kostroma_shop-1\android\.gradle\8.14.3\vcsMetadata'
+    at Object.lstat (node:internal/fs/promises:1028:18)
+    at FallbackWatcher._processChange (C:\Users\george\kostroma_shop-1\node_modules\metro-file-map\src\watchers\FallbackWatcher.js:205:20)
+Emitted 'error' event at:
+    at FallbackWatcher.emitError (C:\Users\george\kostroma_shop-1\node_modules\metro-file-map\src\watchers\AbstractWatcher.js:70:19)
+    at C:\Users\george\kostroma_shop-1\node_modules\metro-file-map\src\watchers\FallbackWatcher.js:193:25 {
+  errno: -4094,
+  code: 'UNKNOWN',
+  syscall: 'lstat',
+  path: 'C:\\Users\\george\\kostroma_shop-1\\android\\.gradle\\8.14.3\\vcsMetadata\\?\\C:\\Users\\george\\kostroma_shop-1\\android\\.gradle\\8.14.3\\vcsMetadata'
+}
+
+Node.js v22.18.0
+npm notice
+npm notice New major version of npm available! 10.9.3 -> 12.0.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.2
+npm notice To update run: npm install -g npm@12.0.2
+npm notice

@@ -16,6 +16,7 @@ import { processAudioQcQueue, retryAudioQcQueueNow } from './audioQcQueue';
 import { createDefaultAudioQcPolicy, normalizeAudioQcPolicy } from './audioQcPolicy';
 import {
   buildAudioQcQueueSummary,
+  cleanupOldAudioQcHistory,
   getAudioQcDeviceId,
   getAudioQcFileSize,
   listAudioQcRecordings,
@@ -181,7 +182,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
   }, [syncRecording]);
 
   const refreshRecordings = useCallback(async () => {
-    const next = sortRecordings(await listAudioQcRecordings());
+    const next = sortRecordings(await cleanupOldAudioQcHistory());
     setRecordings(next);
     setQueueSummary(buildAudioQcQueueSummary(next));
     next.slice(0, 200).forEach(syncRecording);
@@ -217,7 +218,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     queueProcessingRef.current = true;
     setIsQueueProcessing(true);
     try {
-      const result = await processAudioQcQueue({ onRecordingChanged: handleRecordingChanged });
+      const result = await processAudioQcQueue({ token: session.token, shopId: session.user.shopId, onRecordingChanged: handleRecordingChanged });
       if (result.lastError) {
         setLastError(result.lastError);
       }
@@ -226,7 +227,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
       queueProcessingRef.current = false;
       setIsQueueProcessing(false);
     }
-  }, [handleRecordingChanged, refreshRecordings]);
+  }, [handleRecordingChanged, refreshRecordings, session.token, session.user.shopId]);
 
   const ingestVadSegment = useCallback(
     async (segment: AudioQcVadSegment) => {
@@ -456,7 +457,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
     queueProcessingRef.current = true;
     setIsQueueProcessing(true);
     try {
-      const result = await retryAudioQcQueueNow({ onRecordingChanged: handleRecordingChanged });
+      const result = await retryAudioQcQueueNow({ token: session.token, shopId: session.user.shopId, onRecordingChanged: handleRecordingChanged });
       if (result.lastError) {
         setLastError(result.lastError);
       } else {
@@ -467,7 +468,7 @@ export const useAudioQcController = (session: Session): AudioQcControllerValue =
       queueProcessingRef.current = false;
       setIsQueueProcessing(false);
     }
-  }, [handleRecordingChanged, refreshRecordings]);
+  }, [handleRecordingChanged, refreshRecordings, session.token, session.user.shopId]);
 
   const refreshPolicy = useCallback(async () => {
     if (session.user.role !== 'store_tablet' && session.user.role !== 'manager') {

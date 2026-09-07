@@ -143,6 +143,10 @@ Both backend services use the same lightweight structure:
 
 The Russia backend also has `observability/` for audit-related helpers.
 
+The integrated Audio AI Quality Control design, API, migration, provider flow,
+configuration, tests, and production checklist are documented in
+[`services/ru-backend/QUALITY_CONTROL_IMPLEMENTATION.md`](services/ru-backend/QUALITY_CONTROL_IMPLEMENTATION.md).
+
 ## CI/CD
 
 GitHub Actions workflows are included for deployment and application updates:

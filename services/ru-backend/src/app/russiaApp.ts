@@ -8,6 +8,7 @@ import { registerNotificationRoutes } from '../routes/notificationRoutes';
 import { registerSupportRoutes } from '../routes/supportRoutes';
 import { registerTaskRoutes } from '../routes/taskRoutes';
 import { registerUserRoutes } from '../routes/userRoutes';
+import { registerQualityControlRoutes } from '../routes/qualityControlRoutes';
 
 export const createRussiaApp = () => {
   const app = express();
@@ -20,6 +21,7 @@ export const createRussiaApp = () => {
 
   registerAuthRoutes(app);
   registerAudioQcRoutes(app);
+  registerQualityControlRoutes(app);
   registerUserRoutes(app);
   registerCheckInRoutes(app);
   registerFobRoutes(app);

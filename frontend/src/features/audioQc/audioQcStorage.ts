@@ -5,6 +5,7 @@ import { AudioQcQueueSummary, AudioQcRecording } from './audioQcTypes';
 const RECORDINGS_KEY = 'audio_qc_recordings_v1';
 const DEVICE_ID_KEY = 'audio_qc_device_id_v1';
 const AUDIO_QC_DIRECTORY = 'audio-qc';
+const LOCAL_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const queuedStatuses = new Set<AudioQcRecording['status']>([
   'recorded',
@@ -48,6 +49,40 @@ const writeRecordings = async (recordings: AudioQcRecording[]): Promise<void> =>
 export const listAudioQcRecordings = async (): Promise<AudioQcRecording[]> => {
   const raw = await AsyncStorage.getItem(RECORDINGS_KEY);
   return safeParseRecordings(raw);
+};
+
+export const cleanupOldAudioQcHistory = async (nowMs = Date.now()): Promise<AudioQcRecording[]> => {
+  const recordings = await listAudioQcRecordings();
+  const cutoffMs = nowMs - LOCAL_HISTORY_RETENTION_MS;
+  const retained: AudioQcRecording[] = [];
+
+  for (const recording of recordings) {
+    const createdAtMs = Date.parse(recording.createdAt);
+    const canDelete =
+      uploadedStatuses.has(recording.status) &&
+      !Number.isNaN(createdAtMs) &&
+      createdAtMs < cutoffMs;
+
+    if (!canDelete) {
+      retained.push(recording);
+      continue;
+    }
+
+    try {
+      if (recording.localFileUri) {
+        const file = new File(recording.localFileUri);
+        if (file.exists) file.delete();
+      }
+    } catch (error) {
+      console.warn('[AudioQc] Unable to delete expired local recording', recording.localRecordingId, error);
+      retained.push(recording);
+    }
+  }
+
+  if (retained.length !== recordings.length) {
+    await writeRecordings(retained);
+  }
+  return retained;
 };
 
 export const upsertAudioQcRecording = async (recording: AudioQcRecording): Promise<AudioQcRecording[]> => {

@@ -1,7 +1,10 @@
 import { config } from './config/config';
 import { runMigrations } from './db/migrate';
+import { personalDb } from './db/personalDb';
 import { createRussiaApp } from './app/russiaApp';
 import { cleanupExpiredTaskPhotos } from './services/taskService';
+import { qcConfig, validateQcConfig } from './quality-control/config';
+import { createQualityControlWorker } from './quality-control/worker';
 
 const startServer = async () => {
   await runMigrations();
@@ -13,10 +16,24 @@ const startServer = async () => {
       console.error('Failed to clean up expired task photos:', error);
     });
   }, 5 * 60 * 1000).unref();
+  validateQcConfig();
   const app = createRussiaApp();
-  app.listen(config.port, () => {
+  const worker = qcConfig.enabled && qcConfig.workerEnabled ? createQualityControlWorker() : null;
+  const server = app.listen(config.port, () => {
     console.log(`RU backend started on port ${config.port}`);
+    worker?.start();
   });
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    await worker?.stop();
+    await closed;
+    await personalDb.close();
+  };
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
 };
 
 startServer().catch((error) => {

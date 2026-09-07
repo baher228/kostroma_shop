@@ -28,8 +28,15 @@ const uploadFinishedStatuses = new Set<AudioQcRecordingStatus>([
 ]);
 
 const terminalProcessingStatuses = new Set(['completed', 'complete', 'succeeded', 'success', 'done']);
+const retryableServerErrorCodes = new Set([
+  'STORAGE_ERROR', 'STORAGE_TIMEOUT', 'NEXARA_TIMEOUT', 'NEXARA_RATE_LIMIT', 'NEXARA_ERROR', 'NEXARA_UNAVAILABLE',
+  'GIGACHAT_TIMEOUT', 'GIGACHAT_RATE_LIMIT', 'GIGACHAT_ERROR', 'GIGACHAT_UNAVAILABLE',
+  'PROCESSING_INTERNAL_ERROR', 'PROCESSING_LEASE_EXPIRED',
+]);
 
 type ProcessAudioQcQueueOptions = {
+  token: string;
+  shopId: string | null;
   onRecordingChanged?: (recording: AudioQcRecording) => void | Promise<void>;
 };
 
@@ -74,29 +81,62 @@ const classifyFailureStatus = (error: unknown, attemptCount: number): AudioQcRec
     error instanceof AudioQcApiError &&
     error.status >= 400 &&
     error.status < 500 &&
+    error.status !== 401 &&
     error.status !== 408 &&
     error.status !== 429
   ) {
     return 'failed_permanent';
   }
-  return attemptCount >= MAX_ATTEMPTS ? 'failed_retryable' : 'failed_retryable';
+  return attemptCount >= MAX_ATTEMPTS ? 'failed_permanent' : 'failed_retryable';
 };
 
 const shouldUploadAudio = (recording: AudioQcRecording): boolean => !uploadFinishedStatuses.has(recording.status);
 
 export const processAudioQcQueue = async (
-  options: ProcessAudioQcQueueOptions = {},
+  options: ProcessAudioQcQueueOptions,
 ): Promise<ProcessAudioQcQueueResult> => {
+  if (!options.token || !options.shopId) return { attempted: 0, processed: 0, lastError: null };
   const nowMs = Date.now();
   const recordings = await listAudioQcRecordings();
   const candidates = recordings
-    .filter((recording) => isDue(recording, nowMs))
+    .filter((recording) => recording.shopId === options.shopId && isDue(recording, nowMs))
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
     .slice(0, QUEUE_BATCH_LIMIT);
 
   let attempted = 0;
   let processed = 0;
   let lastError: string | null = null;
+
+  // Upload acknowledgement only starts the server pipeline. Poll until analysis finishes.
+  for (const pending of recordings.filter(recording => recording.shopId === options.shopId && recording.status === 'processing_started' && recording.mlSessionId).slice(0, QUEUE_BATCH_LIMIT)) {
+    try {
+      const remote = await audioQcApi.getMlStatus(options.token, pending.mlSessionId!);
+      const status = typeof remote.status === 'string' ? remote.status : '';
+      const failed = status === 'transcription_failed' || status === 'analysis_failed';
+      if (terminalProcessingStatuses.has(status) || failed) {
+        const latestJob = remote.latestJob as { errorCode?: string; errorMessage?: string } | undefined;
+        const failedStatus: AudioQcRecordingStatus = latestJob?.errorCode && retryableServerErrorCodes.has(latestJob.errorCode)
+          ? 'failed_retryable'
+          : 'failed_permanent';
+        const patch: Partial<AudioQcRecording> = {
+          status: failed ? failedStatus : 'completed',
+          lastError: failed ? latestJob?.errorMessage || 'Quality Control processing failed.' : null,
+          nextRetryAt: null, updatedAt: new Date().toISOString(),
+        };
+        await patchAudioQcRecording(pending.localRecordingId, patch);
+        await options.onRecordingChanged?.({ ...pending, ...patch });
+        if (failed) lastError = patch.lastError ?? null;
+      }
+    } catch (error) {
+      lastError = toErrorMessage(error);
+      // Old standalone ML session IDs have no record in RU; re-upload the retained local file.
+      if (error instanceof AudioQcApiError && error.status === 404) {
+        const patch: Partial<AudioQcRecording> = { mlSessionId: null, jobId: null, status: 'recorded', nextRetryAt: null };
+        await patchAudioQcRecording(pending.localRecordingId, patch);
+        await options.onRecordingChanged?.({ ...pending, ...patch });
+      }
+    }
+  }
 
   for (const candidate of candidates) {
     attempted += 1;
@@ -127,21 +167,22 @@ export const processAudioQcQueue = async (
 
       let sessionId = current.mlSessionId;
       if (!sessionId) {
-        sessionId = await audioQcApi.createMlSession(current);
+        sessionId = await audioQcApi.createMlSession(options.token, current);
         await save({ mlSessionId: sessionId, status: 'uploading_audio' });
       }
 
       if (shouldUploadAudio(current)) {
         await save({ status: 'uploading_audio' });
-        await audioQcApi.uploadAudio(sessionId, current.localFileUri);
+        await audioQcApi.uploadAudio(options.token, sessionId, current.localFileUri);
         await save({ status: 'audio_uploaded' });
       }
 
       await save({ status: 'starting_processing' });
-      const processResult = await audioQcApi.startProcessing(sessionId);
+      const processResult = await audioQcApi.startProcessing(options.token, sessionId);
       await save({
         jobId: processResult.jobId,
-        status: processResult.status && terminalProcessingStatuses.has(processResult.status) ? 'completed' : 'processing_started',
+        // A completed transcription job still has a following analysis job.
+        status: 'processing_started',
         nextRetryAt: null,
         lastError: null,
       });
@@ -152,7 +193,8 @@ export const processAudioQcQueue = async (
       const status = classifyFailureStatus(error, current.attemptCount);
       const delay = status === 'failed_permanent' ? null : nextRetryDelayMs(current.attemptCount);
       await patchAudioQcRecording(current.localRecordingId, {
-        status,
+        status: error instanceof AudioQcApiError && error.status === 404 && current.mlSessionId ? 'recorded' : status,
+        ...(error instanceof AudioQcApiError && error.status === 404 && current.mlSessionId ? { mlSessionId: null, jobId: null } : {}),
         lastError: message,
         nextRetryAt: delay === null ? null : new Date(Date.now() + delay).toISOString(),
       });
@@ -168,7 +210,7 @@ export const processAudioQcQueue = async (
 };
 
 export const retryAudioQcQueueNow = async (
-  options: ProcessAudioQcQueueOptions = {},
+  options: ProcessAudioQcQueueOptions,
 ): Promise<ProcessAudioQcQueueResult> => {
   const recordings = await requeueRetryableAudioQcRecordings();
   for (const recording of recordings) {

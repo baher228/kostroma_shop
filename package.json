@@ -5,6 +5,9 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
+    "android:reverse": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-reverse.ps1",
+    "stack:up": "docker compose up -d --build",
+    "stack:down": "docker compose down",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "worker:start": "npm --prefix worker-app run start",

@@ -112,12 +112,24 @@ The Android build workflow publishes both manifests and both versioned APKs toge
 
 ## Default Login
 
+These accounts are for the local development environment only.
+
 ```text
 Username: admin
 Password: admin
+Role: manager
 
 Username: manager
 Password: manager123
+Role: manager
+
+Username: worker
+Password: worker123
+Role: worker
+
+Username: tablet
+Password: tablet123
+Role: store_tablet
 ```
 
 ## Local Ports
@@ -283,7 +295,7 @@ Manual regression:
 
 1. Set the shop policy to `manual`, record and stop from the tablet controls.
 2. Confirm an `.m4a` item appears in Audio QC and advances through the queue.
-3. Confirm the ML backend receives `POST /api/ml/sessions`, `/audio`, then `/process`.
+3. Confirm the RU backend receives POST /api/quality-control/sessions, then /audio and /process, and the app polls /status until completion.
 
 VAD preview:
 
@@ -293,7 +305,7 @@ VAD preview:
 4. Keep the room quiet: no segment should be created. A single clap/short noise must not pass the 700 ms start hysteresis; any resulting segment under 5 seconds is deleted.
 5. Speak continuously, then stay silent for 3 seconds. Confirm a WAV appears with `recordingMode=vad_auto`, VAD metadata, duration, size, and speech ratio.
 6. Confirm the heartbeat reports `currentMode=vad_auto`; `isRecording` is true only while a segment is being written.
-7. Disable the network and verify the existing retry state is retained. Restore it and confirm the same three ML requests complete.
+7. Disable the network and verify the existing retry state is retained. Restore it and confirm the same Quality Control requests complete.
 8. Verify continuous speech is force-finalized at `maxSegmentDurationSec` and app reload recovers any pending native-to-JS handoff.
 
 Current MVP limitations: Android only, no on-device STT/diarization, WAV files are larger than AAC, policy polling can take up to 45 seconds, and VAD pauses in background. ABI splits, compressed native encoding, device-specific VAD calibration, longer lifecycle soak tests, and richer `vadActive` heartbeat telemetry are candidates for the next sprint.
@@ -463,3 +475,11 @@ EXPO_WORKER_EAS_PROJECT_ID=<worker-project-uuid> npx eas-cli build -p android --
 ```
 
 Both `preview` profiles use the HTTPS production APIs at `https://affera.co.uk/ru` and `https://affera.co.uk/dxb` as applicable. Cleartext access remains enabled only for local emulator/LAN development.
+
+## Unified local contour
+
+The local Quality Control stack is part of the main Analitika Compose project. It starts the RU and Dubai PostgreSQL databases, both backends, and the existing MinIO data volume.
+
+Run npm run stack:up, then npm run android:reverse, then npm run dashboard:dev.
+
+For the physical Android tablet, keep EXPO_PUBLIC_RU_API_URL=http://127.0.0.1:4000 and EXPO_PUBLIC_DXB_API_URL=http://127.0.0.1:4001 in the gitignored root .env; android:reverse forwards API and Metro ports over USB. Quality Control metadata is stored by the RU backend in analitika_personal; audio remains in the private ml-audio MinIO bucket. The standalone Python ML API, Celery, Redis, and ML PostgreSQL are not part of the runtime.

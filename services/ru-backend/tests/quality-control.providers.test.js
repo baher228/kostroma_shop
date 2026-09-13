@@ -89,6 +89,9 @@ test('QC GigaChat uses strict native JSON schema, verified TLS and excludes inte
   assert.equal(capturedConfig.credentials, 'test-auth');
   assert.equal(capturedConfig.accessToken, undefined);
   assert.equal(capturedConfig.timeout, 2);
+  assert.equal(capturedConfig.baseUrl, 'https://api.giga.chat/v1/');
+  assert.equal(capturedConfig.authUrl, 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
+  assert.equal(capturedConfig.model, 'GigaChat-3-Pro');
   assert.equal(capturedConfig.httpsAgent.options.rejectUnauthorized, true);
   assert.equal(capturedRequest.response_format.strict, true);
   assert.equal(capturedRequest.response_format.type, 'json_schema');

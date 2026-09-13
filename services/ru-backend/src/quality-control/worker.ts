@@ -109,6 +109,8 @@ export const createQualityControlWorker = () => {
     analysis: new GigaChatAnalysisProvider({
       credentials: qcConfig.gigachatAuthKey,
       scope: qcConfig.gigachatScope,
+      baseUrl: qcConfig.gigachatBaseUrl,
+      authUrl: qcConfig.gigachatAuthUrl,
       model: qcConfig.gigachatModel,
       timeoutMs: qcConfig.gigachatTimeoutMs,
       caBundlePath: qcConfig.gigachatCaBundlePath || undefined,

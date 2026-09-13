@@ -47,3 +47,11 @@ services/dubai-backend/secrets/
 
 # interrupted Audio QC native artifact downloads
 modules/audio-qc-vad/**/*.download
+
+# local Android and diagnostic artifacts
+/platform-tools-local/
+/platform-tools-latest-windows.zip
+/phone-screen.png
+/window.xml
+/crash-logcat-full.txt
+/expo-export-local-apk/

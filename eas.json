@@ -19,9 +19,7 @@
       "env": {
         "NODE_ENV": "production",
         "EXPO_PUBLIC_RU_API_URL": "https://affera.co.uk/ru",
-        "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb",
-        "ML_API_BASE_URL": "https://affera.co.uk/ml",
-        "EXPO_PUBLIC_ML_API_URL": "https://affera.co.uk/ml"
+        "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb"
       }
     },
     "local-apk": {
@@ -36,9 +34,7 @@
         "EXPO_LOCAL_APK_PROJECT_ID": "531a62b9-9f92-4d40-9c41-57a6d155de00",
         "EXPO_DISABLE_UPDATES": "1",
         "EXPO_PUBLIC_RU_API_URL": "http://127.0.0.1:4000",
-        "EXPO_PUBLIC_DXB_API_URL": "http://127.0.0.1:4001",
-        "ML_API_BASE_URL": "http://127.0.0.1:8000",
-        "EXPO_PUBLIC_ML_API_URL": "http://127.0.0.1:8000"
+        "EXPO_PUBLIC_DXB_API_URL": "http://127.0.0.1:4001"
       }
     },
     "production": {
@@ -49,9 +45,7 @@
       "env": {
         "NODE_ENV": "production",
         "EXPO_PUBLIC_RU_API_URL": "https://affera.co.uk/ru",
-        "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb",
-        "ML_API_BASE_URL": "https://affera.co.uk/ml",
-        "EXPO_PUBLIC_ML_API_URL": "https://affera.co.uk/ml"
+        "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb"
       }
     }
   }

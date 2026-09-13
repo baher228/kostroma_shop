@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { Agent } from 'node:https';
+import { rootCertificates } from 'node:tls';
 import GigaChat, { type GigaChatClientConfig } from 'gigachat';
 import { z } from 'zod';
 import { ANALYSIS_SCHEMA_VERSION, SCORECARD_VERSION, dialogAnalysisJsonSchema, validateAnalysis } from './analysis';
@@ -7,7 +8,7 @@ import { DIALOG_ANALYSIS_PROMPT, PROMPT_VERSION } from './prompts/dialog-analysi
 import { QcError, type AnalysisResult, type DialogTranscript, type LlmAnalysisProvider, type SttProvider, type SttResult, type TranscriptSegment } from './types';
 
 export type NexaraConfig = { apiKey?: string; baseUrl?: string; model?: string; language?: string; timeoutMs?: number; diarization?: boolean; maxResponseBytes?: number };
-export type GigaChatConfig = { credentials?: string; scope?: string; baseUrl?: string; model?: string; timeoutMs?: number; caBundlePath?: string; maxTranscriptChars?: number; maxTokens?: number };
+export type GigaChatConfig = { credentials?: string; scope?: string; baseUrl?: string; authUrl?: string; model?: string; timeoutMs?: number; caBundlePath?: string; maxTranscriptChars?: number; maxTokens?: number };
 export type GigaChatClient = { chat(payload: Record<string, unknown>): Promise<unknown> };
 export type GigaChatClientFactory = (config: GigaChatClientConfig) => GigaChatClient;
 
@@ -148,12 +149,13 @@ export class GigaChatAnalysisProvider implements LlmAnalysisProvider {
       this.client = this.createClient({
         credentials: this.config.credentials,
         scope: this.config.scope ?? 'GIGACHAT_API_B2B',
-        baseUrl: `${httpsBaseUrl(this.config.baseUrl ?? 'https://gigachat.devices.sberbank.ru/api/v1')}/`,
-        model: this.config.model ?? 'GigaChat-2-Max',
+        baseUrl: `${httpsBaseUrl(this.config.baseUrl ?? 'https://api.giga.chat/v1')}/`,
+        authUrl: httpsBaseUrl(this.config.authUrl ?? 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth'),
+        model: this.config.model ?? 'GigaChat-3-Pro',
         timeout: (this.config.timeoutMs ?? 120000) / 1000,
         verbose: false,
         // Install the approved CA bundle or NODE_EXTRA_CA_CERTS. Never disable TLS verification.
-        httpsAgent: new Agent({ rejectUnauthorized: true, ...(this.config.caBundlePath ? { ca: readFileSync(this.config.caBundlePath) } : {}) }),
+        httpsAgent: new Agent({ rejectUnauthorized: true, ...(this.config.caBundlePath ? { ca: [...rootCertificates, readFileSync(this.config.caBundlePath)] } : {}) }),
       });
     } catch (error) {
       if (error instanceof QcError) throw error;
@@ -174,7 +176,7 @@ export class GigaChatAnalysisProvider implements LlmAnalysisProvider {
     const started = Date.now();
     try {
       const response = await this.getClient().chat({
-        model: this.config.model ?? 'GigaChat-2-Max',
+        model: this.config.model ?? 'GigaChat-3-Pro',
         messages: [{ role: 'system', content: DIALOG_ANALYSIS_PROMPT }, { role: 'user', content }],
         temperature: 0.1,
         max_tokens: this.config.maxTokens ?? 4096,
@@ -193,7 +195,7 @@ export class GigaChatAnalysisProvider implements LlmAnalysisProvider {
       const usage = parsed.data.usage;
       return {
         analysis,
-        metadata: { provider: 'gigachat', model: parsed.data.model ?? this.config.model ?? 'GigaChat-2-Max', latencyMs: Date.now() - started,
+        metadata: { provider: 'gigachat', model: parsed.data.model ?? this.config.model ?? 'GigaChat-3-Pro', latencyMs: Date.now() - started,
           inputTokens: usage?.prompt_tokens, outputTokens: usage?.completion_tokens, totalTokens: usage?.total_tokens },
         promptVersion: PROMPT_VERSION, scorecardVersion: SCORECARD_VERSION, schemaVersion: ANALYSIS_SCHEMA_VERSION,
       };

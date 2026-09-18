@@ -23,8 +23,8 @@ import type { BusinessCategory, OrderSheet, OrderSheetRow, ProductCategory, Sess
 const nextOrderDateForCategory = (category: BusinessCategory): string => {
   const today = todayDateKey();
   if (category === 'Молоко') return nearestAllowedOrderDate(today);
-  if (category === 'Деликатесы') return nearestDelicaciesOrderDate(today);
-  return addDays(today, 1);
+  if (category === 'Деликатесы') return isDelicaciesOrderDate(today) ? today : nearestDelicaciesOrderDate(today);
+  return today;
 };
 
 const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>

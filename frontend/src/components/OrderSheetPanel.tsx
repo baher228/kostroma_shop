@@ -91,8 +91,8 @@ const shiftToDelicaciesOrderDate = (dateKey: string, direction: 1 | -1): string 
 const nextOrderDateForCategory = (category: BusinessCategory): string => {
   const today = todayDateKey();
   if (category === 'Молоко') return nearestAllowedOrderDate(today);
-  if (category === 'Деликатесы') return shiftToDelicaciesOrderDate(today, 1);
-  return shiftOneDay(today, 1);
+  if (category === 'Деликатесы') return isDelicaciesOrderDate(today) ? today : shiftToDelicaciesOrderDate(today, 1);
+  return today;
 };
 
 const formatWeekdayLabel = (iso: string): string =>

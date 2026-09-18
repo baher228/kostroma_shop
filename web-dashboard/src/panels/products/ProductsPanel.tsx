@@ -12,7 +12,7 @@ import {
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, getTwoWeeksEnd, nearestDelicaciesOrderDate, startOfWeek } from '../../dateUtils';
+import { addDays, formatDateLabel, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
@@ -118,10 +118,14 @@ const dailyFormulaStockRangeForWindowStart = (weekStart: string): LoadedWeekRang
   return { ...range, from: addDays(range.from, -1) };
 };
 
+const dailyOrderDateForStockDate = (date: string, businessCategory: BusinessCategory): string =>
+  businessCategory === 'Деликатесы' && !isDelicaciesOrderDate(date)
+    ? nearestDelicaciesOrderDate(date)
+    : date;
+
 const dailyFormulaOrderRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
   const stockRange = dailyFormulaStockRangeForWindowStart(weekStart);
-  const orderDates = buildDateRange(stockRange.from, stockRange.to).map((date) =>
-    businessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1));
+  const orderDates = buildDateRange(stockRange.from, stockRange.to).map((date) => dailyOrderDateForStockDate(date, businessCategory));
   return rangeFromDates(orderDates, stockRange);
 };
 
@@ -439,7 +443,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         })
         : loadedDates.flatMap((date) => [
           `Остаток (${formatDateLabel(date)})`,
-          `Заказ (${formatDateLabel(activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1))})`,
+          `Заказ (${formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))})`,
           `Продано (${formatDateLabel(date)})`,
         ])),
     ];
@@ -458,7 +462,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             return DASHBOARD_COLUMNS.map((column) => values[column.key] ?? '');
           })
           : loadedDates.flatMap((date) => {
-            const orderDate = activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1);
+            const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
             return [row.values[date] ?? '', orderPacksForDate(row.productId, orderDate), soldFor(row, date)];
           })),
       ];
@@ -618,7 +622,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                 <React.Fragment key={date}>
                   <th data-week-start={date === windowStart ? windowStart : undefined}>{formatDateLabel(date)}<small>Остаток</small></th>
                   <th>
-                    {formatDateLabel(activeBusinessCategory === 'Деликатесы' ? nearestDelicaciesOrderDate(date) : addDays(date, 1))}
+                    {formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
                     <small>Заказ</small>
                   </th>
                   <th>{formatDateLabel(date)}<small>Продано</small></th>
@@ -633,9 +637,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
                 <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
                 {loadedDates.map((date) => {
-                  const orderDate = activeBusinessCategory === 'Деликатесы'
-                    ? nearestDelicaciesOrderDate(date)
-                    : addDays(date, 1);
+                  const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                   return (
                     <React.Fragment key={`${row.productId}:${date}`}>
                       <td>

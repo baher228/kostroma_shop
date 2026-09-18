@@ -87,7 +87,9 @@ test('daily stock tables fetch hidden previous-day dependencies for sold formula
   assert.match(source, /const dailyFormulaStockRangeForWindowStart = \(weekStart: string\): LoadedWeekRange => \{/);
   assert.match(source, /return \{ \.\.\.range, from: addDays\(range\.from, -1\) \};/);
   assert.match(source, /const dailyFormulaOrderRangeForWindowStart = \(weekStart: string, businessCategory: BusinessCategory\): LoadedWeekRange => \{/);
-  assert.match(source, /businessCategory === 'Деликатесы' \? nearestDelicaciesOrderDate\(date\) : addDays\(date, 1\)/);
+  assert.match(source, /const dailyOrderDateForStockDate = \(date: string, businessCategory: BusinessCategory\): string =>/);
+  assert.match(source, /businessCategory === 'Деликатесы' && !isDelicaciesOrderDate\(date\)/);
+  assert.match(source, /const orderDates = buildDateRange\(stockRange\.from, stockRange\.to\)\.map\(\(date\) => dailyOrderDateForStockDate\(date, businessCategory\)\);/);
   assert.match(source, /: dailyFormulaStockRangeForWindowStart\(weekStart\);/);
   assert.match(source, /return dailyFormulaOrderRangeForWindowStart\(weekStart, businessCategory\);/);
 });

@@ -145,6 +145,11 @@ const nextDelicaciesDeliveryDate = (dateKey: string): string => {
   return target;
 };
 
+const dailyOrderDateForStockDate = (dateKey: string, businessCategory: BusinessCategory): string =>
+  businessCategory === 'Деликатесы' && parseDateKey(dateKey).getDay() === 0
+    ? nextDelicaciesDeliveryDate(dateKey)
+    : dateKey;
+
 const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
 
 const formatOptionalPrice = (value: unknown): string => {
@@ -267,7 +272,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         const targetShopId = selectedShopId ?? nextTable.shop.id;
         if (targetShopId) {
           try {
-            const orderValuesTo = shiftDateKey(to, 2);
+            const orderValuesTo = dailyOrderDateForStockDate(to, activeBusinessCategory);
             const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, orderValuesTo, activeBusinessCategory);
             const loaded: Record<string, string> = {};
             for (const entry of orderValues) {
@@ -876,9 +881,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               rows.map((row, index) => (
                 <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
                   {table?.dates.map((date) => {
-                    const orderDate = activeBusinessCategory === 'Деликатесы'
-                      ? nextDelicaciesDeliveryDate(date)
-                      : shiftDateKey(date, 1);
+                    const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                     return (
                       <View key={`${row.productId}:${date}`} style={styles.dailyValueGroup}>
                         <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>

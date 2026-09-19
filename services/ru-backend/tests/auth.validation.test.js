@@ -119,7 +119,21 @@ test('audio QC recording schemas normalize history payloads', () => {
   assert.equal(recording.shopId, 'shop_main');
   assert.equal(recording.mlSessionId, null);
   assert.equal(recording.lastError, null);
-  assert.equal(audioQcRecordingsQuerySchema.parse({ limit: '25' }).limit, 25);
+  const recordingsQuery = audioQcRecordingsQuerySchema.parse({
+    shopId: 'shop_main',
+    from: '2026-08-01T00:00:00+03:00',
+    to: '2026-08-08T00:00:00+03:00',
+    limit: '25',
+    offset: '50',
+  });
+  assert.deepEqual(
+    { limit: recordingsQuery.limit, offset: recordingsQuery.offset },
+    { limit: 25, offset: 50 },
+  );
+  assert.throws(() => audioQcRecordingsQuerySchema.parse({
+    from: '2026-08-08T00:00:00+03:00',
+    to: '2026-08-01T00:00:00+03:00',
+  }));
 });
 
 test('Russia app does not expose stock/order/shop routes', async (t) => {

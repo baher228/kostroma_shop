@@ -115,3 +115,40 @@ test('Audio QC heartbeat is upserted by device id', async () => {
   assert.equal(heartbeat.currentMode, 'vad_auto');
   assert.equal(heartbeat.online, true);
 });
+
+test('Audio QC recording history is paginated and includes only the latest linked analysis', async () => {
+  const calls = [];
+  const { listAudioQcRecordings } = installDbMock(async (sql, params = []) => {
+    calls.push({ sql, params });
+    if (sql.includes('COUNT(*)::int AS total')) return { rows: [{ total: 31 }] };
+    assert.equal(sql.includes('LEFT JOIN qc_sessions q'), true);
+    assert.equal(sql.includes('q.shop_id = r.shop_id'), true);
+    assert.equal(sql.includes('ORDER BY ar.version DESC'), true);
+    assert.equal(sql.includes('r.started_at DESC, r.local_recording_id DESC'), true);
+    return { rows: [{
+      local_recording_id: 'recording-1', ml_session_id: 'qc-1', job_id: 'job-1', shop_id: 'shop_main',
+      seller_id: 'u_worker_01', shift_id: null, device_id: 'tablet-1',
+      started_at: '2026-08-03T10:00:00.000Z', ended_at: '2026-08-03T10:01:00.000Z',
+      app_version: '1.0.0', timezone: 'Europe/Moscow', recording_mode: 'vad_auto', duration_sec: 60,
+      file_size_bytes: '2048', status: 'completed', last_error: null,
+      created_at: '2026-08-03T10:00:00.000Z', updated_at: '2026-08-03T10:02:00.000Z',
+      qc_session_id: 'qc-1', qc_status: 'completed', analysis_id: 'analysis-2', analysis_version: '2',
+      overall_score: '42.5', quality_class: 'bad', analyzed_at: '2026-08-03T10:03:00.000Z',
+    }] };
+  });
+
+  const page = await listAudioQcRecordings({
+    shopId: 'shop_main', from: '2026-08-01T00:00:00+03:00', to: '2026-08-08T00:00:00+03:00',
+    limit: 25, offset: 25,
+  });
+
+  assert.equal(page.total, 31);
+  assert.equal(page.recordings[0].qc.status, 'completed');
+  assert.deepEqual(page.recordings[0].qc.latestAnalysis, {
+    id: 'analysis-2', version: 2, overallScore: 42.5, qualityClass: 'bad', analyzedAt: '2026-08-03T10:03:00.000Z',
+  });
+  assert.deepEqual(calls.find((call) => call.sql.includes('LEFT JOIN qc_sessions')).params,
+    ['shop_main', '2026-08-01T00:00:00+03:00', '2026-08-08T00:00:00+03:00', 25, 25]);
+  assert.deepEqual(calls.find((call) => call.sql.includes('COUNT(*)')).params,
+    ['shop_main', '2026-08-01T00:00:00+03:00', '2026-08-08T00:00:00+03:00']);
+});

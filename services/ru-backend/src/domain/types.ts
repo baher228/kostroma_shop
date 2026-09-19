@@ -15,6 +15,18 @@ export type AudioQcRecordingStatus =
   | 'failed_retryable'
   | 'failed_permanent';
 
+export type AudioQcRecordingQcSummary = {
+  sessionId: string;
+  status: 'created' | 'queued' | 'transcribing' | 'analysis_queued' | 'analyzing' | 'completed' | 'transcription_failed' | 'analysis_failed';
+  latestAnalysis: {
+    id: string;
+    version: number;
+    overallScore: number;
+    qualityClass: 'good' | 'neutral' | 'bad';
+    analyzedAt: string;
+  } | null;
+};
+
 export type AudioQcRecordingSummary = {
   localRecordingId: string;
   mlSessionId: string | null;
@@ -34,6 +46,7 @@ export type AudioQcRecordingSummary = {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+  qc: AudioQcRecordingQcSummary | null;
 };
 
 export type ColumnKey =

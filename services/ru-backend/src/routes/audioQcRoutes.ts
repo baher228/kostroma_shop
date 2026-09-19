@@ -37,8 +37,8 @@ export const registerAudioQcRoutes = (app: Express) => {
   app.get('/api/audio-qc/recordings', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
     try {
       const query = audioQcRecordingsQuerySchema.parse(req.query);
-      const recordings = await getManagedAudioQcRecordings((req as AuthorizedRequest).user, query.shopId, query.limit);
-      res.json({ recordings });
+      const result = await getManagedAudioQcRecordings((req as AuthorizedRequest).user, query);
+      res.json(result);
     } catch (error) {
       handleAudioQcError(error, res, 'Failed to load Audio QC recordings.');
     }

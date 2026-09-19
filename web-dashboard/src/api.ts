@@ -1,13 +1,19 @@
 import {
   AudioQcPolicy,
   AudioQcPolicyWithHeartbeat,
-  AudioQcRecording,
+  AudioQcRecordingsPage,
   CheckInStats,
   BusinessCategory,
   ManagedUser,
   OrderSheet,
   OrderValueEntry,
   ProductPayload,
+  QcAnalysis,
+  QcOverview,
+  QcSession,
+  QcStatus,
+  QcTranscript,
+  QcTrendPoint,
   PromotionDocument,
   PromotionDocumentType,
   PromotionRowPayload,
@@ -39,10 +45,12 @@ type CachedOpsToken = {
 
 export class ApiError extends Error {
   status: number;
+  code: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -93,7 +101,7 @@ const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOpt
   const parsed = text
     ? (() => {
         try {
-          return JSON.parse(text) as { message?: string };
+          return JSON.parse(text) as { message?: string; code?: string };
         } catch {
           return null;
         }
@@ -101,7 +109,7 @@ const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOpt
     : null;
 
   if (!response.ok) {
-    throw new ApiError(parsed?.message || 'Request failed.', response.status);
+    throw new ApiError(parsed?.message || 'Request failed.', response.status, parsed?.code ?? null);
   }
 
   return (parsed ?? {}) as T;
@@ -428,10 +436,36 @@ export const api = {
           },
         },
       )).policy,
-    recordings: async (token: string, shopId?: string) =>
-      (await ruRequest<{ recordings: AudioQcRecording[] }>(
-        `/api/audio-qc/recordings${query({ shopId, limit: '200' })}`,
+    recordings: async (token: string, filters: {
+      shopId?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+      offset?: number;
+    } = {}): Promise<AudioQcRecordingsPage> =>
+      ruRequest<AudioQcRecordingsPage>(
+        `/api/audio-qc/recordings${query({
+          shopId: filters.shopId,
+          from: filters.from,
+          to: filters.to,
+          limit: String(filters.limit ?? 25),
+          offset: String(filters.offset ?? 0),
+        })}`,
         { token },
-      )).recordings,
+      ),
+  },
+  qualityControl: {
+    session: async (token: string, sessionId: string) =>
+      (await ruRequest<{ session: QcSession }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}`, { token })).session,
+    status: async (token: string, sessionId: string) =>
+      ruRequest<QcStatus>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/status`, { token }),
+    transcript: async (token: string, sessionId: string) =>
+      ruRequest<QcTranscript>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/transcript`, { token }),
+    analysis: async (token: string, sessionId: string) =>
+      (await ruRequest<{ analysis: QcAnalysis }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/analysis`, { token })).analysis,
+    overview: async (token: string, filters: { shopId?: string; from?: string; to?: string }) =>
+      ruRequest<QcOverview>(`/api/quality-control/analytics/overview${query(filters)}`, { token }),
+    trends: async (token: string, filters: { shopId?: string; from?: string; to?: string; interval: 'day' | 'week' | 'month' }) =>
+      ruRequest<QcTrendPoint[]>(`/api/quality-control/analytics/trends${query(filters)}`, { token }),
   },
 };

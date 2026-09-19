@@ -1,5 +1,6 @@
 import {
   AudioQcPolicyPatch,
+  AudioQcRecordingsFilter,
   AudioQcRecordingInput,
   listAudioQcRecordings,
   upsertAudioQcHeartbeat,
@@ -93,11 +94,10 @@ export const recordTabletAudioQcRecording = (user: SessionUser, input: AudioQcRe
 
 export const getManagedAudioQcRecordings = (
   user: SessionUser,
-  shopId: string | undefined,
-  limit: number,
+  filter: AudioQcRecordingsFilter,
 ) => {
   if (user.role !== 'manager') {
     throw new AudioQcPolicyError('forbidden');
   }
-  return listAudioQcRecordings(shopId, limit);
+  return listAudioQcRecordings(filter);
 };

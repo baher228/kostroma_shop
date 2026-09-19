@@ -34,6 +34,8 @@ type AudioQcHeartbeatRow = {
   last_seen_at: Date | string;
 };
 
+type AudioQcQcSessionStatus = NonNullable<AudioQcRecordingSummary['qc']>['status'];
+
 type AudioQcRecordingRow = {
   local_recording_id: string;
   ml_session_id: string | null;
@@ -53,6 +55,13 @@ type AudioQcRecordingRow = {
   last_error: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  qc_session_id?: string | null;
+  qc_status?: AudioQcQcSessionStatus | null;
+  analysis_id?: string | null;
+  analysis_version?: number | string | null;
+  overall_score?: number | string | null;
+  quality_class?: 'good' | 'neutral' | 'bad' | null;
+  analyzed_at?: Date | string | null;
 };
 
 export type AudioQcPolicyPatch = {
@@ -76,7 +85,15 @@ export type AudioQcHeartbeatInput = {
   lastUploadAt: string | null;
 };
 
-export type AudioQcRecordingInput = Omit<AudioQcRecordingSummary, 'createdAt' | 'updatedAt'>;
+export type AudioQcRecordingInput = Omit<AudioQcRecordingSummary, 'createdAt' | 'updatedAt' | 'qc'>;
+
+export type AudioQcRecordingsFilter = {
+  shopId?: string;
+  from?: string;
+  to?: string;
+  limit: number;
+  offset: number;
+};
 
 const createPolicyId = (shopId: string): string =>
   `audio_qc_policy_${shopId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
@@ -147,6 +164,17 @@ const mapRecording = (row: AudioQcRecordingRow): AudioQcRecordingSummary => ({
   lastError: row.last_error,
   createdAt: new Date(row.created_at).toISOString(),
   updatedAt: new Date(row.updated_at).toISOString(),
+  qc: row.qc_session_id ? {
+    sessionId: row.qc_session_id,
+    status: row.qc_status!,
+    latestAnalysis: row.analysis_id ? {
+      id: row.analysis_id,
+      version: Number(row.analysis_version),
+      overallScore: Number(row.overall_score),
+      qualityClass: row.quality_class!,
+      analyzedAt: new Date(row.analyzed_at!).toISOString(),
+    } : null,
+  } : null,
 });
 
 const listLatestHeartbeats = async (): Promise<Map<string, AudioQcDeviceHeartbeat>> => {
@@ -438,18 +466,60 @@ export const upsertAudioQcRecording = async (recording: AudioQcRecordingInput): 
 };
 
 export const listAudioQcRecordings = async (
-  shopId: string | undefined,
-  limit: number,
-): Promise<AudioQcRecordingSummary[]> => {
-  const result = await personalDb.query<AudioQcRecordingRow>(
-    `
-      SELECT ${recordingColumns}
-      FROM audio_qc_recordings
-      WHERE ($1::text IS NULL OR shop_id = $1)
-      ORDER BY started_at DESC
-      LIMIT $2;
-    `,
-    [shopId ?? null, limit],
-  );
-  return result.rows.map(mapRecording);
+  filter: AudioQcRecordingsFilter,
+): Promise<{ recordings: AudioQcRecordingSummary[]; total: number }> => {
+  const params: unknown[] = [];
+  const clauses: string[] = [];
+  const add = (condition: string, value: unknown) => {
+    params.push(value);
+    clauses.push(condition.replace('?', `$${params.length}`));
+  };
+  if (filter.shopId) add('r.shop_id = ?', filter.shopId);
+  if (filter.from) add('r.started_at >= ?::timestamptz', filter.from);
+  if (filter.to) add('r.started_at < ?::timestamptz', filter.to);
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const selectColumns = recordingColumns
+    .split(',')
+    .map((column) => `r.${column.trim()}`)
+    .join(',\n        ');
+
+  const [recordingsResult, countResult] = await Promise.all([
+    personalDb.query<AudioQcRecordingRow>(
+      `
+        SELECT
+          ${selectColumns},
+          q.id AS qc_session_id,
+          q.status AS qc_status,
+          a.id AS analysis_id,
+          a.version AS analysis_version,
+          a.overall_score,
+          a.quality_class,
+          a.analyzed_at
+        FROM audio_qc_recordings r
+        LEFT JOIN qc_sessions q
+          ON q.id = r.ml_session_id
+          AND q.shop_id = r.shop_id
+        LEFT JOIN LATERAL (
+          SELECT ar.id, ar.version, ar.overall_score, ar.quality_class, ar.analyzed_at
+          FROM qc_analysis_results ar
+          WHERE ar.session_id = q.id
+          ORDER BY ar.version DESC
+          LIMIT 1
+        ) a ON TRUE
+        ${where}
+        ORDER BY r.started_at DESC, r.local_recording_id DESC
+        LIMIT $${params.length + 1}
+        OFFSET $${params.length + 2};
+      `,
+      [...params, filter.limit, filter.offset],
+    ),
+    personalDb.query<{ total: number | string }>(
+      `SELECT COUNT(*)::int AS total FROM audio_qc_recordings r ${where};`,
+      params,
+    ),
+  ]);
+  return {
+    recordings: recordingsResult.rows.map(mapRecording),
+    total: Number(countResult.rows[0]?.total ?? 0),
+  };
 };

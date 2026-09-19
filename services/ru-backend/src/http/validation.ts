@@ -317,7 +317,13 @@ export const audioQcRecordingSchema = z.object({
 
 export const audioQcRecordingsQuerySchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+}).strict().refine((input) => !input.from || !input.to || Date.parse(input.from) <= Date.parse(input.to), {
+  message: 'from must not follow to.',
+  path: ['to'],
 });
 
 export const orderSheetQuerySchema = z.object({

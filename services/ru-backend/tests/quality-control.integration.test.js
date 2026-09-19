@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const { readdirSync } = require('node:fs');
+const path = require('node:path');
 const { before, after, test } = require('node:test');
 const { createQcTestDatabase } = require('./quality-control.db-helper');
 const { QualityControlRepository } = require('../dist/repositories/qualityControlRepository');
@@ -17,7 +19,8 @@ after(async () => { await db?.close(); });
 
 test('all Russia migrations apply and the existing migration runner is repeatable', async () => {
   const first = await db.query('SELECT name FROM schema_migrations ORDER BY name');
-  assert.equal(first.rows.length, 10);
+  const migrationCount = readdirSync(path.resolve(__dirname, '../migrations')).filter(name => name.endsWith('.sql')).length;
+  assert.equal(first.rows.length, migrationCount);
   assert.equal(first.rows.at(-1).name, '010_quality_control.sql');
   await migrate();
   assert.deepEqual((await db.query('SELECT name FROM schema_migrations ORDER BY name')).rows, first.rows);

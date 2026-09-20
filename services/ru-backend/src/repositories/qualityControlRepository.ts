@@ -5,6 +5,7 @@ import type { Database } from '../db/dbFactory';
 import type { SessionUser } from '../domain/types';
 import { classifyQuality, validateAnalysis } from '../quality-control/analysis';
 import { qcConfig } from '../quality-control/config';
+import { retentionForAnalysis } from '../quality-control/retention';
 import { AnalysisResult, CreateSessionInput, DialogTranscript, ProviderMetadata, QcError, QcFilters, QcJob, QcMedia, QcSession, SttResult } from '../quality-control/types';
 
 type Row = Record<string, any>;
@@ -21,7 +22,10 @@ const mapJob = (r: Row): QcJob => ({ id: r.id, sessionId: r.session_id, stage: r
   errorCode: r.error_code, errorMessage: r.error_message, createdAt: iso(r.created_at) });
 const mapMedia = (r: Row): QcMedia => ({ id: r.id, sessionId: r.session_id, type: r.type, storageKey: r.storage_key,
   storageBucket: r.storage_bucket, originalFilename: r.original_filename, mimeType: r.mime_type,
-  size: Number(r.size), duration: r.duration, sha256: r.sha256 });
+  size: Number(r.size), duration: r.duration, sha256: r.sha256,
+  retentionClass: r.retention_class, retentionReason: r.retention_reason,
+  expiresAt: r.expires_at ? iso(r.expires_at) : null, pinnedAt: r.pinned_at ? iso(r.pinned_at) : null,
+  pinnedBy: r.pinned_by, deletedAt: r.deleted_at ? iso(r.deleted_at) : null });
 const technicalMetadata = (m: ProviderMetadata) => ({ provider: m.provider, model: m.model,
   latencyMs: m.latencyMs, inputTokens: m.inputTokens, outputTokens: m.outputTokens, totalTokens: m.totalTokens });
 
@@ -143,8 +147,10 @@ export class QualityControlRepository {
         const jobs = await client.query('SELECT * FROM qc_processing_jobs WHERE session_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1', [sessionId]);
         return { media: mapMedia(existing.rows[0]), job: mapJob(jobs.rows[0]) };
       }
-      await client.query(`INSERT INTO qc_media(id,session_id,type,storage_key,storage_bucket,original_filename,mime_type,size,duration,sha256)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [media.id, sessionId, 'audio', media.storageKey, media.storageBucket, media.originalFilename, media.mimeType, media.size, media.duration, media.sha256]);
+      await client.query(`INSERT INTO qc_media(id,session_id,type,storage_key,storage_bucket,original_filename,mime_type,size,duration,sha256,
+        retention_class,retention_reason,expires_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [media.id, sessionId, 'audio', media.storageKey, media.storageBucket,
+        media.originalFilename, media.mimeType, media.size, media.duration, media.sha256, media.retentionClass, media.retentionReason, media.expiresAt]);
       const job = await this.insertJob(client, sessionId, 'transcription', null, 'transcription');
       return { media, job };
     });
@@ -257,8 +263,8 @@ export class QualityControlRepository {
       }
       const transcriptId = id('qct');
       await client.query(`INSERT INTO qc_transcripts(id,session_id,media_id,provider,provider_model,language,duration,raw_result,technical_metadata)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb)`, [transcriptId, job.sessionId, media.id, result.metadata.provider, result.metadata.model,
-        result.transcript.language, result.transcript.duration, result.rawResult === undefined ? null : JSON.stringify(result.rawResult), JSON.stringify(technicalMetadata(result.metadata))]);
+        VALUES($1,$2,$3,$4,$5,$6,$7,NULL,$8::jsonb)`, [transcriptId, job.sessionId, media.id, result.metadata.provider, result.metadata.model,
+        result.transcript.language, result.transcript.duration, JSON.stringify(technicalMetadata(result.metadata))]);
       for (const [position, segment] of result.transcript.segments.entries()) {
         await client.query(`INSERT INTO qc_transcript_segments(id,transcript_id,position,start_time,end_time,speaker,text,confidence)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [id('qcs'), transcriptId, position, segment.start, segment.end, segment.speaker, segment.text, segment.confidence ?? null]);
@@ -281,6 +287,11 @@ export class QualityControlRepository {
       const analysisId = id('qca');
       const nextVersion = await client.query('SELECT COALESCE(MAX(version),0)+1 AS version FROM qc_analysis_results WHERE session_id=$1', [job.sessionId]);
       const qualityClass = classifyQuality(analysis.quality.overallScore, { good: qcConfig.qualityGoodThreshold, neutral: qcConfig.qualityNeutralThreshold });
+      const retention = retentionForAnalysis(analysis, qualityClass, {
+        standardMs: qcConfig.retentionStandardHours * 60 * 60 * 1000,
+        badMs: qcConfig.retentionBadHours * 60 * 60 * 1000,
+        interestingMs: qcConfig.retentionInterestingHours * 60 * 60 * 1000,
+      });
       await client.query(`INSERT INTO qc_analysis_results(id,session_id,transcript_id,job_id,provider,model,prompt_version,scorecard_version,schema_version,
         version,overall_score,quality_class,customer_sentiment,customer_satisfaction,has_conflict,has_complaint,has_objection,violations_count,
         critical_violations_count,structured_result,technical_metadata)
@@ -296,6 +307,10 @@ export class QualityControlRepository {
       }
       await client.query("UPDATE qc_processing_jobs SET status='completed',lease_token=NULL,lease_expires_at=NULL,error_code=NULL,error_message=NULL,completed_at=NOW(),updated_at=NOW() WHERE id=$1", [job.id]);
       await client.query("UPDATE qc_sessions SET status='completed',updated_at=NOW() WHERE id=$1", [job.sessionId]);
+      await client.query(`UPDATE qc_media SET retention_class=$2,retention_reason=$3,
+        expires_at=NOW()+($4 * INTERVAL '1 millisecond')
+        WHERE session_id=$1 AND type='audio' AND pinned_at IS NULL AND deleted_at IS NULL`,
+      [job.sessionId, retention.retentionClass, retention.retentionReason, retention.retentionMs]);
       return true;
     });
   }
@@ -311,8 +326,77 @@ export class QualityControlRepository {
       [job.id, retry ? 'queued' : 'failed', error.code, error.message, backoff]);
       await client.query('UPDATE qc_sessions SET status=$2,updated_at=NOW() WHERE id=$1',
         [job.sessionId, retry ? (job.stage === 'transcription' ? 'queued' : 'analysis_queued') : `${job.stage}_failed`]);
+      if (!retry) {
+        await client.query(`UPDATE qc_media SET retention_class='bad',retention_reason='Failed processing retained for diagnosis.',
+          expires_at=NOW()+($2 * INTERVAL '1 millisecond')
+          WHERE session_id=$1 AND type='audio' AND pinned_at IS NULL AND deleted_at IS NULL`,
+        [job.sessionId, qcConfig.retentionBadHours * 60 * 60 * 1000]);
+      }
       return true;
     });
+  }
+
+  async getAudioInfo(user: SessionUser, sessionId: string): Promise<QcMedia> {
+    await this.session(user, sessionId, this.db, false, true);
+    const result = await this.db.query("SELECT * FROM qc_media WHERE session_id=$1 AND type='audio'", [sessionId]);
+    if (!result.rows[0]) throw new QcError('AUDIO_REQUIRED', 'Audio not found.', 404);
+    return mapMedia(result.rows[0]);
+  }
+
+  async setAudioPinned(user: SessionUser, sessionId: string, pinned: boolean): Promise<QcMedia> {
+    if (user.role !== 'manager') throw new QcError('FORBIDDEN', 'Only managers can change audio retention.', 403);
+    await this.session(user, sessionId, this.db, false, true);
+    let retentionClass = 'standard';
+    let retentionReason = 'Routine dialog restored to the standard retention policy.';
+    let retentionMs = qcConfig.retentionStandardHours * 60 * 60 * 1000;
+    if (!pinned) {
+      const latest = await this.db.query(`SELECT quality_class,has_conflict,has_complaint,critical_violations_count,structured_result
+        FROM qc_analysis_results WHERE session_id=$1 ORDER BY version DESC LIMIT 1`, [sessionId]);
+      const analysis = latest.rows[0];
+      const dialog = analysis?.structured_result?.dialog ?? {};
+      if (analysis?.quality_class === 'good' && (dialog.upsellDetected === true || dialog.crossSellDetected === true)) {
+        retentionClass = 'interesting'; retentionReason = 'Strong dialog with upsell or cross-sell.';
+        retentionMs = qcConfig.retentionInterestingHours * 60 * 60 * 1000;
+      } else if (analysis?.quality_class === 'bad' || analysis?.has_conflict || analysis?.has_complaint || Number(analysis?.critical_violations_count) > 0) {
+        retentionClass = 'bad'; retentionReason = 'Poor or escalated dialog retained for review.';
+        retentionMs = qcConfig.retentionBadHours * 60 * 60 * 1000;
+      }
+    }
+    const result = await this.db.query(`UPDATE qc_media SET
+      retention_class=CASE WHEN $3 THEN 'pinned' ELSE $4 END,
+      retention_reason=CASE WHEN $3 THEN 'Pinned by a manager.' ELSE $5 END,
+      pinned_at=CASE WHEN $3 THEN NOW() ELSE NULL END,
+      pinned_by=CASE WHEN $3 THEN $2 ELSE NULL END,
+      expires_at=CASE WHEN $3 THEN NULL ELSE NOW()+($6 * INTERVAL '1 millisecond') END
+      WHERE session_id=$1 AND type='audio' AND deleted_at IS NULL AND delete_claim_token IS NULL RETURNING *`,
+    [sessionId, user.id, pinned, retentionClass, retentionReason, retentionMs]);
+    if (!result.rows[0]) throw new QcError('AUDIO_EXPIRED', 'Audio has already been removed by the retention policy.', 410);
+    return mapMedia(result.rows[0]);
+  }
+
+  async claimExpiredMedia(limit: number): Promise<{ media: QcMedia; claimToken: string }[]> {
+    const claimToken = randomUUID();
+    const result = await this.db.query(`WITH candidates AS (
+        SELECT m.id FROM qc_media m
+        WHERE m.deleted_at IS NULL AND m.pinned_at IS NULL AND m.expires_at<=NOW()
+          AND (m.delete_claim_token IS NULL OR m.delete_claimed_at<NOW()-INTERVAL '15 minutes')
+          AND NOT EXISTS (SELECT 1 FROM qc_processing_jobs j WHERE j.session_id=m.session_id AND j.status IN ('queued','running'))
+        ORDER BY m.expires_at,m.id FOR UPDATE SKIP LOCKED LIMIT $1
+      )
+      UPDATE qc_media m SET delete_claim_token=$2,delete_claimed_at=NOW()
+      FROM candidates c WHERE m.id=c.id RETURNING m.*`, [limit, claimToken]);
+    return result.rows.map((row: Row) => ({ media: mapMedia(row), claimToken }));
+  }
+
+  async markMediaDeleted(mediaId: string, claimToken: string): Promise<void> {
+    await this.db.query(`UPDATE qc_media SET deleted_at=NOW(),retention_reason=retention_reason || ' Audio object deleted.'
+      ,delete_claim_token=NULL,delete_claimed_at=NULL
+      WHERE id=$1 AND delete_claim_token=$2 AND deleted_at IS NULL AND pinned_at IS NULL AND expires_at<=NOW()`, [mediaId, claimToken]);
+  }
+
+  async releaseMediaDeleteClaim(mediaId: string, claimToken: string): Promise<void> {
+    await this.db.query(`UPDATE qc_media SET delete_claim_token=NULL,delete_claimed_at=NULL
+      WHERE id=$1 AND delete_claim_token=$2 AND deleted_at IS NULL`, [mediaId, claimToken]);
   }
 
   async analytics(user: SessionUser, kind: 'overview' | 'trends' | 'criteria' | 'sellers' | 'shops', filter: QcFilters = {}) {

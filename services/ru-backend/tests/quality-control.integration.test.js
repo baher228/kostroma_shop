@@ -6,6 +6,8 @@ const { createQcTestDatabase } = require('./quality-control.db-helper');
 const { QualityControlRepository } = require('../dist/repositories/qualityControlRepository');
 const { QualityControlService, validateQcAudio } = require('../dist/services/qualityControlService');
 const { QualityControlWorker } = require('../dist/quality-control/worker');
+const { QualityControlRetentionWorker } = require('../dist/quality-control/retentionWorker');
+const { retentionForAnalysis } = require('../dist/quality-control/retention');
 const { MinioQcStorage } = require('../dist/quality-control/storage');
 const { QcError } = require('../dist/quality-control/types');
 const { criterionKeys } = require('../dist/quality-control/analysis');
@@ -21,7 +23,7 @@ test('all Russia migrations apply and the existing migration runner is repeatabl
   const first = await db.query('SELECT name FROM schema_migrations ORDER BY name');
   const migrationCount = readdirSync(path.resolve(__dirname, '../migrations')).filter(name => name.endsWith('.sql')).length;
   assert.equal(first.rows.length, migrationCount);
-  assert.equal(first.rows.at(-1).name, '010_quality_control.sql');
+  assert.equal(first.rows.at(-1).name, '011_qc_audio_retention.sql');
   await migrate();
   assert.deepEqual((await db.query('SELECT name FROM schema_migrations ORDER BY name')).rows, first.rows);
   const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'qc_%'");
@@ -50,13 +52,14 @@ const manager = { id: 'u_manager_01', username: 'manager', firstName: 'Main', la
 const workerUser = { id: 'u_worker_01', username: 'worker', firstName: 'Store', lastName: 'Worker', fullName: 'Store Worker', role: 'worker', shopId: 'shop_main', shopName: null };
 const otherWorker = { ...workerUser, id: 'other-worker' };
 const makeAnalysis = (score, sentiment = 'negative') => ({
-  schemaVersion: '1.0',
+  schemaVersion: '1.1',
   summary: { short: 'Клиент выбрал товар.', customerIntent: 'Подобрать товар.', outcome: 'Товар подобран.' },
   quality: { overallScore: 0, criteria: Object.fromEntries(criterionKeys.map(key => [key, {
     score, maxScore: 10, status: score >= 8 ? 'good' : score >= 6 ? 'neutral' : 'needs_improvement', comment: 'Проверено по диалогу.',
   }])) },
   customer: { sentiment, satisfaction: 'satisfied' },
-  dialog: { hasConflict: false, hasComplaint: false, hasObjection: true, saleIntentDetected: true },
+  dialog: { hasConflict: false, hasComplaint: false, hasObjection: true, saleIntentDetected: true,
+    upsellDetected: false, crossSellDetected: false, purchaseCompleted: false },
   strengths: ['Вежливость.'], problems: [], violations: [], recommendations: ['Уточнять потребность клиента.'],
 });
 const wav = () => {
@@ -125,7 +128,7 @@ test('QC audio MVP runs asynchronously end-to-end, preserves history and aggrega
     analysis: { async analyzeDialog(transcript) {
       assert.equal(transcript.sessionId, session.id);
       return { analysis: makeAnalysis(analysisScore), metadata: { provider: 'gigachat', model: 'test-model', latencyMs: 8 },
-        promptVersion: '1.0', scorecardVersion: '1.0', schemaVersion: '1.0' };
+        promptVersion: '1.1', scorecardVersion: '1.0', schemaVersion: '1.1' };
     } },
     maxAttempts: 3, retryBaseMs: 1, leaseMs: 60_000, pollIntervalMs: 50,
   });
@@ -135,11 +138,14 @@ test('QC audio MVP runs asynchronously end-to-end, preserves history and aggrega
   assert.equal((await repository.getStatus(manager, session.id)).status, 'completed');
   const transcript = await repository.getTranscript(manager, session.id);
   assert.equal(transcript.transcript.segments[0].speaker, 'speaker_0');
+  assert.equal((await db.query('SELECT raw_result FROM qc_transcripts WHERE session_id=$1', [session.id])).rows[0].raw_result, null,
+    'canonical segments are retained without duplicating the raw provider payload');
   const first = await repository.getAnalysis(manager, session.id);
   assert.equal(first.overallScore, 90);
   assert.equal(first.qualityClass, 'good');
   assert.equal(first.customerSentiment, 'negative', 'customer mood remains separate from service quality');
   assert.equal(first.structuredResult.quality.overallScore, 90);
+  assert.equal((await repository.getAudioInfo(manager, session.id)).retentionClass, 'standard');
   await assert.rejects(repository.getTranscript(otherWorker, session.id), { code: 'FORBIDDEN' });
 
   const overview = await repository.analytics(manager, 'overview', { shopId: 'shop_main', from: '2026-08-03T00:00:00Z', to: '2026-08-04T00:00:00Z' });
@@ -163,6 +169,27 @@ test('QC audio MVP runs asynchronously end-to-end, preserves history and aggrega
   assert.equal(history[0].qualityClass, 'bad');
   assert.equal(history[1].qualityClass, 'good');
   assert.equal(sttCalls, 1, 'intentional re-analysis reuses the canonical transcript');
+
+  assert.equal((await repository.getAudioInfo(manager, session.id)).retentionClass, 'bad');
+  assert.equal((await repository.setAudioPinned(manager, session.id, true)).retentionClass, 'pinned');
+  assert.equal((await repository.claimExpiredMedia(10)).length, 0, 'pinned audio cannot be claimed for deletion');
+  assert.equal((await repository.setAudioPinned(manager, session.id, false)).retentionClass, 'bad');
+  await db.query("UPDATE qc_media SET expires_at=NOW()-INTERVAL '1 second' WHERE session_id=$1", [session.id]);
+  const retentionWorker = new QualityControlRetentionWorker(repository, storage, 60_000, 10);
+  assert.equal(await retentionWorker.runOnce(), 1);
+  assert.equal(stored.size, 0);
+  assert.ok((await repository.getAudioInfo(manager, session.id)).deletedAt);
+  await assert.rejects(service.downloadAudio(manager, session.id), { code: 'AUDIO_EXPIRED', status: 410 });
+});
+
+test('QC retention keeps strong upsells longer and prioritizes incidents', () => {
+  const durations = { standardMs: 3, badMs: 7, interestingMs: 30 };
+  const routine = makeAnalysis(9, 'positive');
+  assert.deepEqual(retentionForAnalysis(routine, 'good', durations).retentionClass, 'standard');
+  routine.dialog.upsellDetected = true;
+  assert.equal(retentionForAnalysis(routine, 'good', durations).retentionClass, 'interesting');
+  routine.dialog.hasComplaint = true;
+  assert.equal(retentionForAnalysis(routine, 'bad', durations).retentionClass, 'bad');
 });
 
 test('QC upload validation rejects empty, oversized and spoofed media before storage', () => {

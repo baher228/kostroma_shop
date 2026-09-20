@@ -9,6 +9,7 @@ import {
   OrderValueEntry,
   ProductPayload,
   QcAnalysis,
+  QcAudioInfo,
   QcOverview,
   QcSession,
   QcStatus,
@@ -463,6 +464,14 @@ export const api = {
       ruRequest<QcTranscript>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/transcript`, { token }),
     analysis: async (token: string, sessionId: string) =>
       (await ruRequest<{ analysis: QcAnalysis }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/analysis`, { token })).analysis,
+    audioInfo: async (token: string, sessionId: string) =>
+      (await ruRequest<{ audio: QcAudioInfo }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/audio-info`, { token })).audio,
+    audioDownload: async (token: string, sessionId: string) =>
+      makeDownloadBlobRequest(RU_API_BASE_URL, `/api/quality-control/sessions/${encodeURIComponent(sessionId)}/audio`, token),
+    setAudioPinned: async (token: string, sessionId: string, pinned: boolean) =>
+      (await ruRequest<{ audio: QcAudioInfo }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/audio-retention`, {
+        method: 'PUT', token, body: { pinned },
+      })).audio,
     overview: async (token: string, filters: { shopId?: string; from?: string; to?: string }) =>
       ruRequest<QcOverview>(`/api/quality-control/analytics/overview${query(filters)}`, { token }),
     trends: async (token: string, filters: { shopId?: string; from?: string; to?: string; interval: 'day' | 'week' | 'month' }) =>

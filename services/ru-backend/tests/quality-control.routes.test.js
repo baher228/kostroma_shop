@@ -18,6 +18,9 @@ async function withApp(user, enabled, callback) {
     async getStatus() { return { sessionId: 'qc_test', status: 'queued', jobs: [] }; },
     async getTranscript() { return { transcript: { segments: [] } }; },
     async getAnalysis() { return { overallScore: 80, qualityClass: 'good', structuredResult: { quality: { criteria: {} }, recommendations: ['Practice.'] } }; },
+    async getAudioInfo() { return { mimeType: 'audio/wav', size: 64, duration: 1, retentionClass: 'bad', retentionReason: 'Review.', expiresAt: '2026-08-08T00:00:00Z', pinnedAt: null, deletedAt: null }; },
+    async downloadAudio() { return { media: { mimeType: 'audio/wav' }, audio: Buffer.from('audio') }; },
+    async setAudioPinned(_user, id, pinned) { calls.push(['pin', id, pinned]); return { mimeType: 'audio/wav', size: 64, duration: 1, retentionClass: pinned ? 'pinned' : 'standard', retentionReason: 'Policy.', expiresAt: null, pinnedAt: pinned ? '2026-08-01T00:00:00Z' : null, deletedAt: null }; },
     async analytics(_user, kind, filters) { calls.push(['analytics', kind, filters]); return { kind }; },
   };
   const app = express();
@@ -55,6 +58,13 @@ test('QC HTTP routes expose async session/audio/status/result/analytics contract
     assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/analysis`)).status, 200);
     assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/scorecard`)).status, 200);
     assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/recommendations`)).status, 200);
+    assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/audio-info`)).status, 200);
+    const audio = await fetch(`${base}/api/quality-control/sessions/qc_test/audio`);
+    assert.equal(audio.status, 200);
+    assert.equal(audio.headers.get('content-type'), 'audio/wav');
+    const pinned = await fetch(`${base}/api/quality-control/sessions/qc_test/audio-retention`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: true }) });
+    assert.equal(pinned.status, 200);
+    assert.deepEqual(calls.find(call => call[0] === 'pin'), ['pin', 'qc_test', true]);
 
     const analytics = await fetch(`${base}/api/quality-control/analytics/trends?from=2026-08-01&to=2026-08-01&interval=week`);
     assert.equal(analytics.status, 200);
@@ -75,6 +85,9 @@ test('QC HTTP routes enforce role gates, feature flag and bounded validation', a
   await withApp(worker, true, async base => {
     assert.equal((await fetch(`${base}/api/quality-control/analytics/overview`)).status, 403);
     assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/reanalyze`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'v2' }, body: '{}' })).status, 403);
+    assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/audio-info`)).status, 403);
+    assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/audio`)).status, 403);
+    assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/audio-retention`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: true }) })).status, 403);
     assert.equal((await fetch(`${base}/api/quality-control/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopId: '../escape', startedAt: 'not-a-date' }) })).status, 400);
     assert.equal((await fetch(`${base}/api/quality-control/sessions/qc_test/audio`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 415);
   });

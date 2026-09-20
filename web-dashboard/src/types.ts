@@ -178,11 +178,11 @@ export type QcFinding = {
   type: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
-  evidence: string | null;
+  evidence: string | null | Array<{ segmentIndex: number; quote: string }>;
 };
 
 export type QcStructuredResult = {
-  schemaVersion: '1.0';
+  schemaVersion: '1.0' | '1.1';
   summary: { short: string; customerIntent: string; outcome: string };
   quality: {
     overallScore: number;
@@ -192,11 +192,26 @@ export type QcStructuredResult = {
     sentiment: 'positive' | 'neutral' | 'negative' | 'unknown';
     satisfaction: 'satisfied' | 'neutral' | 'dissatisfied' | 'unknown';
   };
-  dialog: { hasConflict: boolean; hasComplaint: boolean; hasObjection: boolean; saleIntentDetected: boolean };
+  dialog: {
+    hasConflict: boolean; hasComplaint: boolean; hasObjection: boolean; saleIntentDetected: boolean;
+    upsellDetected?: boolean; crossSellDetected?: boolean; purchaseCompleted?: boolean;
+  };
   strengths: string[];
   problems: QcFinding[];
   violations: QcFinding[];
   recommendations: string[];
+};
+
+export type QcAudioInfo = {
+  available: boolean;
+  mimeType: string;
+  size: number;
+  duration: number | null;
+  retentionClass: 'standard' | 'bad' | 'interesting' | 'pinned';
+  retentionReason: string;
+  expiresAt: string | null;
+  pinnedAt: string | null;
+  deletedAt: string | null;
 };
 
 export type QcAnalysis = {

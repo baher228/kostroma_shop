@@ -38,6 +38,7 @@ const filtersSchema = z.object({
   return { ...input, from, to };
 });
 const processSchema = z.object({ idempotencyKey: z.string().min(1).max(200).optional() }).strict();
+const pinSchema = z.object({ pinned: z.boolean() }).strict();
 
 export const handleQualityControlError = (error: unknown, res: Response) => {
   if (error instanceof ZodError) {
@@ -59,7 +60,7 @@ export const createQualityControlService = () => new QualityControlService(new Q
   endpoint: qcConfig.storageEndpoint, accessKey: qcConfig.storageAccessKey, secretKey: qcConfig.storageSecretKey,
   bucket: qcConfig.storageBucket, region: qcConfig.storageRegion, maxAudioBytes: qcConfig.maxUploadBytes,
   timeoutMs: qcConfig.storageTimeoutMs,
-}), qcConfig.maxUploadBytes);
+}), qcConfig.maxUploadBytes, qcConfig.retentionStandardHours * 60 * 60 * 1000);
 
 export const registerQualityControlRoutes = (app: Express, options: {
   service?: QualityControlService; auth?: RequestHandler; enabled?: boolean;
@@ -102,6 +103,42 @@ export const registerQualityControlRoutes = (app: Express, options: {
       const result = await service.uploadAudio(user(req), sessionId, req.file);
       res.status(202).json(result);
     } finally { activeUploads -= 1; }
+  }));
+
+  app.get(`${base}/sessions/:id/audio-info`, auth, guard, requireRole('manager'), handle(async (req, res) => {
+    const media = await service.getAudioInfo(user(req), id(req));
+    res.json({ audio: {
+      available: !media.deletedAt, mimeType: media.mimeType, size: media.size, duration: media.duration,
+      retentionClass: media.retentionClass, retentionReason: media.retentionReason, expiresAt: media.expiresAt,
+      pinnedAt: media.pinnedAt, deletedAt: media.deletedAt,
+    } });
+  }));
+
+  let activeDownloads = 0;
+  app.get(`${base}/sessions/:id/audio`, auth, guard, requireRole('manager'), handle(async (req, res) => {
+    if (activeDownloads >= 2) throw new QcError('DOWNLOAD_BUSY', 'Audio download capacity reached; retry shortly.', 429, true);
+    activeDownloads += 1;
+    try {
+      const sessionId = id(req);
+      const { media, audio } = await service.downloadAudio(user(req), sessionId);
+      const extension = ({ 'audio/wav': 'wav', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg',
+        'audio/webm': 'webm', 'audio/flac': 'flac', 'audio/aac': 'aac', 'audio/3gpp': '3gp' } as Record<string, string>)[media.mimeType] ?? 'audio';
+      res.set({
+        'Content-Type': media.mimeType, 'Content-Length': String(audio.length),
+        'Content-Disposition': `attachment; filename="quality-control-${sessionId}.${extension}"`,
+        'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+      });
+      res.send(audio);
+    } finally { activeDownloads -= 1; }
+  }));
+
+  app.put(`${base}/sessions/:id/audio-retention`, auth, guard, requireRole('manager'), handle(async (req, res) => {
+    const media = await service.setAudioPinned(user(req), id(req), pinSchema.parse(req.body).pinned);
+    res.json({ audio: {
+      available: !media.deletedAt, mimeType: media.mimeType, size: media.size, duration: media.duration,
+      retentionClass: media.retentionClass, retentionReason: media.retentionReason, expiresAt: media.expiresAt,
+      pinnedAt: media.pinnedAt, deletedAt: media.deletedAt,
+    } });
   }));
 
   for (const action of ['process', 'reanalyze'] as const) {

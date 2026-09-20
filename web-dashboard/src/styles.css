@@ -705,6 +705,50 @@ label {
   margin-bottom: 13px;
 }
 
+.qc-audio-section {
+  display: grid;
+  gap: 12px;
+}
+
+.qc-audio-section h4,
+.qc-audio-section p {
+  margin: 0;
+}
+
+.qc-audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.qc-audio-player {
+  width: 100%;
+}
+
+.qc-transcript-seek,
+.qc-evidence-seek {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #426453;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.qc-transcript-seek:disabled {
+  color: #87938d;
+  text-decoration: none;
+  cursor: default;
+}
+
+.qc-evidence-seek {
+  display: block;
+  margin-top: 8px;
+}
+
 .qc-detail-facts {
   display: grid;
   grid-template-columns: repeat(4, minmax(130px, 1fr));

@@ -6,7 +6,7 @@ import { CreateSessionInput, QcError, QcFilters, QcMedia, QcStorage } from '../q
 export type QcUpload = { originalname: string; mimetype: string; buffer: Buffer; size: number };
 export type QualityControlData = Pick<QualityControlRepository,
   'createSession' | 'getSession' | 'listSessions' | 'attachAudio' | 'enqueue' | 'getStatus' |
-  'getTranscript' | 'getAnalysis' | 'analytics'>;
+  'getTranscript' | 'getAnalysis' | 'getAudioInfo' | 'setAudioPinned' | 'analytics'>;
 
 const formats: Record<string, { extension: string; mime: string; valid: (buffer: Buffer) => boolean }> = {
   wav: { extension: 'wav', mime: 'audio/wav', valid: b => b.length > 44 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WAVE' },
@@ -42,7 +42,8 @@ export const validateQcAudio = (file: QcUpload | undefined, maxAudioBytes: numbe
 };
 
 export class QualityControlService {
-  constructor(readonly repository: QualityControlData, readonly storage: QcStorage, readonly maxAudioBytes: number) {}
+  constructor(readonly repository: QualityControlData, readonly storage: QcStorage, readonly maxAudioBytes: number,
+    readonly standardRetentionMs = 72 * 60 * 60 * 1000) {}
 
   createSession(user: SessionUser, input: CreateSessionInput) { return this.repository.createSession(user, input); }
   getSession(user: SessionUser, id: string) { return this.repository.getSession(user, id); }
@@ -58,6 +59,8 @@ export class QualityControlService {
       storageKey: `quality-control/shops/${session.shopId}/sessions/${id}/audio/${sha256}.${format.extension}`,
       storageBucket: this.storage.bucket, originalFilename: format.originalFilename,
       mimeType: format.mime, size: audio.buffer.length, duration: null, sha256,
+      retentionClass: 'standard', retentionReason: 'Awaiting Quality Control analysis.',
+      expiresAt: new Date(Date.now() + this.standardRetentionMs).toISOString(), pinnedAt: null, pinnedBy: null, deletedAt: null,
     };
     await this.storage.put(media.storageKey, audio.buffer, media.mimeType);
     // A failed/ambiguous DB commit must not delete an object another retry already attached.
@@ -77,6 +80,13 @@ export class QualityControlService {
   getStatus(user: SessionUser, id: string) { return this.repository.getStatus(user, id); }
   getTranscript(user: SessionUser, id: string) { return this.repository.getTranscript(user, id); }
   getAnalysis(user: SessionUser, id: string, history = false) { return this.repository.getAnalysis(user, id, history); }
+  getAudioInfo(user: SessionUser, id: string) { return this.repository.getAudioInfo(user, id); }
+  setAudioPinned(user: SessionUser, id: string, pinned: boolean) { return this.repository.setAudioPinned(user, id, pinned); }
+  async downloadAudio(user: SessionUser, id: string) {
+    const media = await this.repository.getAudioInfo(user, id);
+    if (media.deletedAt) throw new QcError('AUDIO_EXPIRED', 'Audio has been removed by the retention policy.', 410);
+    return { media, audio: await this.storage.get(media.storageKey, media.storageBucket) };
+  }
   analytics(user: SessionUser, kind: 'overview' | 'trends' | 'criteria' | 'sellers' | 'shops', filters: QcFilters) {
     return this.repository.analytics(user, kind, filters);
   }

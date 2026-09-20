@@ -169,7 +169,7 @@ export class GigaChatAnalysisProvider implements LlmAnalysisProvider {
   async analyzeDialog(transcript: DialogTranscript): Promise<AnalysisResult> {
     // Deliberately construct the outbound projection; sessionId and any future
     // database/storage fields on the domain object cannot cross this boundary.
-    const dialog = { language: transcript.language, segments: transcript.segments.map(({ speaker, text }) => ({ speaker, text })) };
+    const dialog = { language: transcript.language, segments: transcript.segments.map(({ speaker, text }, segmentIndex) => ({ segmentIndex, speaker, text })) };
     const content = JSON.stringify(dialog);
     if (!transcript.segments.some((segment) => segment.text.trim())) throw new QcError('ANALYSIS_EMPTY_TRANSCRIPT', 'An empty transcript cannot be analyzed.', 422);
     if (content.length > (this.config.maxTranscriptChars ?? 100000)) throw new QcError('ANALYSIS_INPUT_TOO_LARGE', 'The transcript exceeds the configured model input limit.', 422);

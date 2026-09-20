@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../../api';
-import type { AudioQcRecording, QcAnalysis, QcSession, QcStatus, QcTranscript, Session } from '../../types';
+import type { AudioQcRecording, QcAnalysis, QcAudioInfo, QcSession, QcStatus, QcTranscript, Session } from '../../types';
 import { messageOf } from '../../shared/format';
 import {
   criterionLabels,
@@ -40,9 +40,14 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
   const [status, setStatus] = useState<QcStatus | null>(null);
   const [transcript, setTranscript] = useState<QcTranscript | null>(null);
   const [analysis, setAnalysis] = useState<QcAnalysis | null>(null);
-  const [errors, setErrors] = useState({ session: '', status: '', transcript: '', analysis: '' });
+  const [audioInfo, setAudioInfo] = useState<QcAudioInfo | null>(null);
+  const [audioUrl, setAudioUrl] = useState('');
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [errors, setErrors] = useState({ session: '', status: '', transcript: '', analysis: '', audio: '' });
   const [loading, setLoading] = useState(Boolean(sessionId));
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const audioElementRef = useRef<HTMLAudioElement>(null);
+  const pendingSeekRef = useRef<number | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const inFlightRef = useRef(false);
   const analysisIdRef = useRef<string | null>(recording.qc?.latestAnalysis?.id ?? null);
@@ -53,11 +58,12 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
     if (!sessionId || inFlightRef.current) return;
     inFlightRef.current = true;
     if (showLoading) setLoading(true);
-    const [sessionResult, statusResult, transcriptResult, analysisResult] = await Promise.allSettled([
+    const [sessionResult, statusResult, transcriptResult, analysisResult, audioResult] = await Promise.allSettled([
       api.qualityControl.session(session.token, sessionId),
       api.qualityControl.status(session.token, sessionId),
       api.qualityControl.transcript(session.token, sessionId),
       api.qualityControl.analysis(session.token, sessionId),
+      api.qualityControl.audioInfo(session.token, sessionId),
     ]);
 
     if (sessionResult.status === 'fulfilled') setQcSession(sessionResult.value);
@@ -69,11 +75,13 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
       if (!analysisIdRef.current && !recording.qc?.latestAnalysis) onDataChangedRef.current();
       analysisIdRef.current = analysisResult.value.id;
     }
+    if (audioResult.status === 'fulfilled') setAudioInfo(audioResult.value);
     setErrors({
       session: sessionResult.status === 'rejected' ? unavailableMessage(sessionResult.reason, 'session') : '',
       status: statusResult.status === 'rejected' ? messageOf(statusResult.reason) : '',
       transcript: transcriptResult.status === 'rejected' ? unavailableMessage(transcriptResult.reason, 'transcript') : '',
       analysis: analysisResult.status === 'rejected' ? unavailableMessage(analysisResult.reason, 'analysis') : '',
+      audio: audioResult.status === 'rejected' ? messageOf(audioResult.reason) : '',
     });
     setLoading(false);
     inFlightRef.current = false;
@@ -101,10 +109,13 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
     setStatus(null);
     setTranscript(null);
     setAnalysis(null);
-    setErrors({ session: '', status: '', transcript: '', analysis: '' });
+    setAudioInfo(null);
+    setErrors({ session: '', status: '', transcript: '', analysis: '', audio: '' });
     analysisIdRef.current = recording.qc?.latestAnalysis?.id ?? null;
     void load(true);
   }, [load, recording.qc?.latestAnalysis?.id]);
+
+  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
 
   useEffect(() => {
     if (!sessionId || (status && terminal.has(status.status))) return;
@@ -116,6 +127,49 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
 
   const result = analysis?.structuredResult;
   const currentStatus = status?.status ?? qcSession?.status ?? recording.qc?.status;
+
+  const fetchAudio = async (download: boolean) => {
+    if (!sessionId || audioBusy) return;
+    setAudioBusy(true);
+    try {
+      const file = await api.qualityControl.audioDownload(session.token, sessionId);
+      if (download) {
+        const url = URL.createObjectURL(file.blob);
+        const link = document.createElement('a');
+        link.href = url; link.download = file.fileName; link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      } else {
+        if (audioUrl) URL.revokeObjectURL(audioUrl);
+        setAudioUrl(URL.createObjectURL(file.blob));
+      }
+      setErrors(current => ({ ...current, audio: '' }));
+    } catch (error) { setErrors(current => ({ ...current, audio: messageOf(error) })); }
+    finally { setAudioBusy(false); }
+  };
+
+  const togglePinned = async () => {
+    if (!sessionId || !audioInfo || audioBusy) return;
+    setAudioBusy(true);
+    try {
+      setAudioInfo(await api.qualityControl.setAudioPinned(session.token, sessionId, audioInfo.retentionClass !== 'pinned'));
+      setErrors(current => ({ ...current, audio: '' }));
+    } catch (error) { setErrors(current => ({ ...current, audio: messageOf(error) })); }
+    finally { setAudioBusy(false); }
+  };
+
+  const playFrom = async (seconds: number | null) => {
+    if (seconds === null || seconds < 0) return;
+    pendingSeekRef.current = seconds;
+    if (!audioUrl) {
+      await fetchAudio(false);
+      return;
+    }
+    if (audioElementRef.current) {
+      audioElementRef.current.currentTime = seconds;
+      await audioElementRef.current.play().catch(() => undefined);
+      pendingSeekRef.current = null;
+    }
+  };
 
   return (
     <div className="qc-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -143,6 +197,33 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
                 <div><span>Режим</span><strong>{recording.recordingMode === 'vad_auto' ? 'Авто по речи' : 'Ручная запись'}</strong></div>
               </section>
               {(errors.session || errors.status) && <p className="error">{errors.session || errors.status}</p>}
+
+              <section className="qc-detail-section qc-audio-section">
+                <div>
+                  <h4>Аудиозапись</h4>
+                  {audioInfo ? (
+                    audioInfo.available ? <p>
+                      {audioInfo.retentionClass === 'pinned' ? 'Хранится бессрочно.' : `Будет удалена ${audioInfo.expiresAt ? formatDateTime(audioInfo.expiresAt) : 'по политике хранения'}.`}
+                      {' '}{audioInfo.retentionReason}
+                    </p> : <p>Аудиофайл уже удалён по политике хранения. Расшифровка и анализ сохранены.</p>
+                  ) : <p>{errors.audio || 'Получаем сведения о файле...'}</p>}
+                </div>
+                {audioInfo?.available && <div className="qc-audio-actions">
+                  <button type="button" onClick={() => void fetchAudio(false)} disabled={audioBusy}>{audioUrl ? 'Обновить плеер' : 'Прослушать'}</button>
+                  <button className="secondary" type="button" onClick={() => void fetchAudio(true)} disabled={audioBusy}>Скачать аудио</button>
+                  <button className="secondary" type="button" onClick={() => void togglePinned()} disabled={audioBusy}>
+                    {audioInfo.retentionClass === 'pinned' ? 'Вернуть автоудаление' : 'Хранить бессрочно'}
+                  </button>
+                </div>}
+                {audioUrl && <audio ref={audioElementRef} className="qc-audio-player" controls preload="metadata" src={audioUrl}
+                  onLoadedMetadata={(event) => {
+                    if (pendingSeekRef.current === null) return;
+                    event.currentTarget.currentTime = pendingSeekRef.current;
+                    pendingSeekRef.current = null;
+                    void event.currentTarget.play().catch(() => undefined);
+                  }} />}
+                {errors.audio && <p className="error">{errors.audio}</p>}
+              </section>
 
               <section className="qc-detail-section">
                 <h4>Краткий вывод AI</h4>
@@ -172,7 +253,12 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
                     <div className="qc-transcript">
                       {transcript.transcript.segments.map((segment, index) => (
                         <article key={`${segment.start ?? index}-${index}`}>
-                          <header><strong>{displaySpeaker(segment.speaker, index)}</strong><span>{formatTimestamp(segment.start)}</span></header>
+                          <header><strong>{displaySpeaker(segment.speaker, index)}</strong>
+                            <button className="qc-transcript-seek" type="button" disabled={segment.start === null || audioInfo?.available === false}
+                              onClick={() => void playFrom(segment.start)} title="Прослушать с этой реплики">
+                              ▶ {formatTimestamp(segment.start)}
+                            </button>
+                          </header>
                           <p>{segment.text}</p>
                         </article>
                       ))}
@@ -208,7 +294,18 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
                         {[...result.problems, ...result.violations].map((finding, index) => (
                           <article key={`${finding.type}-${index}`}>
                             <header><strong>{finding.description}</strong><span className={`qc-severity ${finding.severity}`}>{severityLabels[finding.severity]}</span></header>
-                            {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
+                            {typeof finding.evidence === 'string' && finding.evidence && <blockquote>{finding.evidence}</blockquote>}
+                            {Array.isArray(finding.evidence) && finding.evidence.map((evidence, evidenceIndex) => (
+                              <blockquote key={`${evidence.segmentIndex}-${evidenceIndex}`}>
+                                {evidence.quote}
+                                {transcript?.transcript.segments[evidence.segmentIndex]?.start != null && audioInfo?.available !== false && (
+                                  <button className="qc-evidence-seek" type="button"
+                                    onClick={() => void playFrom(transcript.transcript.segments[evidence.segmentIndex].start)}>
+                                    ▶ Прослушать фрагмент
+                                  </button>
+                                )}
+                              </blockquote>
+                            ))}
                           </article>
                         ))}
                       </div>

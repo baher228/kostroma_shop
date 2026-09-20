@@ -11,11 +11,12 @@ const input = { sessionId: transcript.sessionId, audio: Buffer.from('fake audio'
 
 function validAnalysis(score = 8) {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     summary: { short: 'Клиент обратился за возвратом.', customerIntent: 'Оформить возврат.', outcome: 'Результат в записи отсутствует.' },
     quality: { overallScore: 42, criteria: Object.fromEntries(criterionKeys.map((key) => [key, { score, maxScore: 10, status: 'good', comment: 'Оценка по записи.' }])) },
     customer: { sentiment: 'negative', satisfaction: 'unknown' },
-    dialog: { hasConflict: false, hasComplaint: false, hasObjection: false, saleIntentDetected: false },
+    dialog: { hasConflict: false, hasComplaint: false, hasObjection: false, saleIntentDetected: false,
+      upsellDetected: false, crossSellDetected: false, purchaseCompleted: false },
     strengths: ['Вежливое приветствие.'], problems: [], violations: [], recommendations: [],
   };
 }
@@ -98,12 +99,13 @@ test('QC GigaChat uses strict native JSON schema, verified TLS and excludes inte
   assert.equal(capturedRequest.response_format.schema, dialogAnalysisJsonSchema);
   assert.equal(capturedRequest.response_format.json_schema, undefined);
   assert.equal(JSON.stringify(capturedRequest).includes('private-'), false);
-  assert.deepEqual(JSON.parse(capturedRequest.messages[1].content), { language: 'ru', segments: transcript.segments.map(({ speaker, text }) => ({ speaker, text })) });
+  assert.deepEqual(JSON.parse(capturedRequest.messages[1].content), { language: 'ru',
+    segments: transcript.segments.map(({ speaker, text }, segmentIndex) => ({ segmentIndex, speaker, text })) });
   assert.equal(result.analysis.quality.overallScore, 80);
   assert.equal(result.analysis.customer.sentiment, 'negative');
   assert.equal(result.metadata.model, 'GigaChat-2-Max:revision');
   assert.equal(result.metadata.totalTokens, 300);
-  assert.deepEqual([result.promptVersion, result.scorecardVersion, result.schemaVersion], ['1.0', '1.0', '1.0']);
+  assert.deepEqual([result.promptVersion, result.scorecardVersion, result.schemaVersion], ['1.1', '1.0', '1.1']);
 });
 
 test('QC GigaChat rejects invalid JSON, schema violations and incomplete responses', async () => {
@@ -136,16 +138,23 @@ test('QC full response schema rejects bounds, extra keys, missing criteria and f
   assert.throws(() => validateAnalysis(extra), { code: 'ANALYSIS_SCHEMA_INVALID' });
   const missing = validAnalysis(); delete missing.quality.criteria.closing;
   assert.throws(() => validateAnalysis(missing), { code: 'ANALYSIS_SCHEMA_INVALID' });
-  const evidence = validAnalysis(); evidence.violations.push({ type: 'conflict', severity: 'low', description: 'Комментарий', evidence: 'Придуманная реплика.' });
+  const evidence = validAnalysis(); evidence.violations.push({ type: 'conflict', severity: 'low', description: 'Комментарий', evidence: [{ segmentIndex: 1, quote: 'Придуманная реплика.' }] });
   assert.throws(() => validateAnalysis(evidence, transcript), { code: 'ANALYSIS_EVIDENCE_INVALID' });
-  evidence.violations[0].evidence = 'Хочу оформить возврат.';
-  assert.equal(validateAnalysis(evidence, transcript).violations[0].evidence, 'Хочу оформить возврат.');
-  evidence.violations[0].evidence = null;
-  assert.equal(validateAnalysis(evidence, transcript).violations[0].evidence, null);
+  evidence.violations[0].evidence = [{ segmentIndex: 1, quote: 'Хочу оформить возврат.' }];
+  assert.equal(validateAnalysis(evidence, transcript).violations[0].evidence[0].quote, 'Хочу оформить возврат.');
+  evidence.violations[0].evidence = [{ segmentIndex: 1, quote: '«Хочу оформить возврат.»' }];
+  assert.equal(validateAnalysis(evidence, transcript).violations[0].evidence[0].quote, '«Хочу оформить возврат.»',
+    'outer model-added quotes do not invalidate otherwise exact evidence');
+  evidence.violations[0].evidence = [];
+  assert.deepEqual(validateAnalysis(evidence, transcript).violations[0].evidence, []);
 });
 
 test('QC score and quality class are deterministic, configurable and distinct from sentiment', () => {
   assert.equal(calculateOverallScore(validAnalysis(8).quality.criteria), 80);
+  const canonical = validAnalysis(8).quality.criteria;
+  canonical.greeting.status = 'neutral';
+  assert.equal(calculateOverallScore(canonical), 80);
+  assert.equal(canonical.greeting.status, 'good', 'derived labels are canonicalized without another LLM request');
   const criteria = validAnalysis(8).quality.criteria;
   criteria.scriptCompliance = { score: 0, maxScore: 10, status: 'not_applicable', comment: 'Нет скрипта.' };
   assert.equal(calculateOverallScore(criteria), 80);

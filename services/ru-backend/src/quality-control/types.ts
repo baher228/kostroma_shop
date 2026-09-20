@@ -1,6 +1,7 @@
 import type { DialogAnalysis } from './analysis';
 
 export type QualityClass = 'good' | 'neutral' | 'bad';
+export type QcRetentionClass = 'standard' | 'bad' | 'interesting' | 'pinned';
 export type SessionStatus = 'created' | 'queued' | 'transcribing' | 'analysis_queued' | 'analyzing' | 'completed' | 'transcription_failed' | 'analysis_failed';
 export type QcSession = {
   id: string; shopId: string; sellerId: string | null; shiftId: string | null;
@@ -14,6 +15,8 @@ export type CreateSessionInput = {
 export type QcMedia = {
   id: string; sessionId: string; type: 'audio' | 'video'; storageKey: string; storageBucket: string;
   originalFilename: string; mimeType: string; size: number; duration: number | null; sha256: string;
+  retentionClass: QcRetentionClass; retentionReason: string; expiresAt: string | null;
+  pinnedAt: string | null; pinnedBy: string | null; deletedAt: string | null;
 };
 export type TranscriptSegment = {
   start: number | null; end: number | null; speaker: string; text: string; confidence?: number;

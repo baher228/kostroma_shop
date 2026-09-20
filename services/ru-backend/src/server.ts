@@ -5,6 +5,7 @@ import { createRussiaApp } from './app/russiaApp';
 import { cleanupExpiredTaskPhotos } from './services/taskService';
 import { qcConfig, validateQcConfig } from './quality-control/config';
 import { createQualityControlWorker } from './quality-control/worker';
+import { createQualityControlRetentionWorker } from './quality-control/retentionWorker';
 
 const startServer = async () => {
   await runMigrations();
@@ -19,9 +20,11 @@ const startServer = async () => {
   validateQcConfig();
   const app = createRussiaApp();
   const worker = qcConfig.enabled && qcConfig.workerEnabled ? createQualityControlWorker() : null;
+  const retentionWorker = qcConfig.enabled ? createQualityControlRetentionWorker() : null;
   const server = app.listen(config.port, () => {
     console.log(`RU backend started on port ${config.port}`);
     worker?.start();
+    retentionWorker?.start();
   });
   let shuttingDown = false;
   const shutdown = async () => {
@@ -29,6 +32,7 @@ const startServer = async () => {
     shuttingDown = true;
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     await worker?.stop();
+    await retentionWorker?.stop();
     await closed;
     await personalDb.close();
   };

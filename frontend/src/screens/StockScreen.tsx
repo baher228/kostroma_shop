@@ -33,7 +33,6 @@ import {
   DEFAULT_PRODUCT_CATEGORY,
   MAX_ORDER_VALUE_LEN,
   PRODUCT_CATEGORIES,
-  TWO_WEEKS_DAYS,
   WEEK_DAYS,
   type DashboardColumn,
   type DashboardColumnKey,
@@ -63,6 +62,11 @@ type EditingCell = {
   productId: string;
   date: string;
   productName: string;
+};
+
+type LoadedDateRange = {
+  from: string;
+  to: string;
 };
 
 type StockScreenProps = {
@@ -150,7 +154,85 @@ const dailyOrderDateForStockDate = (dateKey: string, businessCategory: BusinessC
     ? nextDelicaciesDeliveryDate(dateKey)
     : dateKey;
 
-const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
+const buildDateRange = (from: string, to: string): string[] => {
+  const dates: string[] = [];
+  for (let date = from; date <= to; date = shiftDateKey(date, 1)) {
+    dates.push(date);
+  }
+  return dates;
+};
+
+const visibleStockRangeForWindowStart = (weekStart: string): LoadedDateRange => ({
+  from: shiftDateKey(weekStart, -WEEK_DAYS),
+  to: shiftDateKey(weekStart, WEEK_DAYS - 1),
+});
+
+const rangeFromDates = (dates: Array<string | undefined>, fallback: LoadedDateRange): LoadedDateRange => {
+  const sortedDates = dates.filter((date): date is string => Boolean(date)).sort();
+  return {
+    from: sortedDates[0] && sortedDates[0] < fallback.from ? sortedDates[0] : fallback.from,
+    to: sortedDates[sortedDates.length - 1] && sortedDates[sortedDates.length - 1] > fallback.to
+      ? sortedDates[sortedDates.length - 1]
+      : fallback.to,
+  };
+};
+
+const dashboardFormulaStockRangeForWindowStart = (weekStart: string): LoadedDateRange => {
+  const visibleRange = visibleStockRangeForWindowStart(weekStart);
+  const weeks = deriveDashboardWeeks(buildDateRange(visibleRange.from, visibleRange.to));
+  const previousSundayBeforeWeek = weeks.previous?.mon ? shiftDateKey(weeks.previous.mon, -1) : undefined;
+  return rangeFromDates([
+    previousSundayBeforeWeek,
+    weeks.previous?.mon,
+    weeks.previous?.tue,
+    weeks.previous?.wed,
+    weeks.previous?.thu,
+    weeks.previous?.fri,
+    weeks.previous?.sun,
+    weeks.current.mon,
+    weeks.current.tue,
+    weeks.current.wed,
+    weeks.current.thu,
+    weeks.current.fri,
+    weeks.current.sun,
+  ], visibleRange);
+};
+
+const dashboardFormulaOrderRangeForWindowStart = (weekStart: string): LoadedDateRange => {
+  const visibleRange = visibleStockRangeForWindowStart(weekStart);
+  const stockRange = dashboardFormulaStockRangeForWindowStart(weekStart);
+  const weeks = deriveDashboardWeeks(buildDateRange(visibleRange.from, visibleRange.to));
+  return rangeFromDates([
+    weeks.previous?.tue,
+    weeks.previous?.thu,
+    weeks.previous?.thu ? shiftDateKey(weeks.previous.thu, 2) : undefined,
+    weeks.current.tue,
+    weeks.current.thu,
+    weeks.current.thu ? shiftDateKey(weeks.current.thu, 2) : undefined,
+    weeks.current.sun ? shiftDateKey(weeks.current.sun, 2) : undefined,
+  ], stockRange);
+};
+
+const dailyFormulaStockRangeForWindowStart = (weekStart: string): LoadedDateRange => {
+  const range = visibleStockRangeForWindowStart(weekStart);
+  return { ...range, from: shiftDateKey(range.from, -1) };
+};
+
+const dailyFormulaOrderRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedDateRange => {
+  const stockRange = dailyFormulaStockRangeForWindowStart(weekStart);
+  const orderDates = buildDateRange(stockRange.from, stockRange.to).map((date) => dailyOrderDateForStockDate(date, businessCategory));
+  return rangeFromDates(orderDates, stockRange);
+};
+
+const stockFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedDateRange =>
+  businessCategory === 'Молоко'
+    ? dashboardFormulaStockRangeForWindowStart(weekStart)
+    : dailyFormulaStockRangeForWindowStart(weekStart);
+
+const orderFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedDateRange =>
+  businessCategory === 'Молоко'
+    ? dashboardFormulaOrderRangeForWindowStart(weekStart)
+    : dailyFormulaOrderRangeForWindowStart(weekStart, businessCategory);
 
 const formatOptionalPrice = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
@@ -253,10 +335,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     try {
       setLoading(true);
       setError('');
-      const dashboardFrom = shiftDateKey(managerWindowStart, -WEEK_DAYS);
-      const dashboardTo = getTwoWeeksEnd(dashboardFrom);
-      const from = canManage ? dashboardFrom : undefined;
-      const to = canManage ? dashboardTo : undefined;
+      const visibleRange = visibleStockRangeForWindowStart(managerWindowStart);
+      const stockRange = stockFetchRangeForWindowStart(managerWindowStart, activeBusinessCategory);
+      const orderRange = orderFetchRangeForWindowStart(managerWindowStart, activeBusinessCategory);
+      const from = canManage ? stockRange.from : undefined;
+      const to = canManage ? stockRange.to : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
         businessCategory: activeBusinessCategory,
@@ -264,16 +347,24 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         to,
         range: canManage ? undefined : 'week',
       });
-      setTable(nextTable);
+      const visibleTable = canManage
+        ? { ...nextTable, dates: nextTable.dates.filter((date) => date >= visibleRange.from && date <= visibleRange.to) }
+        : nextTable;
+      setTable(visibleTable);
       if (!selectedShopId) {
-        setSelectedShopId(nextTable.shop.id);
+        setSelectedShopId(visibleTable.shop.id);
       }
       if (canManage && from && to) {
-        const targetShopId = selectedShopId ?? nextTable.shop.id;
+        const targetShopId = selectedShopId ?? visibleTable.shop.id;
         if (targetShopId) {
           try {
-            const orderValuesTo = dailyOrderDateForStockDate(to, activeBusinessCategory);
-            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, orderValuesTo, activeBusinessCategory);
+            const orderValues = await stockApi.listShopOrderValues(
+              session.token,
+              targetShopId,
+              orderRange.from,
+              orderRange.to,
+              activeBusinessCategory,
+            );
             const loaded: Record<string, string> = {};
             for (const entry of orderValues) {
               loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);

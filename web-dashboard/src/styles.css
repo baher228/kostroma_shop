@@ -647,8 +647,13 @@ td.sticky {
   width: 220px;
 }
 
-.dashboard-data-col-width {
+.dashboard-col-stock-width,
+.dashboard-col-metric-width {
   width: 76px;
+}
+
+.dashboard-col-order-width {
+  width: 64px;
 }
 
 .manager-action-col-width {
@@ -759,11 +764,16 @@ td.sticky {
 }
 
 .dashboard-col-stock,
-.dashboard-col-order,
 .dashboard-col-metric {
   width: 76px;
   min-width: 76px;
   max-width: 76px;
+}
+
+.dashboard-col-order {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
 }
 
 .dashboard-tone-neutral {
@@ -2287,10 +2297,20 @@ td.sticky {
     width: 176px;
   }
 
+  .dashboard-col-order-width {
+    width: 56px;
+  }
+
   .manager-stock-table .manager-name-col {
     width: 176px;
     min-width: 176px;
     max-width: 176px;
+  }
+
+  .dashboard-col-order {
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
   }
 
   .order-sheet-table .order-name-col {

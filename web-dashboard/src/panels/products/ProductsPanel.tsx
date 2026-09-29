@@ -514,7 +514,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           <colgroup>
             <col className="manager-name-col-width" />
             {dashboardWeekStarts.flatMap((weekStart) => DASHBOARD_COLUMNS.map((column) => (
-              <col key={`${weekStart}:${column.key}`} className="dashboard-data-col-width" />
+              <col key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind}-width`} />
             )))}
           </colgroup>
           <thead>
@@ -615,6 +615,16 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       {renderTopScrollbar()}
       <div className="manager-table-scroll" onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)} ref={tableScrollRef}>
         <table className="manager-stock-table manager-dashboard-table">
+          <colgroup>
+            <col className="manager-name-col-width" />
+            {loadedDates.flatMap((date) => (
+              <React.Fragment key={date}>
+                <col className="dashboard-col-stock-width" />
+                <col className="dashboard-col-order-width" />
+                <col className="dashboard-col-metric-width" />
+              </React.Fragment>
+            ))}
+          </colgroup>
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>

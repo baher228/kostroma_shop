@@ -957,7 +957,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   <Text style={styles.dateDayText}>{formatDate(date)}</Text>
                   <View style={styles.dailySubHeaderRow}>
                     <Text style={styles.dailySubHeaderText}>Ост</Text>
-                    <Text style={styles.dailySubHeaderText}>Зак</Text>
+                    <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText]}>Зак</Text>
                     <Text style={styles.dailySubHeaderText}>Прод</Text>
                   </View>
                 </View>
@@ -978,7 +978,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                         <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
                           <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
                         </Pressable>
-                        <View style={[styles.cell, styles.dailyValueCell]}>
+                        <View style={[styles.cell, styles.dailyValueCell, styles.dailyOrderValueCell]}>
                           <TextInput
                             value={orderPacksForDate(row.productId, orderDate)}
                             onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
@@ -1971,7 +1971,7 @@ const styles = StyleSheet.create({
     width: 118,
   },
   dashboardOrderColumn: {
-    width: 122,
+    width: 92,
   },
   dashboardMetricColumn: {
     width: 106,
@@ -2079,7 +2079,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f4f6f4',
   },
   dailyHeaderGroup: {
-    width: 168,
+    width: 154,
     minHeight: 82,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -2100,14 +2100,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 10,
   },
+  dailyOrderSubHeaderText: {
+    width: 42,
+  },
   dailyValueGroup: {
-    width: 168,
+    width: 154,
     flexDirection: 'row',
   },
   dailyValueCell: {
     width: 56,
     height: 68,
     backgroundColor: '#f4f6f4',
+  },
+  dailyOrderValueCell: {
+    width: 42,
   },
   dashboardValueNeutral: {
     backgroundColor: '#f2f2f2',

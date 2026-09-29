@@ -1942,7 +1942,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   nameColumn: {
-    width: 320,
+    width: 380,
     alignItems: 'flex-start',
     paddingHorizontal: 10,
     backgroundColor: '#f7f7f7',

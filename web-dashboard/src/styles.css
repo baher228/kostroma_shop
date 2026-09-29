@@ -644,7 +644,7 @@ td.sticky {
 }
 
 .manager-name-col-width {
-  width: 156px;
+  width: 220px;
 }
 
 .dashboard-data-col-width {
@@ -678,9 +678,9 @@ td.sticky {
   position: sticky;
   left: 0;
   z-index: 2;
-  width: 156px;
-  min-width: 156px;
-  max-width: 156px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
   border-right: 2px solid #657667;
   background: #f7f7f7;
   text-align: left;
@@ -2284,13 +2284,13 @@ td.sticky {
   }
 
   .manager-name-col-width {
-    width: 142px;
+    width: 176px;
   }
 
   .manager-stock-table .manager-name-col {
-    width: 142px;
-    min-width: 142px;
-    max-width: 142px;
+    width: 176px;
+    min-width: 176px;
+    max-width: 176px;
   }
 
   .order-sheet-table .order-name-col {

@@ -1,5 +1,12 @@
 import { personalDb } from '../db/personalDb';
-import { CheckInStats, DailyCheckInSummary, WorkerCheckInEvent, WorkerCheckInStatus, WorkerCheckInSummary } from '../domain/types';
+import {
+  CheckInStats,
+  DailyCheckInSummary,
+  WorkerCheckInDay,
+  WorkerCheckInEvent,
+  WorkerCheckInStatus,
+  WorkerCheckInSummary,
+} from '../domain/types';
 
 const EXPECTED_START_TIME = '10:00';
 
@@ -291,30 +298,62 @@ export const recordWorkerCheckIn = async (input: {
   }
 };
 
-const workedMinutesForEvents = (events: WorkerCheckInEvent[], rangeEnd: string): number => {
+type WorkShift = {
+  date: string;
+  minutes: number;
+  missingCheckOut: boolean;
+};
+
+const endOfUtcDay = (date: Date): Date => parseDateKey(shiftDateKey(toDateKey(date), 1));
+
+const minutesBetween = (start: Date, end: Date): number =>
+  Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+
+// A shift without a check-out is counted until the end of its day (or until now,
+// if that day is still going on) instead of until the end of the selected range.
+const openShift = (start: Date, limit: Date, now: Date): WorkShift => {
+  const dayEnd = endOfUtcDay(start);
+  const end = new Date(Math.min(dayEnd.getTime(), limit.getTime(), now.getTime()));
+  return {
+    date: toDateKey(start),
+    minutes: minutesBetween(start, end),
+    missingCheckOut: dayEnd.getTime() <= now.getTime(),
+  };
+};
+
+const shiftsForEvents = (events: WorkerCheckInEvent[], now: Date): WorkShift[] => {
   const sorted = [...events].sort((a, b) => Date.parse(a.eventAt) - Date.parse(b.eventAt));
-  const rangeEndDate = parseDateKey(shiftDateKey(rangeEnd, 1));
+  const shifts: WorkShift[] = [];
   let openIn: Date | null = null;
-  let minutes = 0;
 
   for (const event of sorted) {
     const eventTime = new Date(event.eventAt);
     if (event.status === 'in') {
+      if (openIn) {
+        shifts.push(openShift(openIn, eventTime, now));
+      }
       openIn = eventTime;
     } else if (event.status === 'out' && openIn) {
-      minutes += Math.max(0, Math.round((eventTime.getTime() - openIn.getTime()) / 60000));
+      shifts.push({ date: toDateKey(openIn), minutes: minutesBetween(openIn, eventTime), missingCheckOut: false });
       openIn = null;
     }
   }
 
   if (openIn) {
-    minutes += Math.max(0, Math.round((rangeEndDate.getTime() - openIn.getTime()) / 60000));
+    shifts.push(openShift(openIn, now, now));
   }
 
-  return minutes;
+  return shifts;
 };
 
-export const getCheckInStats = async (from: string, to: string, shopId?: string): Promise<CheckInStats> => {
+const sumMinutes = (shifts: WorkShift[]): number => shifts.reduce((sum, shift) => sum + shift.minutes, 0);
+
+export const getCheckInStats = async (
+  from: string,
+  to: string,
+  shopId?: string,
+  now: Date = new Date(),
+): Promise<CheckInStats> => {
   const [statuses, events] = await Promise.all([listWorkerCheckInStatuses(shopId), listWorkerCheckInEvents(from, to, shopId)]);
   const dates = dateRange(from, to);
   const startMinutes = expectedStartMinutes();
@@ -332,28 +371,41 @@ export const getCheckInStats = async (from: string, to: string, shopId?: string)
     eventsByDate.set(dateKey, dayEvents);
   }
 
+  const shiftsByWorker = new Map<string, WorkShift[]>();
   const workers: WorkerCheckInSummary[] = statuses.map((status) => {
     const workerEvents = eventsByWorker.get(status.workerId) ?? [];
     const inEvents = workerEvents.filter((event) => event.status === 'in');
     const presentDates = new Set(inEvents.map((event) => eventDateKey(event.eventAt)));
-    let lateDays = 0;
+    const shifts = shiftsForEvents(workerEvents, now);
+    shiftsByWorker.set(status.workerId, shifts);
 
-    for (const date of dates) {
-      const firstIn = inEvents
+    const days: WorkerCheckInDay[] = dates.map((date) => {
+      const dayEvents = workerEvents
         .filter((event) => eventDateKey(event.eventAt) === date)
-        .sort((a, b) => Date.parse(a.eventAt) - Date.parse(b.eventAt))[0];
-      if (firstIn && eventMinutesOfDay(firstIn.eventAt) > startMinutes) {
-        lateDays += 1;
-      }
-    }
+        .sort((a, b) => Date.parse(a.eventAt) - Date.parse(b.eventAt));
+      const firstIn = dayEvents.find((event) => event.status === 'in');
+      const lastOut = [...dayEvents].reverse().find((event) => event.status === 'out');
+      const dayShifts = shifts.filter((shift) => shift.date === date);
+      return {
+        date,
+        present: presentDates.has(date),
+        firstInAt: firstIn?.eventAt ?? null,
+        lastOutAt: lastOut?.eventAt ?? null,
+        workedMinutes: sumMinutes(dayShifts),
+        late: Boolean(firstIn && eventMinutesOfDay(firstIn.eventAt) > startMinutes),
+        missingCheckOut: dayShifts.some((shift) => shift.missingCheckOut),
+      };
+    });
 
     return {
       ...status,
       totalCheckIns: inEvents.length,
       daysPresent: presentDates.size,
-      workedMinutes: workedMinutesForEvents(workerEvents, to),
-      lateDays,
+      workedMinutes: sumMinutes(shifts),
+      lateDays: days.filter((day) => day.late).length,
       missingDays: Math.max(0, dates.length - presentDates.size),
+      missingCheckOuts: shifts.filter((shift) => shift.missingCheckOut).length,
+      days,
     };
   });
 
@@ -373,7 +425,10 @@ export const getCheckInStats = async (from: string, to: string, shopId?: string)
     return {
       date,
       checkIns: dayInEvents.length,
-      workedMinutes: workedMinutesForEvents(dayEvents, date),
+      workedMinutes: [...shiftsByWorker.values()].reduce(
+        (sum, shifts) => sum + sumMinutes(shifts.filter((shift) => shift.date === date)),
+        0,
+      ),
       lateCount,
       missingCount: Math.max(0, statuses.length - presentWorkers.size),
     };
@@ -389,6 +444,7 @@ export const getCheckInStats = async (from: string, to: string, shopId?: string)
     workedMinutes: workers.reduce((sum, worker) => sum + worker.workedMinutes, 0),
     lateCount: workers.reduce((sum, worker) => sum + worker.lateDays, 0),
     missingCount: workers.reduce((sum, worker) => sum + worker.missingDays, 0),
+    missingCheckOuts: workers.reduce((sum, worker) => sum + worker.missingCheckOuts, 0),
     workers,
     daily,
     events,

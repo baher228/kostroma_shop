@@ -12,7 +12,7 @@ import {
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, startOfWeek } from '../../dateUtils';
+import { addDays, formatDateLabel, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, parseDateKey, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
@@ -56,6 +56,8 @@ const bufferedWeekStartsFor = (weekStart: string): string[] => [
   weekStart,
   addDays(weekStart, WEEK_DAYS),
 ];
+
+const isTuesday = (date: string): boolean => parseDateKey(date).getDay() === 2;
 
 const visibleStockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
   from: addDays(weekStart, -WEEK_DAYS),
@@ -514,31 +516,43 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         <table className="manager-stock-table manager-dashboard-table">
           <colgroup>
             <col className="manager-name-col-width" />
-            {dashboardWeekStarts.flatMap((weekStart) => DASHBOARD_COLUMNS.map((column) => (
-              <col key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind}-width`} />
-            )))}
+            {dashboardWeekStarts.map((weekStart) => (
+              <React.Fragment key={weekStart}>
+                <col className="dashboard-tuesday-separator-width" />
+                {DASHBOARD_COLUMNS.map((column) => (
+                  <col key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind}-width`} />
+                ))}
+              </React.Fragment>
+            ))}
           </colgroup>
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>
               {dashboardWeekStarts.flatMap((weekStart) => {
                 const weeks = dashboardWeeksForStart(weekStart);
-                return DASHBOARD_COLUMNS.map((column, index) => (
+                return [
                   <th
-                    key={`${weekStart}:${column.key}`}
-                    className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}
-                    data-week-start={index === 0 ? weekStart : undefined}
-                  >
-                    <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
-                    {dashboardHeaderSubtitle(weeks, column) && <small>{dashboardHeaderSubtitle(weeks, column)}</small>}
-                  </th>
-                ));
+                    key={`${weekStart}:tuesday-separator`}
+                    aria-hidden="true"
+                    className="dashboard-tuesday-separator"
+                    data-week-start={weekStart}
+                  />,
+                  ...DASHBOARD_COLUMNS.map((column) => (
+                    <th
+                      key={`${weekStart}:${column.key}`}
+                      className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}
+                    >
+                      <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
+                      {dashboardHeaderSubtitle(weeks, column) && <small>{dashboardHeaderSubtitle(weeks, column)}</small>}
+                    </th>
+                  )),
+                ];
               })}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={dashboardWeekStarts.length * DASHBOARD_COLUMNS.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={dashboardWeekStarts.length * (DASHBOARD_COLUMNS.length + 1) + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => {
               return (
                 <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
@@ -549,7 +563,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   {dashboardWeekStarts.flatMap((weekStart) => {
                     const weeks = dashboardWeeksForStart(weekStart);
                     const values = rowValuesFor(row, weeks);
-                    return DASHBOARD_COLUMNS.map((column) => {
+                    return [
+                      <td key={`${weekStart}:tuesday-separator`} aria-hidden="true" className="dashboard-tuesday-separator" />,
+                      ...DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
                       const manualOrderKey = column.key;
@@ -582,7 +598,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                         </span>
                       </td>
                     );
-                    });
+                    }),
+                    ];
                   })}
                 </tr>
               );
@@ -620,6 +637,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             <col className="manager-name-col-width" />
             {loadedDates.flatMap((date) => (
               <React.Fragment key={date}>
+                {isTuesday(date) && <col className="dashboard-tuesday-separator-width" />}
                 <col className="dashboard-col-stock-width" />
                 <col className="dashboard-col-order-width" />
                 <col className="dashboard-col-metric-width" />
@@ -631,6 +649,13 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <th className="manager-name-col dashboard-name-header">Товар</th>
               {loadedDates.map((date) => (
                 <React.Fragment key={date}>
+                  {isTuesday(date) && (
+                    <th
+                      aria-hidden="true"
+                      className="dashboard-tuesday-separator"
+                      data-week-start={date === windowStart ? windowStart : undefined}
+                    />
+                  )}
                   <th data-week-start={date === windowStart ? windowStart : undefined}>{formatDateLabel(date)}<small>Остаток</small></th>
                   <th>
                     {formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
@@ -643,7 +668,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={loadedDates.length * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={loadedDates.length * 3 + loadedDates.filter(isTuesday).length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => (
               <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
                 <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
@@ -651,6 +676,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                   return (
                     <React.Fragment key={`${row.productId}:${date}`}>
+                      {isTuesday(date) && <td aria-hidden="true" className="dashboard-tuesday-separator" />}
                       <td>
                         <button className="stock-cell-button" onClick={() => openEditCell(row, date)}>
                           {row.values[date] || '-'}

@@ -656,6 +656,10 @@ td.sticky {
   width: 64px;
 }
 
+.dashboard-tuesday-separator-width {
+  width: 14px;
+}
+
 .manager-action-col-width {
   width: 76px;
 }
@@ -774,6 +778,14 @@ td.sticky {
   width: 64px;
   min-width: 64px;
   max-width: 64px;
+}
+
+.dashboard-tuesday-separator {
+  width: 14px;
+  min-width: 14px;
+  max-width: 14px;
+  padding: 0 !important;
+  background: #ffffff !important;
 }
 
 .dashboard-tone-neutral {

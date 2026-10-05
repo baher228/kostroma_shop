@@ -123,6 +123,8 @@ const formatWeekday = (dateKey: string): string => {
   return date.toLocaleDateString('ru-RU', { weekday: 'short' });
 };
 
+const isTuesday = (dateKey: string): boolean => parseDateKey(dateKey).getDay() === 2;
+
 const normalizeText = (value: string) => value.trim().toLowerCase();
 
 const startOfWeekMonday = (date: Date): Date => {
@@ -832,19 +834,21 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         <View style={styles.workerDataColumns}>
           <View style={styles.headerRow}>
             {table?.dates.map((date) => (
-              <View
-                key={date}
-                style={[
-                  styles.headerCell,
-                  styles.dateColumn,
-                  styles.workerDateColumn,
-                  styles.workerHeaderCell,
-                  columnToneHeader(date),
-                  secondWeekBoundaryStyle(date),
-                ]}
-              >
-                <Text style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>{formatWeekday(date)}</Text>
-                <Text style={[styles.dateDayText, styles.workerDateDayText]}>{formatDate(date)}</Text>
+              <View key={date} style={styles.workerDateSlot}>
+                {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerHeaderCell]} />}
+                <View
+                  style={[
+                    styles.headerCell,
+                    styles.dateColumn,
+                    styles.workerDateColumn,
+                    styles.workerHeaderCell,
+                    columnToneHeader(date),
+                    secondWeekBoundaryStyle(date),
+                  ]}
+                >
+                  <Text style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>{formatWeekday(date)}</Text>
+                  <Text style={[styles.dateDayText, styles.workerDateDayText]}>{formatDate(date)}</Text>
+                </View>
               </View>
             ))}
           </View>
@@ -862,22 +866,24 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   const value = row.values[date] ?? '';
 
                   return (
-                    <Pressable
-                      key={date}
-                      style={[
-                        styles.cell,
-                        styles.dateColumn,
-                        styles.workerDateColumn,
-                        styles.workerCell,
-                        styles.valueCell,
-                        columnToneValue(date),
-                        secondWeekBoundaryStyle(date),
-                        pending && styles.pendingCell,
-                      ]}
-                      onPress={() => openEditCell(row, date)}
-                    >
-                      <Text style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
-                    </Pressable>
+                    <View key={date} style={styles.workerDateSlot}>
+                      {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerCell]} />}
+                      <Pressable
+                        style={[
+                          styles.cell,
+                          styles.dateColumn,
+                          styles.workerDateColumn,
+                          styles.workerCell,
+                          styles.valueCell,
+                          columnToneValue(date),
+                          secondWeekBoundaryStyle(date),
+                          pending && styles.pendingCell,
+                        ]}
+                        onPress={() => openEditCell(row, date)}
+                      >
+                        <Text style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
+                      </Pressable>
+                    </View>
                   );
                 })}
               </View>
@@ -952,13 +958,16 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           <View>
             <View style={styles.headerRow}>
               {table?.dates.map((date) => (
-                <View key={date} style={styles.dailyHeaderGroup}>
-                  <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
-                  <Text style={styles.dateDayText}>{formatDate(date)}</Text>
-                  <View style={styles.dailySubHeaderRow}>
-                    <Text style={styles.dailySubHeaderText}>Ост</Text>
-                    <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText]}>Зак</Text>
-                    <Text style={styles.dailySubHeaderText}>Прод</Text>
+                <View key={date} style={styles.dailyDateSlot}>
+                  {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.dashboardHeaderCell]} />}
+                  <View style={styles.dailyHeaderGroup}>
+                    <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
+                    <Text style={styles.dateDayText}>{formatDate(date)}</Text>
+                    <View style={styles.dailySubHeaderRow}>
+                      <Text style={styles.dailySubHeaderText}>Ост</Text>
+                      <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText]}>Зак</Text>
+                      <Text style={styles.dailySubHeaderText}>Прод</Text>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -974,23 +983,26 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   {table?.dates.map((date) => {
                     const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                     return (
-                      <View key={`${row.productId}:${date}`} style={styles.dailyValueGroup}>
-                        <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
-                          <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
-                        </Pressable>
-                        <View style={[styles.cell, styles.dailyValueCell, styles.dailyOrderValueCell]}>
-                          <TextInput
-                            value={orderPacksForDate(row.productId, orderDate)}
-                            onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
-                            keyboardType="number-pad"
-                            style={styles.dashboardOrderInput}
-                            maxLength={MAX_ORDER_VALUE_LEN}
-                            placeholder="-"
-                            placeholderTextColor="#6d7d72"
-                          />
-                        </View>
-                        <View style={[styles.cell, styles.dailyValueCell]}>
-                          <Text style={styles.valueText}>{soldForDate(row, date) || '-'}</Text>
+                      <View key={`${row.productId}:${date}`} style={styles.dailyDateSlot}>
+                        {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.dashboardValueCell]} />}
+                        <View style={styles.dailyValueGroup}>
+                          <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
+                            <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
+                          </Pressable>
+                          <View style={[styles.cell, styles.dailyValueCell, styles.dailyOrderValueCell]}>
+                            <TextInput
+                              value={orderPacksForDate(row.productId, orderDate)}
+                              onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
+                              keyboardType="number-pad"
+                              style={styles.dashboardOrderInput}
+                              maxLength={MAX_ORDER_VALUE_LEN}
+                              placeholder="-"
+                              placeholderTextColor="#6d7d72"
+                            />
+                          </View>
+                          <View style={[styles.cell, styles.dailyValueCell]}>
+                            <Text style={styles.valueText}>{soldForDate(row, date) || '-'}</Text>
+                          </View>
                         </View>
                       </View>
                     );
@@ -1095,17 +1107,19 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           <View>
             <View style={styles.headerRow}>
               {DASHBOARD_COLUMNS.map((column) => (
-                <View
-                  key={column.key}
-                  style={[
-                    styles.headerCell,
-                    styles.dashboardHeaderCell,
-                    dashboardColumnStyle(column),
-                    dashboardHeaderToneStyle(column.tone),
-                  ]}
-                >
-                  <Text style={dashboardHeaderTitleStyle(column)}>{column.title}</Text>
-                  <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardColumnSubtitle(column)}</Text>
+                <View key={column.key} style={styles.dashboardColumnSlot}>
+                  {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardHeaderCell]} />}
+                  <View
+                    style={[
+                      styles.headerCell,
+                      styles.dashboardHeaderCell,
+                      dashboardColumnStyle(column),
+                      dashboardHeaderToneStyle(column.tone),
+                    ]}
+                  >
+                    <Text style={dashboardHeaderTitleStyle(column)}>{column.title}</Text>
+                    <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardColumnSubtitle(column)}</Text>
+                  </View>
                 </View>
               ))}
             </View>
@@ -1124,24 +1138,25 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
                       const manualOrderKey = column.key;
                       return (
-                        <View
-                          key={column.key}
-                          style={[
-                            styles.cell,
-                            styles.dashboardValueCell,
-                            dashboardColumnStyle(column),
-                            dashboardValueToneStyle(column.tone),
-                          ]}
-                        >
-                          <TextInput
-                            value={value}
-                            onChangeText={(nextValue) => setOrderCellValue(row.productId, manualOrderKey, nextValue)}
-                            keyboardType="number-pad"
-                            style={[styles.dashboardOrderInput, styles.dashboardOrderInputExpanded]}
-                            maxLength={MAX_ORDER_VALUE_LEN}
-                            placeholder="-"
-                            placeholderTextColor="#6d7d72"
-                          />
+                        <View key={column.key} style={styles.dashboardColumnSlot}>
+                          <View
+                            style={[
+                              styles.cell,
+                              styles.dashboardValueCell,
+                              dashboardColumnStyle(column),
+                              dashboardValueToneStyle(column.tone),
+                            ]}
+                          >
+                            <TextInput
+                              value={value}
+                              onChangeText={(nextValue) => setOrderCellValue(row.productId, manualOrderKey, nextValue)}
+                              keyboardType="number-pad"
+                              style={[styles.dashboardOrderInput, styles.dashboardOrderInputExpanded]}
+                              maxLength={MAX_ORDER_VALUE_LEN}
+                              placeholder="-"
+                              placeholderTextColor="#6d7d72"
+                            />
+                          </View>
                         </View>
                       );
                     }
@@ -1151,37 +1166,40 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       const pending = date ? pendingKeys[`${row.productId}:${date}`] : false;
 
                       return (
-                        <Pressable
-                          key={column.key}
+                        <View key={column.key} style={styles.dashboardColumnSlot}>
+                          {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardValueCell]} />}
+                          <Pressable
+                            style={[
+                              styles.cell,
+                              styles.dashboardValueCell,
+                              dashboardColumnStyle(column),
+                              dashboardValueToneStyle(column.tone),
+                              pending && styles.pendingCell,
+                            ]}
+                            onPress={() => {
+                              if (date) {
+                                openEditCell(row, date);
+                              }
+                            }}
+                          >
+                            <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
+                          </Pressable>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <View key={column.key} style={styles.dashboardColumnSlot}>
+                        <View
                           style={[
                             styles.cell,
                             styles.dashboardValueCell,
                             dashboardColumnStyle(column),
                             dashboardValueToneStyle(column.tone),
-                            pending && styles.pendingCell,
                           ]}
-                          onPress={() => {
-                            if (date) {
-                              openEditCell(row, date);
-                            }
-                          }}
                         >
                           <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
-                        </Pressable>
-                      );
-                    }
-
-                    return (
-                      <View
-                        key={column.key}
-                        style={[
-                          styles.cell,
-                          styles.dashboardValueCell,
-                          dashboardColumnStyle(column),
-                          dashboardValueToneStyle(column.tone),
-                        ]}
-                      >
-                        <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
+                        </View>
                       </View>
                     );
                   })}
@@ -1858,6 +1876,29 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     backgroundColor: '#ecf1ec',
+  },
+  workerDateSlot: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    flexDirection: 'row',
+  },
+  dailyDateSlot: {
+    flexDirection: 'row',
+  },
+  dashboardColumnSlot: {
+    flexDirection: 'row',
+  },
+  tuesdaySeparator: {
+    width: 14,
+    minHeight: 46,
+    backgroundColor: '#ffffff',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#7f8d81',
+  },
+  workerTuesdaySeparator: {
+    flexShrink: 0,
   },
   headerCell: {
     justifyContent: 'center',

@@ -238,11 +238,11 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
         action={<RefreshButton onClick={() => load()} />}
       />
       <Feedback error={error} />
-      <div className="toolbar hero-toolbar">
+      <div className="category-tabs">
         {BUSINESS_CATEGORIES.map((category) => (
           <button
             key={category}
-            className={activeBusinessCategory === category ? '' : 'secondary'}
+            className={activeBusinessCategory === category ? 'active' : ''}
             onClick={() => {
               setActiveBusinessCategory(category);
             }}
@@ -250,6 +250,8 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
             {category}
           </button>
         ))}
+      </div>
+      <div className="toolbar hero-toolbar">
         <button className="secondary date-step" onClick={() => shiftDate(-1)} aria-label="Предыдущая дата заказа">‹</button>
         <input type="date" value={inputDate} onChange={(event) => setInputDate(event.target.value)} />
         <button className="secondary date-step" onClick={() => shiftDate(1)} aria-label="Следующая дата заказа">›</button>

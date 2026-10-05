@@ -734,11 +734,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       <Feedback error={error} />
 
       <div className="manager-controls">
-        <div className="manager-button-row">
+        <div className="category-tabs">
           {BUSINESS_CATEGORIES.map((category) => (
             <button
               key={category}
-              className={activeBusinessCategory === category ? '' : 'secondary'}
+              className={activeBusinessCategory === category ? 'active' : ''}
               onClick={() => {
                 setActiveBusinessCategory(category);
                 setForm({ ...productToForm(), businessCategory: category, category: subcategories[category]?.[0] ?? DEFAULT_PRODUCT_CATEGORY });

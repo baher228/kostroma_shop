@@ -18,6 +18,7 @@ import {
 } from '../constants/dashboard';
 import { sortProductsLikeImage } from '../constants/productOrdering';
 import { BusinessCategory, OrderSheet, OrderSheetRow, Session, Shop } from '../types/models';
+import { BusinessCategoryTabs } from './BusinessCategoryTabs';
 
 type OrderSheetPanelProps = {
   session: Session;
@@ -347,22 +348,7 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
 
   return (
     <View style={styles.panel}>
-      <Text style={styles.title}>{'\u0417\u0430\u043a\u0430\u0437'}</Text>
-
-      <View style={styles.businessTabs}>
-        {BUSINESS_CATEGORIES.map((category) => {
-          const active = activeBusinessCategory === category;
-          return (
-            <Pressable
-              key={category}
-              style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
-              onPress={() => setActiveBusinessCategory(category)}
-            >
-              <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <BusinessCategoryTabs active={activeBusinessCategory} onSelect={setActiveBusinessCategory} />
 
       <View style={styles.dateRow}>
         <Pressable style={styles.dateButton} onPress={() => shiftDate(-1)}>
@@ -411,40 +397,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 12,
   },
-  businessTabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  businessTabButton: {
-    borderWidth: 1,
-    borderColor: '#bccabf',
-    borderRadius: 10,
-    backgroundColor: '#f3f6f4',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  businessTabButtonActive: {
-    backgroundColor: '#1f4f37',
-    borderColor: '#1f4f37',
-  },
-  businessTabText: {
-    color: '#2f4437',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  businessTabTextActive: {
-    color: '#ffffff',
-  },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#213428',
   },
   dateRow: {
     flexDirection: 'row',

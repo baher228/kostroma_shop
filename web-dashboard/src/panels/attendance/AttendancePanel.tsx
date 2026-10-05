@@ -60,7 +60,7 @@ export const AttendancePanel = ({ session }: { session: Session }) => {
           </div>
           <div className="chart-grid">
             <BarChart title="Часы по работникам" items={stats.workers.map((worker) => ({ label: worker.workerDisplayName, value: Math.round(worker.workedMinutes / 60) }))} suffix="ч" />
-            <BarChart title="Check-in по дням" items={stats.daily.map((day) => ({ label: day.date.slice(5), value: day.checkIns }))} suffix="" />
+            <BarChart title="Check-in по дням" items={stats.daily.map((day) => ({ label: `${day.date.slice(8, 10)}.${day.date.slice(5, 7)}`, value: day.checkIns }))} suffix="" />
           </div>
           <div className="status-grid">
             {stats.workers.map((worker) => (

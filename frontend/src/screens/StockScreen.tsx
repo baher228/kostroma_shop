@@ -932,6 +932,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const soldForDate = (row: StockTableRow, date: string): string => {
+    if (activeBusinessCategory === 'Хлеб') {
+      const previousDate = shiftDateKey(date, -1);
+      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previousDate), row.unitsInPack ?? 1);
+      return computeSold(row.values[previousDate], deliveryUnits, row.values[date]);
+    }
     if (activeBusinessCategory === 'Деликатесы') {
       const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, date), row.unitsInPack ?? 1);
       return computeSold(row.values[shiftDateKey(date, -1)], deliveryUnits, row.values[date]);

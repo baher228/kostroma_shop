@@ -55,6 +55,7 @@ import {
 } from '../../../shared/dashboard-calculations';
 import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/product-display';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
+import { BusinessCategoryTabs } from '../components/BusinessCategoryTabs';
 
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob';
 
@@ -265,6 +266,14 @@ const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
 const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
   index > 0 && rows[index - 1]?.category !== rows[index]?.category;
 
+const optionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const canManage = session.user.role === 'manager';
   const isWorker = session.user.role === 'worker';
@@ -438,16 +447,16 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (row.packType) {
       parts.push(row.packType);
     }
-    const units = typeof row.unitsInPack === 'number' ? row.unitsInPack : Number(row.unitsInPack);
-    if (Number.isFinite(units)) {
+    const units = optionalNumber(row.unitsInPack);
+    if (units !== null) {
       parts.push(`${units} шт/уп`);
     }
-    const packWeight = Number(row.packWeightKg);
-    if (Number.isFinite(packWeight)) {
+    const packWeight = optionalNumber(row.packWeightKg);
+    if (packWeight !== null) {
       parts.push(`${packWeight} кг`);
     }
-    const shelfLife = typeof row.shelfLifeDays === 'number' ? row.shelfLifeDays : Number(row.shelfLifeDays);
-    if (Number.isFinite(shelfLife)) {
+    const shelfLife = optionalNumber(row.shelfLifeDays);
+    if (shelfLife !== null) {
       parts.push(`${shelfLife} сут`);
     }
     const priceLabel = formatOptionalPrice(row.unitPriceRubVat);
@@ -1265,23 +1274,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const renderStockTab = () => (
     <>
       <View style={styles.controls}>
-        <View style={styles.businessTabs}>
-          {BUSINESS_CATEGORIES.map((category) => {
-            const active = activeBusinessCategory === category;
-            return (
-              <Pressable
-                key={category}
-                style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
-                onPress={() => {
-                  setActiveBusinessCategory(category);
-                  setNewProductCategory(null);
-                }}
-              >
-                <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <BusinessCategoryTabs
+          active={activeBusinessCategory}
+          onSelect={(category) => {
+            setActiveBusinessCategory(category);
+            setNewProductCategory(null);
+          }}
+        />
         <View style={styles.controlButtons}>
           {canManage && (
             <>
@@ -1427,7 +1426,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             onPress={() => void checkForAppUpdate()}
             disabled={checkingUpdate}
           >
-            <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить'}</Text>
+            <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить приложение'}</Text>
           </Pressable>
           <Pressable style={styles.logoutButton} onPress={() => void logout()}>
             <Text style={styles.logoutButtonText}>Выйти</Text>
@@ -1687,8 +1686,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
   title: {
     fontSize: 30,
@@ -1741,31 +1742,6 @@ const styles = StyleSheet.create({
   controls: {
     gap: 10,
   },
-  businessTabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  businessTabButton: {
-    borderWidth: 1,
-    borderColor: '#bccabf',
-    borderRadius: 10,
-    backgroundColor: '#f3f6f4',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  businessTabButtonActive: {
-    backgroundColor: '#1f4f37',
-    borderColor: '#1f4f37',
-  },
-  businessTabText: {
-    color: '#2f4437',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  businessTabTextActive: {
-    color: '#ffffff',
-  },
   searchInput: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -1780,6 +1756,7 @@ const styles = StyleSheet.create({
   controlButtons: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 8,
   },
   primaryButton: {
@@ -1813,8 +1790,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#b8c7bb',
     backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
   calendarNavButtonDisabled: {
     opacity: 0.7,
@@ -1822,7 +1799,7 @@ const styles = StyleSheet.create({
   calendarNavButtonText: {
     color: '#2d4034',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
   },
   sortRow: {
     marginTop: 10,
@@ -2084,6 +2061,7 @@ const styles = StyleSheet.create({
   },
   nameScroll: {
     width: '100%',
+    flexGrow: 0,
   },
   nameText: {
     fontSize: 14,

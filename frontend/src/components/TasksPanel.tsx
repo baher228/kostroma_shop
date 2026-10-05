@@ -692,15 +692,17 @@ const styles = StyleSheet.create({
     color: "#1f2f26",
   },
   refreshButton: {
-    borderRadius: 12,
-    backgroundColor: "#dbe4dc",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   refreshButtonText: {
-    color: "#294033",
+    color: '#2f4437',
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   createBox: {
     gap: 8,

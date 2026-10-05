@@ -583,10 +583,8 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
               <View key={task.id} style={[styles.taskCard, pending && styles.taskCardPending]}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
-                  {canManage
-                    ? `Планшет: ${task.assigneeDisplayName}`
-                    : `Поставил: ${task.createdByDisplayName}`}{" "}
-                  · {statusLabel(task.status)}
+                  {canManage ? `Планшет: ${task.assigneeDisplayName} · ` : ''}
+                  {statusLabel(task.status)}
                 </Text>
                 <Text style={styles.taskDate}>Создана: {formatDate(task.createdAt)}</Text>
                 {!!task.deadlineAt && (

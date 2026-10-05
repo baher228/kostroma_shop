@@ -414,6 +414,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
+  const isBreadTable = activeBusinessCategory === 'Хлеб';
 
   const orderedRows = useMemo(
     () => sortStockTableRowsLikeImage(visibleRows),
@@ -989,9 +990,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
                     <Text style={styles.dateDayText}>{formatDate(date)}</Text>
                     <View style={styles.dailySubHeaderRow}>
-                      <Text style={styles.dailySubHeaderText}>Ост</Text>
-                      <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText]}>Зак</Text>
-                      <Text style={styles.dailySubHeaderText}>Прод</Text>
+                      <Text style={[styles.dailySubHeaderText, isBreadTable && styles.breadDailySubHeaderText]}>{isBreadTable ? 'Остаток вечер' : 'Ост'}</Text>
+                      <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText, isBreadTable && styles.breadDailySubHeaderText]}>{isBreadTable ? 'Заказ на' : 'Зак'}</Text>
+                      <Text style={[styles.dailySubHeaderText, isBreadTable && styles.breadDailySubHeaderText]}>{isBreadTable ? 'Продано' : 'Прод'}</Text>
                     </View>
                   </View>
                 </View>
@@ -2197,6 +2198,10 @@ const styles = StyleSheet.create({
     color: '#2e312f',
     fontWeight: '800',
     fontSize: 10,
+  },
+  breadDailySubHeaderText: {
+    fontSize: 8,
+    lineHeight: 9,
   },
   dailyOrderSubHeaderText: {
     width: 42,

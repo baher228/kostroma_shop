@@ -12,7 +12,7 @@ import {
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, parseDateKey, startOfWeek } from '../../dateUtils';
+import { addDays, formatDateLabel, formatDateShort, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, parseDateKey, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
@@ -265,6 +265,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
+  const isBreadTable = activeBusinessCategory === 'Хлеб';
 
   const dashboardWeeks: DashboardWeeks = useMemo(
     () => (table ? deriveDashboardWeeks(activeViewDates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
@@ -444,11 +445,16 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             return subtitle ? `${column.title} (${subtitle})` : column.title;
           });
         })
-        : loadedDates.flatMap((date) => [
-          `Остаток (${formatDateLabel(date)})`,
-          `Заказ (${formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))})`,
-          `Продано (${formatDateLabel(date)})`,
-        ])),
+        : loadedDates.flatMap((date) => {
+          const stockDateLabel = isBreadTable ? formatDateShort(date) : formatDateLabel(date);
+          const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
+          const orderDateLabel = isBreadTable ? formatDateShort(orderDate) : formatDateLabel(orderDate);
+          return [
+            `${isBreadTable ? 'Остаток вечер' : 'Остаток'} (${stockDateLabel})`,
+            `${isBreadTable ? 'Заказ на' : 'Заказ'} (${orderDateLabel})`,
+            `Продано (${stockDateLabel})`,
+          ];
+        })),
     ];
     const rows = orderedRows.map((row) => {
       return [
@@ -654,12 +660,18 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <th className="manager-name-col dashboard-name-header">Товар</th>
               {loadedDates.map((date) => (
                 <React.Fragment key={date}>
-                  <th data-week-start={date === windowStart ? windowStart : undefined}>{formatDateLabel(date)}<small>Остаток</small></th>
-                  <th>
-                    {formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
-                    <small>Заказ</small>
+                  <th data-week-start={date === windowStart ? windowStart : undefined}>
+                    {isBreadTable ? 'Остаток вечер' : formatDateLabel(date)}
+                    <small>{isBreadTable ? formatDateShort(date) : 'Остаток'}</small>
                   </th>
-                  <th>{formatDateLabel(date)}<small>Продано</small></th>
+                  <th>
+                    {isBreadTable ? 'Заказ на' : formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
+                    <small>{isBreadTable ? formatDateShort(dailyOrderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
+                  </th>
+                  <th>
+                    {isBreadTable ? 'Продано' : formatDateLabel(date)}
+                    <small>{isBreadTable ? formatDateShort(date) : 'Продано'}</small>
+                  </th>
                 </React.Fragment>
               ))}
             </tr>

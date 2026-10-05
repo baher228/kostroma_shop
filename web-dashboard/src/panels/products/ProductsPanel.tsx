@@ -31,7 +31,7 @@ import {
 import { intOrZero, messageOf, normalizeText, numberOrZero } from '../../shared/format';
 import type { Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
 import type { BusinessCategory } from '../../types';
-import { managerProductName } from '../../../../shared/product-display';
+import { isBreadSectionBreakProduct, managerProductName } from '../../../../shared/product-display';
 import { sortProductsLikeImage } from '../../productOrdering';
 
 type LoadedWeekRange = {
@@ -555,7 +555,13 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <tr><td colSpan={dashboardWeekStarts.length * (DASHBOARD_COLUMNS.length + 1) + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => {
               return (
-                <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
+                <tr
+                  key={row.productId}
+                  className={[
+                    startsNewSubcategory(rows, index) ? 'subcategory-start-row' : '',
+                    isBreadSectionBreakProduct(row) ? 'bread-section-end-row' : '',
+                  ].filter(Boolean).join(' ') || undefined}
+                >
                   <td className="manager-name-col">
                     <strong>{managerProductName(row.name)}</strong>
                     <small>{productReferenceLabel(row)}</small>
@@ -670,7 +676,13 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             {rows.length === 0 ? (
               <tr><td colSpan={loadedDates.length * 3 + loadedDates.filter(isTuesday).length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => (
-              <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
+              <tr
+                key={row.productId}
+                className={[
+                  startsNewSubcategory(rows, index) ? 'subcategory-start-row' : '',
+                  isBreadSectionBreakProduct(row) ? 'bread-section-end-row' : '',
+                ].filter(Boolean).join(' ') || undefined}
+              >
                 <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
                 {loadedDates.map((date) => {
                   const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);

@@ -2068,6 +2068,10 @@ td.sticky {
   border-top: 4px solid #526557;
 }
 
+.manager-stock-table tbody tr.bread-section-end-row > td {
+  border-bottom: 4px solid #526557;
+}
+
 .manager-stock-table th {
   background: #f0f4f1;
   color: #233228;

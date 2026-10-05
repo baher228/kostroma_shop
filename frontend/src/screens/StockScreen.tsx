@@ -53,7 +53,7 @@ import {
   orderUnitsFromPacks,
   sanitizeOrderValue,
 } from '../../../shared/dashboard-calculations';
-import { managerProductName } from '../../../shared/product-display';
+import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/product-display';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob';
@@ -820,7 +820,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           </View>
           {rows.map((row, index) => (
-            <View key={row.productId} style={[styles.row, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+            <View
+              key={row.productId}
+              style={[
+                styles.row,
+                startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+              ]}
+            >
               <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.workerNameColumn, styles.workerCell]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
                   <Text numberOfLines={1} style={[styles.nameText, styles.workerNameText]}>
@@ -859,7 +866,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           ) : (
             rows.map((row, index) => (
-              <View key={row.productId} style={[styles.row, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+              <View
+                key={row.productId}
+                style={[
+                  styles.row,
+                  startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                  isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                ]}
+              >
                 {table?.dates.map((date) => {
                   const key = `${row.productId}:${date}`;
                   const pending = pendingKeys[key];
@@ -945,7 +959,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           </View>
           {rows.map((row, index) => (
-            <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+            <View
+              key={row.productId}
+              style={[
+                styles.row,
+                styles.dashboardDataRow,
+                startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+              ]}
+            >
               <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
                 <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
                   {managerProductName(row.name)}
@@ -979,7 +1001,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               </View>
             ) : (
               rows.map((row, index) => (
-                <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+                <View
+                  key={row.productId}
+                  style={[
+                    styles.row,
+                    styles.dashboardDataRow,
+                    startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                    isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                  ]}
+                >
                   {table?.dates.map((date) => {
                     const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                     return (
@@ -1088,7 +1118,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           {rows.map((row, index) => {
             const reference = productReferenceLabel(row);
             return (
-              <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+              <View
+                key={row.productId}
+                style={[
+                  styles.row,
+                  styles.dashboardDataRow,
+                  startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                  isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                ]}
+              >
                 <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
                   <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
                     {managerProductName(row.name)}
@@ -1132,7 +1170,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               rows.map((row, index) => {
               const values = dashboardRowValues(row);
               return (
-                <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+                <View
+                  key={row.productId}
+                  style={[
+                    styles.row,
+                    styles.dashboardDataRow,
+                    startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                    isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                  ]}
+                >
                   {DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
@@ -1955,6 +2001,10 @@ const styles = StyleSheet.create({
   subcategoryStartRow: {
     borderTopWidth: 4,
     borderTopColor: '#526557',
+  },
+  breadSectionEndRow: {
+    borderBottomWidth: 4,
+    borderBottomColor: '#526557',
   },
   emptyRow: {
     minHeight: 46,

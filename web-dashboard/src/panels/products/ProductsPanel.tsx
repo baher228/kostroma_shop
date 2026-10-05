@@ -643,7 +643,6 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             <col className="manager-name-col-width" />
             {loadedDates.flatMap((date) => (
               <React.Fragment key={date}>
-                {isTuesday(date) && <col className="dashboard-tuesday-separator-width" />}
                 <col className="dashboard-col-stock-width" />
                 <col className="dashboard-col-order-width" />
                 <col className="dashboard-col-metric-width" />
@@ -655,13 +654,6 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <th className="manager-name-col dashboard-name-header">Товар</th>
               {loadedDates.map((date) => (
                 <React.Fragment key={date}>
-                  {isTuesday(date) && (
-                    <th
-                      aria-hidden="true"
-                      className="dashboard-tuesday-separator"
-                      data-week-start={date === windowStart ? windowStart : undefined}
-                    />
-                  )}
                   <th data-week-start={date === windowStart ? windowStart : undefined}>{formatDateLabel(date)}<small>Остаток</small></th>
                   <th>
                     {formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
@@ -674,7 +666,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={loadedDates.length * 3 + loadedDates.filter(isTuesday).length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={loadedDates.length * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => (
               <tr
                 key={row.productId}
@@ -688,7 +680,6 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                   return (
                     <React.Fragment key={`${row.productId}:${date}`}>
-                      {isTuesday(date) && <td aria-hidden="true" className="dashboard-tuesday-separator" />}
                       <td>
                         <button className="stock-cell-button" onClick={() => openEditCell(row, date)}>
                           {row.values[date] || '-'}

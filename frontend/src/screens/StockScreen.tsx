@@ -842,7 +842,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           <View style={styles.headerRow}>
             {table?.dates.map((date) => (
               <View key={date} style={styles.workerDateSlot}>
-                {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerHeaderCell]} />}
+                {isMilkTable && isTuesday(date) && (
+                  <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerHeaderCell, styles.workerTuesdaySeparatorColumn]} />
+                )}
                 <View
                   style={[
                     styles.headerCell,
@@ -881,7 +883,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
                   return (
                     <View key={date} style={styles.workerDateSlot}>
-                      {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerCell]} />}
+                      {isMilkTable && isTuesday(date) && (
+                        <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerCell, styles.workerTuesdaySeparatorColumn]} />
+                      )}
                       <Pressable
                         style={[
                           styles.cell,
@@ -981,7 +985,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             <View style={styles.headerRow}>
               {table?.dates.map((date) => (
                 <View key={date} style={styles.dailyDateSlot}>
-                  {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.dashboardHeaderCell]} />}
                   <View style={styles.dailyHeaderGroup}>
                     <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
                     <Text style={styles.dateDayText}>{formatDate(date)}</Text>
@@ -1014,7 +1017,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                     return (
                       <View key={`${row.productId}:${date}`} style={styles.dailyDateSlot}>
-                        {isTuesday(date) && <View style={[styles.tuesdaySeparator, styles.dashboardValueCell]} />}
                         <View style={styles.dailyValueGroup}>
                           <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
                             <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
@@ -1146,7 +1148,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             <View style={styles.headerRow}>
               {DASHBOARD_COLUMNS.map((column) => (
                 <View key={column.key} style={styles.dashboardColumnSlot}>
-                  {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardHeaderCell]} />}
+                  {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardHeaderCell, styles.dashboardTuesdaySeparatorColumn]} />}
                   <View
                     style={[
                       styles.headerCell,
@@ -1213,7 +1215,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
                       return (
                         <View key={column.key} style={styles.dashboardColumnSlot}>
-                          {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardValueCell]} />}
+                          {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardValueCell, styles.dashboardTuesdaySeparatorColumn]} />}
                           <Pressable
                             style={[
                               styles.cell,
@@ -1936,7 +1938,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   tuesdaySeparator: {
-    width: 14,
     minHeight: 46,
     backgroundColor: '#ffffff',
     borderRightWidth: 1,
@@ -1945,6 +1946,9 @@ const styles = StyleSheet.create({
   },
   workerTuesdaySeparator: {
     flexShrink: 0,
+  },
+  workerTuesdaySeparatorColumn: {
+    width: 62,
   },
   headerCell: {
     justifyContent: 'center',
@@ -2059,6 +2063,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dashboardStockColumn: {
+    width: 118,
+  },
+  dashboardTuesdaySeparatorColumn: {
     width: 118,
   },
   dashboardOrderColumn: {

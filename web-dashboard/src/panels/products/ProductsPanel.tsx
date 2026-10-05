@@ -265,7 +265,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
-  const isBreadTable = activeBusinessCategory === 'Хлеб';
+  const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы';
 
   const dashboardWeeks: DashboardWeeks = useMemo(
     () => (table ? deriveDashboardWeeks(activeViewDates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
@@ -446,12 +446,12 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
           });
         })
         : loadedDates.flatMap((date) => {
-          const stockDateLabel = isBreadTable ? formatDateShort(date) : formatDateLabel(date);
+          const stockDateLabel = usesEveningStockHeaders ? formatDateShort(date) : formatDateLabel(date);
           const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
-          const orderDateLabel = isBreadTable ? formatDateShort(orderDate) : formatDateLabel(orderDate);
+          const orderDateLabel = usesEveningStockHeaders ? formatDateShort(orderDate) : formatDateLabel(orderDate);
           return [
-            `${isBreadTable ? 'Остаток вечер' : 'Остаток'} (${stockDateLabel})`,
-            `${isBreadTable ? 'Заказ на' : 'Заказ'} (${orderDateLabel})`,
+            `${usesEveningStockHeaders ? 'Остаток вечер' : 'Остаток'} (${stockDateLabel})`,
+            `${usesEveningStockHeaders ? 'Заказ на' : 'Заказ'} (${orderDateLabel})`,
             `Продано (${stockDateLabel})`,
           ];
         })),
@@ -661,16 +661,16 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               {loadedDates.map((date) => (
                 <React.Fragment key={date}>
                   <th data-week-start={date === windowStart ? windowStart : undefined}>
-                    {isBreadTable ? 'Остаток вечер' : formatDateLabel(date)}
-                    <small>{isBreadTable ? formatDateShort(date) : 'Остаток'}</small>
+                    {usesEveningStockHeaders ? 'Остаток вечер' : formatDateLabel(date)}
+                    <small>{usesEveningStockHeaders ? formatDateShort(date) : 'Остаток'}</small>
                   </th>
                   <th>
-                    {isBreadTable ? 'Заказ на' : formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
-                    <small>{isBreadTable ? formatDateShort(dailyOrderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
+                    {usesEveningStockHeaders ? 'Заказ на' : formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
+                    <small>{usesEveningStockHeaders ? formatDateShort(dailyOrderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
                   </th>
                   <th>
-                    {isBreadTable ? 'Продано' : formatDateLabel(date)}
-                    <small>{isBreadTable ? formatDateShort(date) : 'Продано'}</small>
+                    {usesEveningStockHeaders ? 'Продано' : formatDateLabel(date)}
+                    <small>{usesEveningStockHeaders ? formatDateShort(date) : 'Продано'}</small>
                   </th>
                 </React.Fragment>
               ))}

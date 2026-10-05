@@ -866,8 +866,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     secondWeekBoundaryStyle(date),
                   ]}
                 >
-                  <Text style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>{formatWeekday(date)}</Text>
-                  <Text style={[styles.dateDayText, styles.workerDateDayText]}>{formatDate(date)}</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>
+                    {formatWeekday(date)}
+                  </Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dateDayText, styles.workerDateDayText]}>
+                    {formatDate(date)}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -1937,7 +1941,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   workerTuesdaySeparatorColumn: {
-    width: 62,
+    width: 16,
   },
   headerCell: {
     justifyContent: 'center',
@@ -2044,6 +2048,7 @@ const styles = StyleSheet.create({
   },
   workerHeaderCell: {
     minHeight: 54,
+    height: 54,
   },
   workerCell: {
     minHeight: 52,

@@ -11,6 +11,7 @@ import type { Product, ProductPayload } from '../../types';
 import { formatOptionalPrice } from '../../shared/format';
 export {
   buildDashboardRowValues,
+  computeDashboardSold,
   computeSold,
   dashboardDateFor,
   dashboardHeaderSubtitle,

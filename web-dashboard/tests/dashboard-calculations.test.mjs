@@ -104,3 +104,15 @@ test('tablet stock table keeps hidden formula dependencies out of visible dates'
   assert.match(source, /businessCategory === 'Молоко'[\s\S]*\? dashboardFormulaStockRangeForWindowStart\(weekStart\)/);
   assert.match(source, /const visibleTable = canManage[\s\S]*nextTable\.dates\.filter\(\(date\) => date >= visibleRange\.from && date <= visibleRange\.to\)/);
 });
+
+test('bread daily sold treats blank stock as zero in dashboard and tablet app', async () => {
+  const dashboard = await readFile(new URL('../src/panels/products/ProductsPanel.tsx', import.meta.url), 'utf8');
+  const tablet = await readFile(new URL('../../frontend/src/screens/StockScreen.tsx', import.meta.url), 'utf8');
+
+  for (const source of [dashboard, tablet]) {
+    assert.match(
+      source,
+      /activeBusinessCategory === 'Хлеб'[\s\S]*?return computeDashboardSold\(row\.values\[previousDate\], deliveryUnits, row\.values\[date\]\);/,
+    );
+  }
+});

@@ -125,6 +125,9 @@ const dailyOrderDateForStockDate = (date: string, businessCategory: BusinessCate
     ? nearestDelicaciesOrderDate(date)
     : date;
 
+const orderHeaderDateForStockDate = (date: string, businessCategory: BusinessCategory): string =>
+  addDays(dailyOrderDateForStockDate(date, businessCategory), 1);
+
 const dailyFormulaOrderRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
   const stockRange = dailyFormulaStockRangeForWindowStart(weekStart);
   const orderDates = buildDateRange(stockRange.from, stockRange.to).map((date) => dailyOrderDateForStockDate(date, businessCategory));
@@ -448,7 +451,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         : loadedDates.flatMap((date) => {
           const stockDateLabel = usesEveningStockHeaders ? formatDateShort(date) : formatDateLabel(date);
           const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
-          const orderDateLabel = usesEveningStockHeaders ? formatDateShort(orderDate) : formatDateLabel(orderDate);
+          const orderDateLabel = usesEveningStockHeaders
+            ? formatDateShort(orderHeaderDateForStockDate(date, activeBusinessCategory))
+            : formatDateLabel(orderDate);
           return [
             `${usesEveningStockHeaders ? 'Остаток вечер' : 'Остаток'} (${stockDateLabel})`,
             `${usesEveningStockHeaders ? 'Заказ на' : 'Заказ'} (${orderDateLabel})`,
@@ -666,7 +671,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   </th>
                   <th>
                     {usesEveningStockHeaders ? 'Заказ на' : formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
-                    <small>{usesEveningStockHeaders ? formatDateShort(dailyOrderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
+                    <small>{usesEveningStockHeaders ? formatDateShort(orderHeaderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
                   </th>
                   <th>
                     {usesEveningStockHeaders ? 'Продано' : formatDateLabel(date)}

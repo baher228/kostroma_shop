@@ -64,6 +64,9 @@ jobs:
             exit 1
           fi
 
+      - name: Check Expo app config safety
+        run: node scripts/check-app-config-clean.mjs
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:

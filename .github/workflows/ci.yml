@@ -48,6 +48,9 @@ jobs:
       - name: Run backend/mobile CI checks
         run: npm run ci
 
+      - name: Check Expo app config safety
+        run: npm run security:check-app-config
+
       - name: Bundle both Android apps
         env:
           EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru

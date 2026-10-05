@@ -424,7 +424,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
-  const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы';
+  const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
 
   const orderedRows = useMemo(
     () => sortStockTableRowsLikeImage(visibleRows),

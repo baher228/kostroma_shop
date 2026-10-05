@@ -399,6 +399,19 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     setEditingValue(row.values[date] ?? '');
   };
 
+  const saveStockCellAndEditNext = async () => {
+    if (!editingCell) return;
+    const currentCell = editingCell;
+    const currentIndex = orderedRows.findIndex((row) => row.productId === currentCell.productId);
+    const nextRow = currentIndex >= 0 ? orderedRows[currentIndex + 1] : undefined;
+    await saveStockCell(currentCell.productId, currentCell.date, editingValue);
+    if (nextRow) {
+      openEditCell(nextRow, currentCell.date);
+    } else {
+      setEditingCell(null);
+    }
+  };
+
   const createProduct = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -826,7 +839,17 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             void saveStockCell(editingCell.productId, editingCell.date, editingValue).then(() => setEditingCell(null));
           }}>
             <p className="modal-meta">{editingCell.productName} · {formatDateLabel(editingCell.date)}</p>
-            <input autoFocus placeholder="0-15" value={editingValue} onChange={(event) => setEditingValue(sanitizeStock(event.target.value))} />
+            <input
+              autoFocus
+              placeholder="0-15"
+              value={editingValue}
+              onChange={(event) => setEditingValue(sanitizeStock(event.target.value))}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.repeat) return;
+                event.preventDefault();
+                void saveStockCellAndEditNext();
+              }}
+            />
             <div className="modal-actions">
               <button type="button" className="secondary" onClick={() => setEditingCell(null)}>Отмена</button>
               <button type="submit">Сохранить</button>

@@ -1608,6 +1608,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               keyboardType="number-pad"
               maxLength={2}
               autoFocus
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                if (!savingEdit) void saveCell(true);
+              }}
             />
             <View style={styles.modalActions}>
               <Pressable style={styles.modalCancelButton} onPress={() => setEditingCell(null)} disabled={savingEdit}>
@@ -1895,8 +1900,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f7f7f7',
   },
   workerStickyColumn: {
-    width: '31%',
-    minWidth: 140,
+    width: '40%',
+    minWidth: 180,
   },
   scrollableColumns: {
     flex: 1,
@@ -2021,7 +2026,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   nameColumn: {
-    width: 380,
+    width: 460,
     alignItems: 'flex-start',
     paddingHorizontal: 10,
     backgroundColor: '#f7f7f7',

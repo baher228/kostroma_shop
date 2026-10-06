@@ -3398,3 +3398,24 @@ input[type='datetime-local'] {
     width: auto;
   }
 }
+
+.order-sheet-table.paired-order-table .pair-name-col {
+  min-width: 260px;
+  max-width: 320px;
+  border-left: 2px solid #5f7466;
+  text-align: left;
+}
+
+.order-sheet-table.paired-order-table th.pair-name-col {
+  background: #eef3ef;
+}
+
+.order-sheet-table.paired-order-table td.pair-name-col {
+  background: #fbfcfa;
+}
+
+.order-sheet-table.paired-order-table .shop-col {
+  min-width: 150px;
+  max-width: 190px;
+  overflow-wrap: anywhere;
+}

@@ -13,6 +13,12 @@ import {
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { tasksApi } from "../api/tasks";
 import { Session, StoreTablet, Task, TaskStatus } from "../types/models";
+import {
+  groupTasksByUrgency,
+  TaskGroupKey,
+  taskDueLabel,
+  taskTimeParts,
+} from "../../../shared/task-timeline";
 
 type TasksPanelProps = {
   session: Session;
@@ -131,6 +137,12 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
   const [requiresPhotoConfirmation, setRequiresPhotoConfirmation] = useState(false);
   const [pendingTaskIds, setPendingTaskIds] = useState<Record<string, boolean>>({});
   const [cameraTaskId, setCameraTaskId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const canManage = session.user.role === "manager";
 
@@ -577,86 +589,105 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
         <Text style={styles.emptyText}>Список задач пуст.</Text>
       ) : (
         <ScrollView style={styles.tasksList} contentContainerStyle={styles.tasksListContent}>
-          {tasks.map((task) => {
-            const pending = pendingTaskIds[task.id];
-            return (
-              <View key={task.id} style={[styles.taskCard, pending && styles.taskCardPending]}>
-                <Text style={styles.taskTitle}>{task.title}</Text>
-                <Text style={styles.taskMeta}>
-                  {canManage ? `Планшет: ${task.assigneeDisplayName} · ` : ''}
-                  {statusLabel(task.status)}
-                </Text>
-                <Text style={styles.taskDate}>Создана: {formatDate(task.createdAt)}</Text>
-                {!!task.deadlineAt && (
-                  <Text style={styles.taskDate}>Дедлайн: {formatDate(task.deadlineAt)}</Text>
-                )}
-                {!!task.completedAt && (
-                  <Text style={styles.taskDate}>Выполнена: {formatDate(task.completedAt)}</Text>
-                )}
-                {task.overdue && <Text style={styles.error}>Просрочена</Text>}
-                {!!reviewLabel(task) && (
-                  <Text style={styles.taskMeta}>{reviewLabel(task)}</Text>
-                )}
-                {cameraTaskId === task.id && (
-                  <View style={styles.photoCameraBox}>
-                    <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
-                    <View style={styles.photoCameraActions}>
-                      <Pressable
-                        style={[styles.actionButton, styles.statusButton]}
-                        onPress={() => void captureTaskPhoto(task)}
-                        disabled={pending}
-                      >
-                        <Text style={styles.actionButtonText}>{pending ? "Отправляем..." : "Снять и отправить"}</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.actionButton, styles.cancelButton]}
-                        onPress={() => setCameraTaskId(null)}
-                        disabled={pending}
-                      >
-                        <Text style={styles.cancelButtonText}>Отмена</Text>
-                      </Pressable>
+          {groupTasksByUrgency(tasks, now).map((group) => (
+            <View key={group.key} style={styles.taskGroup}>
+              <Text style={styles.groupTitle}>
+                {group.label} <Text style={styles.groupCount}>{group.tasks.length}</Text>
+              </Text>
+              {group.tasks.map((task) => {
+                const pending = pendingTaskIds[task.id];
+                const time = taskTimeParts(task.deadlineAt, now);
+                const due = taskDueLabel(task, now);
+                const meta = [
+                  canManage ? task.assigneeDisplayName : "",
+                  statusLabel(task.status),
+                  reviewLabel(task),
+                  task.completedAt ? `Выполнена ${formatDate(task.completedAt)}` : "",
+                ].filter(Boolean);
+                return (
+                  <View key={task.id} style={[styles.taskCard, pending && styles.taskCardPending]}>
+                    <View style={[styles.timeBlock, timeBlockStyles[group.key]]}>
+                      <Text style={[styles.timeText, timeTextStyles[group.key]]}>{time.time}</Text>
+                      <Text style={[styles.timeDay, timeTextStyles[group.key]]}>{time.day}</Text>
+                    </View>
+                    <View style={styles.taskBody}>
+                      <View style={styles.taskHeaderRow}>
+                        <View style={styles.taskTitleRow}>
+                          {task.requiresPhotoConfirmation && <Text style={styles.photoBadge}>Фото</Text>}
+                          <Text style={[styles.taskTitle, group.key === "done" && styles.taskTitleDone]}>
+                            {task.title}
+                          </Text>
+                        </View>
+                        {!!due && (
+                          <Text style={[styles.dueText, group.key === "overdue" && styles.dueTextOverdue]}>
+                            {due}
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={styles.taskMeta}>{meta.join("   ")}</Text>
+                      {cameraTaskId === task.id && (
+                        <View style={styles.photoCameraBox}>
+                          <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
+                          <View style={styles.photoCameraActions}>
+                            <Pressable
+                              style={[styles.actionButton, styles.statusButton]}
+                              onPress={() => void captureTaskPhoto(task)}
+                              disabled={pending}
+                            >
+                              <Text style={styles.actionButtonText}>{pending ? "Отправляем..." : "Снять и отправить"}</Text>
+                            </Pressable>
+                            <Pressable
+                              style={[styles.actionButton, styles.cancelButton]}
+                              onPress={() => setCameraTaskId(null)}
+                              disabled={pending}
+                            >
+                              <Text style={styles.cancelButtonText}>Отмена</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
+                      <View style={styles.taskActions}>
+                        {canManage ? (
+                          <>
+                            <Pressable
+                              style={[styles.actionButton, styles.statusButton]}
+                              onPress={() => setStatus(task, task.status === "open" ? "done" : "open")}
+                            >
+                              <Text style={styles.actionButtonText}>
+                                {task.status === "open"
+                                  ? "Отметить выполненной"
+                                  : "Открыть снова"}
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              style={[styles.actionButton, styles.deleteButton]}
+                              onPress={() => removeTask(task)}
+                            >
+                              <Text style={styles.actionButtonText}>Удалить</Text>
+                            </Pressable>
+                          </>
+                        ) : task.status === "open" ? (
+                          <Pressable
+                            style={[styles.actionButton, styles.statusButton]}
+                            onPress={() => void completeTask(task)}
+                            disabled={pending}
+                          >
+                            <Text style={styles.actionButtonText}>
+                              {task.requiresPhotoConfirmation && task.photoReviewStatus !== "approved" ? "Сделать фото" : "Выполнено"}
+                            </Text>
+                          </Pressable>
+                        ) : task.photoReviewStatus === "pending" ? (
+                          <Text style={styles.doneText}>На проверке</Text>
+                        ) : (
+                          <Text style={styles.doneText}>Завершено</Text>
+                        )}
+                      </View>
                     </View>
                   </View>
-                )}
-                <View style={styles.taskActions}>
-                  {canManage ? (
-                    <>
-                      <Pressable
-                        style={[styles.actionButton, styles.statusButton]}
-                        onPress={() => setStatus(task, task.status === "open" ? "done" : "open")}
-                      >
-                        <Text style={styles.actionButtonText}>
-                          {task.status === "open"
-                            ? "Отметить выполненной"
-                            : "Открыть снова"}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.actionButton, styles.deleteButton]}
-                        onPress={() => removeTask(task)}
-                      >
-                        <Text style={styles.actionButtonText}>Удалить</Text>
-                      </Pressable>
-                    </>
-                  ) : task.status === "open" ? (
-                    <Pressable
-                      style={[styles.actionButton, styles.statusButton]}
-                      onPress={() => void completeTask(task)}
-                      disabled={pending}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {task.requiresPhotoConfirmation && task.photoReviewStatus !== "approved" ? "Сделать фото" : "Выполнено"}
-                      </Text>
-                    </Pressable>
-                  ) : task.photoReviewStatus === "pending" ? (
-                    <Text style={styles.doneText}>На проверке</Text>
-                  ) : (
-                    <Text style={styles.doneText}>Завершено</Text>
-                  )}
-                </View>
-              </View>
-            );
-          })}
+                );
+              })}
+            </View>
+          ))}
         </ScrollView>
       )}
     </View>
@@ -942,16 +973,93 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tasksListContent: {
-    gap: 8,
+    gap: 16,
     paddingBottom: 4,
   },
+  taskGroup: {
+    gap: 8,
+  },
+  groupTitle: {
+    color: "#1d2f24",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  groupCount: {
+    color: "#738177",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   taskCard: {
-    borderRadius: 11,
+    flexDirection: "row",
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#cfdbd1",
     backgroundColor: "#ffffff",
-    padding: 10,
+    overflow: "hidden",
+    minHeight: 72,
+  },
+  timeBlock: {
+    width: 84,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    backgroundColor: "#e5ebf0",
+  },
+  timeText: {
+    color: "#1f2a23",
+    fontSize: 24,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  timeDay: {
+    color: "#1f2a23",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  taskBody: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 4,
+    justifyContent: "center",
+  },
+  taskHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  taskTitleRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  photoBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#c8d9cd",
+    backgroundColor: "#e8f2eb",
+    color: "#245d43",
+    fontSize: 11,
+    fontWeight: "800",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: "hidden",
+  },
+  taskTitleDone: {
+    color: "#5b6b62",
+  },
+  dueText: {
+    color: "#1f2a23",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  dueTextOverdue: {
+    color: "#9b3b34",
   },
   taskCardPending: {
     opacity: 0.7,
@@ -962,14 +1070,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   taskMeta: {
-    color: "#4c6153",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  taskDate: {
     color: "#64786b",
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   taskActions: {
     flexDirection: "row",
@@ -1025,4 +1128,20 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: "#ffffff",
   },
+});
+
+const timeBlockStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { backgroundColor: "#b9402f" },
+  soon: { backgroundColor: "#f6d66b" },
+  later: { backgroundColor: "#e5ebf0" },
+  noDeadline: { backgroundColor: "#eef3ee" },
+  done: { backgroundColor: "#dceee3" },
+});
+
+const timeTextStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { color: "#ffffff" },
+  soon: { color: "#2a2410" },
+  later: { color: "#1f2a23" },
+  noDeadline: { color: "#5b6b62" },
+  done: { color: "#245236" },
 });

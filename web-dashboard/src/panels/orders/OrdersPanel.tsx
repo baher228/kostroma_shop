@@ -27,11 +27,7 @@ const nextOrderDateForCategory = (category: BusinessCategory): string => {
   return today;
 };
 
-const usesNextDayOrderLabel = (category: BusinessCategory): boolean =>
-  category === 'Хлеб' || category === 'Деликатесы' || category === 'Сыр';
-
-const orderLabelDate = (date: string, category: BusinessCategory): string =>
-  usesNextDayOrderLabel(category) ? addDays(date, 1) : date;
+const orderLabelDate = (date: string): string => addDays(date, 1);
 
 const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
   index > 0 && rows[index - 1]?.category !== rows[index]?.category;
@@ -225,11 +221,11 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       ]),
     ]);
 
-    const blob = makeXlsxBlob(`Заказ ${targetSheet.date}`, rows, merges);
+    const blob = makeXlsxBlob(`Заказ ${orderLabelDate(targetSheet.date)}`, rows, merges);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(`zakaz_${targetSheet.date}`)}.xlsx`;
+    link.download = `${safeFileName(`zakaz_${orderLabelDate(targetSheet.date)}`)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -273,8 +269,8 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       {loading && !sheet ? <p>Загружаем заказ...</p> : sheet && (
         <div className="order-sheet-wrap">
           <div className="order-sheet-meta">
-            <span className="weekday-badge">{formatWeekdayLabel(orderLabelDate(sheet.date, activeBusinessCategory))}</span>
-            <strong>Заказ на {formatDateLabel(orderLabelDate(sheet.date, activeBusinessCategory))}</strong>
+            <span className="weekday-badge">{formatWeekdayLabel(orderLabelDate(sheet.date))}</span>
+            <strong>Заказ на {formatDateLabel(orderLabelDate(sheet.date))}</strong>
             <span>Магазинов: {sheet.shops.length}</span>
           </div>
           <div

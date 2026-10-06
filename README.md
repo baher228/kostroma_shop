@@ -242,6 +242,8 @@ VAD only decides speech/non-speech. The native state machine provides hysteresis
 
 The tracked local Expo module is in `modules/audio-qc-vad`. The first preview intentionally uses the universal sherpa-onnx AAR with `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64`. The AAR is about 46.6 MiB and the model about 0.6 MiB before APK packaging.
 
+The root `.npmrc` sets `install-links=true`, so npm installs the local `audio-qc-vad` dependency as an ordinary directory instead of a symlink or Windows junction. Keep this setting for local installs and CI. Edit the tracked module in `modules/audio-qc-vad`; after changing its TypeScript entry point, run `npm ci` to refresh the installed copy. Expo Android autolinking uses the tracked module's `android` directory.
+
 Verify or restore the pinned artifacts before building:
 
 ```bash

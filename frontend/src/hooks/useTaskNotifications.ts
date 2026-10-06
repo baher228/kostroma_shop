@@ -2,12 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 import { notificationsApi } from '../api/notifications';
 import { tasksApi } from '../api/tasks';
 import { Session, Task } from '../types/models';
 
-const TASK_NOTIFICATION_TYPE = 'task_assigned';
+const TASK_NOTIFICATION_TYPES = new Set(['task_assigned', 'task_deadline']);
+const DEADLINE_NOTIFICATION_TYPE = 'task_deadline';
+const DEADLINE_VIBRATION_PATTERN = [0, 1000, 500, 1000, 500, 1000, 500, 1000];
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
@@ -23,8 +25,14 @@ if (Platform.OS !== 'web') {
 const unreadStorageKey = (userId: string) => `unread_task_notification:${userId}`;
 const viewedStorageKey = (userId: string) => `viewed_task_created_at:${userId}`;
 
+const notificationType = (notification: Notifications.Notification) =>
+  String(notification.request.content.data?.type ?? '');
+
 const isTaskNotification = (notification: Notifications.Notification) =>
-  notification.request.content.data.type === TASK_NOTIFICATION_TYPE;
+  TASK_NOTIFICATION_TYPES.has(notificationType(notification));
+
+const isDeadlineNotification = (notification: Notifications.Notification) =>
+  notificationType(notification) === DEADLINE_NOTIFICATION_TYPE;
 
 export const useTaskNotifications = (session: Session, onOpenTasks: () => void) => {
   const [hasUnreadTasks, setHasUnreadTasks] = useState(false);
@@ -99,6 +107,15 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
           sound: 'default',
           vibrationPattern: [0, 250, 150, 250],
         });
+        await Notifications.setNotificationChannelAsync('task-deadlines', {
+          name: 'Сроки задач',
+          importance: Notifications.AndroidImportance.MAX,
+          sound: 'default',
+          vibrationPattern: DEADLINE_VIBRATION_PATTERN,
+          enableVibrate: true,
+          bypassDnd: true,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        });
       }
 
       const permissions = await Notifications.getPermissionsAsync();
@@ -127,7 +144,9 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
     if (!isTaskAssignee || Platform.OS === 'web') return;
 
     const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-      if (isTaskNotification(notification)) markUnreadTasks();
+      if (!isTaskNotification(notification)) return;
+      markUnreadTasks();
+      if (isDeadlineNotification(notification)) Vibration.vibrate(DEADLINE_VIBRATION_PATTERN);
     });
     const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
       if (!isTaskNotification(response.notification)) return;

@@ -505,12 +505,14 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     borderRadius: 10,
-    backgroundColor: '#dbe4dc',
-    paddingHorizontal: 11,
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
     paddingVertical: 8,
   },
   refreshButtonText: {
-    color: '#294033',
+    color: '#2f4437',
     fontSize: 13,
     fontWeight: '700',
   },

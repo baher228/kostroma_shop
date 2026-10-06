@@ -93,3 +93,26 @@ test('daily stock tables fetch hidden previous-day dependencies for sold formula
   assert.match(source, /: dailyFormulaStockRangeForWindowStart\(weekStart\);/);
   assert.match(source, /return dailyFormulaOrderRangeForWindowStart\(weekStart, businessCategory\);/);
 });
+
+test('tablet stock table keeps hidden formula dependencies out of visible dates', async () => {
+  const source = await readFile(new URL('../../frontend/src/screens/StockScreen.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const dashboardFormulaStockRangeForWindowStart = \(weekStart: string\): LoadedDateRange => \{/);
+  assert.match(source, /const previousSundayBeforeWeek = weeks\.previous\?\.mon \? shiftDateKey\(weeks\.previous\.mon, -1\) : undefined;/);
+  assert.match(source, /weeks\.current\.sun \? shiftDateKey\(weeks\.current\.sun, 2\) : undefined/);
+  assert.match(source, /const stockFetchRangeForWindowStart = \(weekStart: string, businessCategory: BusinessCategory\): LoadedDateRange =>/);
+  assert.match(source, /businessCategory === 'Молоко'[\s\S]*\? dashboardFormulaStockRangeForWindowStart\(weekStart\)/);
+  assert.match(source, /const visibleTable = canManage[\s\S]*nextTable\.dates\.filter\(\(date\) => date >= visibleRange\.from && date <= visibleRange\.to\)/);
+});
+
+test('bread daily sold treats blank stock as zero in dashboard and tablet app', async () => {
+  const dashboard = await readFile(new URL('../src/panels/products/ProductsPanel.tsx', import.meta.url), 'utf8');
+  const tablet = await readFile(new URL('../../frontend/src/screens/StockScreen.tsx', import.meta.url), 'utf8');
+
+  for (const source of [dashboard, tablet]) {
+    assert.match(
+      source,
+      /activeBusinessCategory === 'Хлеб'[\s\S]*?return computeDashboardSold\(row\.values\[previousDate\], deliveryUnits, row\.values\[date\]\);/,
+    );
+  }
+});

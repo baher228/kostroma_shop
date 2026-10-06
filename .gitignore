@@ -55,3 +55,10 @@ modules/audio-qc-vad/**/*.download
 /window.xml
 /crash-logcat-full.txt
 /expo-export-local-apk/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+
+# Separate local checkout; it is not part of the AI QC release.
+/email-downloading-discount/
+/.qc-*-export/

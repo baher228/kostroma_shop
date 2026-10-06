@@ -37,7 +37,6 @@ import {
   DEFAULT_PRODUCT_CATEGORY,
   MAX_ORDER_VALUE_LEN,
   PRODUCT_CATEGORIES,
-  TWO_WEEKS_DAYS,
   WEEK_DAYS,
   type DashboardColumn,
   type DashboardColumnKey,
@@ -50,6 +49,7 @@ import {
 import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
 import {
   buildDashboardRowValues,
+  computeDashboardSold,
   computeSold,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
@@ -58,8 +58,9 @@ import {
   orderUnitsFromPacks,
   sanitizeOrderValue,
 } from '../../../shared/dashboard-calculations';
-import { managerProductName } from '../../../shared/product-display';
+import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/product-display';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
+import { BusinessCategoryTabs } from '../components/BusinessCategoryTabs';
 
 type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
@@ -67,6 +68,11 @@ type EditingCell = {
   productId: string;
   date: string;
   productName: string;
+};
+
+type LoadedDateRange = {
+  from: string;
+  to: string;
 };
 
 type StockScreenProps = {
@@ -123,6 +129,8 @@ const formatWeekday = (dateKey: string): string => {
   return date.toLocaleDateString('ru-RU', { weekday: 'short' });
 };
 
+const isTuesday = (dateKey: string): boolean => parseDateKey(dateKey).getDay() === 2;
+
 const normalizeText = (value: string) => value.trim().toLowerCase();
 
 const startOfWeekMonday = (date: Date): Date => {
@@ -154,7 +162,85 @@ const dailyOrderDateForStockDate = (dateKey: string, businessCategory: BusinessC
     ? nextDelicaciesDeliveryDate(dateKey)
     : dateKey;
 
-const getTwoWeeksEnd = (startDateKey: string): string => shiftDateKey(startDateKey, TWO_WEEKS_DAYS - 1);
+const buildDateRange = (from: string, to: string): string[] => {
+  const dates: string[] = [];
+  for (let date = from; date <= to; date = shiftDateKey(date, 1)) {
+    dates.push(date);
+  }
+  return dates;
+};
+
+const visibleStockRangeForWindowStart = (weekStart: string): LoadedDateRange => ({
+  from: shiftDateKey(weekStart, -WEEK_DAYS),
+  to: shiftDateKey(weekStart, WEEK_DAYS - 1),
+});
+
+const rangeFromDates = (dates: Array<string | undefined>, fallback: LoadedDateRange): LoadedDateRange => {
+  const sortedDates = dates.filter((date): date is string => Boolean(date)).sort();
+  return {
+    from: sortedDates[0] && sortedDates[0] < fallback.from ? sortedDates[0] : fallback.from,
+    to: sortedDates[sortedDates.length - 1] && sortedDates[sortedDates.length - 1] > fallback.to
+      ? sortedDates[sortedDates.length - 1]
+      : fallback.to,
+  };
+};
+
+const dashboardFormulaStockRangeForWindowStart = (weekStart: string): LoadedDateRange => {
+  const visibleRange = visibleStockRangeForWindowStart(weekStart);
+  const weeks = deriveDashboardWeeks(buildDateRange(visibleRange.from, visibleRange.to));
+  const previousSundayBeforeWeek = weeks.previous?.mon ? shiftDateKey(weeks.previous.mon, -1) : undefined;
+  return rangeFromDates([
+    previousSundayBeforeWeek,
+    weeks.previous?.mon,
+    weeks.previous?.tue,
+    weeks.previous?.wed,
+    weeks.previous?.thu,
+    weeks.previous?.fri,
+    weeks.previous?.sun,
+    weeks.current.mon,
+    weeks.current.tue,
+    weeks.current.wed,
+    weeks.current.thu,
+    weeks.current.fri,
+    weeks.current.sun,
+  ], visibleRange);
+};
+
+const dashboardFormulaOrderRangeForWindowStart = (weekStart: string): LoadedDateRange => {
+  const visibleRange = visibleStockRangeForWindowStart(weekStart);
+  const stockRange = dashboardFormulaStockRangeForWindowStart(weekStart);
+  const weeks = deriveDashboardWeeks(buildDateRange(visibleRange.from, visibleRange.to));
+  return rangeFromDates([
+    weeks.previous?.tue,
+    weeks.previous?.thu,
+    weeks.previous?.thu ? shiftDateKey(weeks.previous.thu, 2) : undefined,
+    weeks.current.tue,
+    weeks.current.thu,
+    weeks.current.thu ? shiftDateKey(weeks.current.thu, 2) : undefined,
+    weeks.current.sun ? shiftDateKey(weeks.current.sun, 2) : undefined,
+  ], stockRange);
+};
+
+const dailyFormulaStockRangeForWindowStart = (weekStart: string): LoadedDateRange => {
+  const range = visibleStockRangeForWindowStart(weekStart);
+  return { ...range, from: shiftDateKey(range.from, -1) };
+};
+
+const dailyFormulaOrderRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedDateRange => {
+  const stockRange = dailyFormulaStockRangeForWindowStart(weekStart);
+  const orderDates = buildDateRange(stockRange.from, stockRange.to).map((date) => dailyOrderDateForStockDate(date, businessCategory));
+  return rangeFromDates(orderDates, stockRange);
+};
+
+const stockFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedDateRange =>
+  businessCategory === 'Молоко'
+    ? dashboardFormulaStockRangeForWindowStart(weekStart)
+    : dailyFormulaStockRangeForWindowStart(weekStart);
+
+const orderFetchRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedDateRange =>
+  businessCategory === 'Молоко'
+    ? dashboardFormulaOrderRangeForWindowStart(weekStart)
+    : dailyFormulaOrderRangeForWindowStart(weekStart, businessCategory);
 
 const formatOptionalPrice = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
@@ -184,6 +270,14 @@ const createCategoryMap = (): Record<ProductCategory, StockTableRow[]> =>
 
 const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
   index > 0 && rows[index - 1]?.category !== rows[index]?.category;
+
+const optionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const canManage = session.user.role === 'manager';
@@ -257,10 +351,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     try {
       setLoading(true);
       setError('');
-      const dashboardFrom = shiftDateKey(managerWindowStart, -WEEK_DAYS);
-      const dashboardTo = getTwoWeeksEnd(dashboardFrom);
-      const from = canManage ? dashboardFrom : undefined;
-      const to = canManage ? dashboardTo : undefined;
+      const visibleRange = visibleStockRangeForWindowStart(managerWindowStart);
+      const stockRange = stockFetchRangeForWindowStart(managerWindowStart, activeBusinessCategory);
+      const orderRange = orderFetchRangeForWindowStart(managerWindowStart, activeBusinessCategory);
+      const from = canManage ? stockRange.from : undefined;
+      const to = canManage ? stockRange.to : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
         businessCategory: activeBusinessCategory,
@@ -268,16 +363,24 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         to,
         range: canManage ? undefined : 'week',
       });
-      setTable(nextTable);
+      const visibleTable = canManage
+        ? { ...nextTable, dates: nextTable.dates.filter((date) => date >= visibleRange.from && date <= visibleRange.to) }
+        : nextTable;
+      setTable(visibleTable);
       if (!selectedShopId) {
-        setSelectedShopId(nextTable.shop.id);
+        setSelectedShopId(visibleTable.shop.id);
       }
       if (canManage && from && to) {
-        const targetShopId = selectedShopId ?? nextTable.shop.id;
+        const targetShopId = selectedShopId ?? visibleTable.shop.id;
         if (targetShopId) {
           try {
-            const orderValuesTo = dailyOrderDateForStockDate(to, activeBusinessCategory);
-            const orderValues = await stockApi.listShopOrderValues(session.token, targetShopId, from, orderValuesTo, activeBusinessCategory);
+            const orderValues = await stockApi.listShopOrderValues(
+              session.token,
+              targetShopId,
+              orderRange.from,
+              orderRange.to,
+              activeBusinessCategory,
+            );
             const loaded: Record<string, string> = {};
             for (const entry of orderValues) {
               loaded[`${entry.productId}:${entry.orderDate}`] = String(entry.packs);
@@ -325,6 +428,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
+  const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
 
   const orderedRows = useMemo(
     () => sortStockTableRowsLikeImage(visibleRows),
@@ -348,16 +452,16 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     if (row.packType) {
       parts.push(row.packType);
     }
-    const units = typeof row.unitsInPack === 'number' ? row.unitsInPack : Number(row.unitsInPack);
-    if (Number.isFinite(units)) {
+    const units = optionalNumber(row.unitsInPack);
+    if (units !== null) {
       parts.push(`${units} шт/уп`);
     }
-    const packWeight = Number(row.packWeightKg);
-    if (Number.isFinite(packWeight)) {
+    const packWeight = optionalNumber(row.packWeightKg);
+    if (packWeight !== null) {
       parts.push(`${packWeight} кг`);
     }
-    const shelfLife = typeof row.shelfLifeDays === 'number' ? row.shelfLifeDays : Number(row.shelfLifeDays);
-    if (Number.isFinite(shelfLife)) {
+    const shelfLife = optionalNumber(row.shelfLifeDays);
+    if (shelfLife !== null) {
       parts.push(`${shelfLife} сут`);
     }
     const priceLabel = formatOptionalPrice(row.unitPriceRubVat);
@@ -731,7 +835,14 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           </View>
           {rows.map((row, index) => (
-            <View key={row.productId} style={[styles.row, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+            <View
+              key={row.productId}
+              style={[
+                styles.row,
+                startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+              ]}
+            >
               <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.workerNameColumn, styles.workerCell]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
                   <Text numberOfLines={1} style={[styles.nameText, styles.workerNameText]}>
@@ -745,19 +856,27 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         <View style={styles.workerDataColumns}>
           <View style={styles.headerRow}>
             {table?.dates.map((date) => (
-              <View
-                key={date}
-                style={[
-                  styles.headerCell,
-                  styles.dateColumn,
-                  styles.workerDateColumn,
-                  styles.workerHeaderCell,
-                  columnToneHeader(date),
-                  secondWeekBoundaryStyle(date),
-                ]}
-              >
-                <Text style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>{formatWeekday(date)}</Text>
-                <Text style={[styles.dateDayText, styles.workerDateDayText]}>{formatDate(date)}</Text>
+              <View key={date} style={styles.workerDateSlot}>
+                {isMilkTable && isTuesday(date) && (
+                  <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerHeaderCell, styles.workerTuesdaySeparatorColumn]} />
+                )}
+                <View
+                  style={[
+                    styles.headerCell,
+                    styles.dateColumn,
+                    styles.workerDateColumn,
+                    styles.workerHeaderCell,
+                    columnToneHeader(date),
+                    secondWeekBoundaryStyle(date),
+                  ]}
+                >
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>
+                    {formatWeekday(date)}
+                  </Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dateDayText, styles.workerDateDayText]}>
+                    {formatDate(date)}
+                  </Text>
+                </View>
               </View>
             ))}
           </View>
@@ -768,29 +887,40 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           ) : (
             rows.map((row, index) => (
-              <View key={row.productId} style={[styles.row, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+              <View
+                key={row.productId}
+                style={[
+                  styles.row,
+                  startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                  isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                ]}
+              >
                 {table?.dates.map((date) => {
                   const key = `${row.productId}:${date}`;
                   const pending = pendingKeys[key];
                   const value = row.values[date] ?? '';
 
                   return (
-                    <Pressable
-                      key={date}
-                      style={[
-                        styles.cell,
-                        styles.dateColumn,
-                        styles.workerDateColumn,
-                        styles.workerCell,
-                        styles.valueCell,
-                        columnToneValue(date),
-                        secondWeekBoundaryStyle(date),
-                        pending && styles.pendingCell,
-                      ]}
-                      onPress={() => openEditCell(row, date)}
-                    >
-                      <Text style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
-                    </Pressable>
+                    <View key={date} style={styles.workerDateSlot}>
+                      {isMilkTable && isTuesday(date) && (
+                        <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerCell, styles.workerTuesdaySeparatorColumn]} />
+                      )}
+                      <Pressable
+                        style={[
+                          styles.cell,
+                          styles.dateColumn,
+                          styles.workerDateColumn,
+                          styles.workerCell,
+                          styles.valueCell,
+                          columnToneValue(date),
+                          secondWeekBoundaryStyle(date),
+                          pending && styles.pendingCell,
+                        ]}
+                        onPress={() => openEditCell(row, date)}
+                      >
+                        <Text style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
+                      </Pressable>
+                    </View>
                   );
                 })}
               </View>
@@ -811,6 +941,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   };
 
   const soldForDate = (row: StockTableRow, date: string): string => {
+    if (activeBusinessCategory === 'Хлеб') {
+      const previousDate = shiftDateKey(date, -1);
+      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previousDate), row.unitsInPack ?? 1);
+      return computeDashboardSold(row.values[previousDate], deliveryUnits, row.values[date]);
+    }
     if (activeBusinessCategory === 'Деликатесы') {
       const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, date), row.unitsInPack ?? 1);
       return computeSold(row.values[shiftDateKey(date, -1)], deliveryUnits, row.values[date]);
@@ -852,7 +987,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           </View>
           {rows.map((row, index) => (
-            <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+            <View
+              key={row.productId}
+              style={[
+                styles.row,
+                styles.dashboardDataRow,
+                startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+              ]}
+            >
               <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
                 <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
                   {managerProductName(row.name)}
@@ -865,13 +1008,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           <View>
             <View style={styles.headerRow}>
               {table?.dates.map((date) => (
-                <View key={date} style={styles.dailyHeaderGroup}>
-                  <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
-                  <Text style={styles.dateDayText}>{formatDate(date)}</Text>
-                  <View style={styles.dailySubHeaderRow}>
-                    <Text style={styles.dailySubHeaderText}>Ост</Text>
-                    <Text style={styles.dailySubHeaderText}>Зак</Text>
-                    <Text style={styles.dailySubHeaderText}>Прод</Text>
+                <View key={date} style={styles.dailyDateSlot}>
+                  <View style={styles.dailyHeaderGroup}>
+                    <Text style={styles.dateWeekdayText}>{formatWeekday(date)}</Text>
+                    <Text style={styles.dateDayText}>{formatDate(date)}</Text>
+                    <View style={styles.dailySubHeaderRow}>
+                      <Text style={[styles.dailySubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText]}>{usesEveningStockHeaders ? 'Остаток вечер' : 'Ост'}</Text>
+                      <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText]}>{usesEveningStockHeaders ? 'Заказ на' : 'Зак'}</Text>
+                      <Text style={[styles.dailySubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText]}>{usesEveningStockHeaders ? 'Продано' : 'Прод'}</Text>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -883,27 +1028,37 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               </View>
             ) : (
               rows.map((row, index) => (
-                <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+                <View
+                  key={row.productId}
+                  style={[
+                    styles.row,
+                    styles.dashboardDataRow,
+                    startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                    isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                  ]}
+                >
                   {table?.dates.map((date) => {
                     const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                     return (
-                      <View key={`${row.productId}:${date}`} style={styles.dailyValueGroup}>
-                        <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
-                          <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
-                        </Pressable>
-                        <View style={[styles.cell, styles.dailyValueCell]}>
-                          <TextInput
-                            value={orderPacksForDate(row.productId, orderDate)}
-                            onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
-                            keyboardType="number-pad"
-                            style={styles.dashboardOrderInput}
-                            maxLength={MAX_ORDER_VALUE_LEN}
-                            placeholder="-"
-                            placeholderTextColor="#6d7d72"
-                          />
-                        </View>
-                        <View style={[styles.cell, styles.dailyValueCell]}>
-                          <Text style={styles.valueText}>{soldForDate(row, date) || '-'}</Text>
+                      <View key={`${row.productId}:${date}`} style={styles.dailyDateSlot}>
+                        <View style={styles.dailyValueGroup}>
+                          <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
+                            <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
+                          </Pressable>
+                          <View style={[styles.cell, styles.dailyValueCell, styles.dailyOrderValueCell]}>
+                            <TextInput
+                              value={orderPacksForDate(row.productId, orderDate)}
+                              onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
+                              keyboardType="number-pad"
+                              style={styles.dashboardOrderInput}
+                              maxLength={MAX_ORDER_VALUE_LEN}
+                              placeholder="-"
+                              placeholderTextColor="#6d7d72"
+                            />
+                          </View>
+                          <View style={[styles.cell, styles.dailyValueCell]}>
+                            <Text style={styles.valueText}>{soldForDate(row, date) || '-'}</Text>
+                          </View>
                         </View>
                       </View>
                     );
@@ -989,7 +1144,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           {rows.map((row, index) => {
             const reference = productReferenceLabel(row);
             return (
-              <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+              <View
+                key={row.productId}
+                style={[
+                  styles.row,
+                  styles.dashboardDataRow,
+                  startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                  isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                ]}
+              >
                 <View style={[styles.cell, styles.nameColumn, styles.nameCell, styles.dashboardNameCell]}>
                   <Text numberOfLines={2} ellipsizeMode="tail" style={styles.nameText}>
                     {managerProductName(row.name)}
@@ -1008,17 +1171,19 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           <View>
             <View style={styles.headerRow}>
               {DASHBOARD_COLUMNS.map((column) => (
-                <View
-                  key={column.key}
-                  style={[
-                    styles.headerCell,
-                    styles.dashboardHeaderCell,
-                    dashboardColumnStyle(column),
-                    dashboardHeaderToneStyle(column.tone),
-                  ]}
-                >
-                  <Text style={dashboardHeaderTitleStyle(column)}>{column.title}</Text>
-                  <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardColumnSubtitle(column)}</Text>
+                <View key={column.key} style={styles.dashboardColumnSlot}>
+                  {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardHeaderCell, styles.dashboardTuesdaySeparatorColumn]} />}
+                  <View
+                    style={[
+                      styles.headerCell,
+                      styles.dashboardHeaderCell,
+                      dashboardColumnStyle(column),
+                      dashboardHeaderToneStyle(column.tone),
+                    ]}
+                  >
+                    <Text style={dashboardHeaderTitleStyle(column)}>{column.title}</Text>
+                    <Text style={dashboardHeaderSubtitleStyle(column)}>{dashboardColumnSubtitle(column)}</Text>
+                  </View>
                 </View>
               ))}
             </View>
@@ -1031,30 +1196,39 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               rows.map((row, index) => {
               const values = dashboardRowValues(row);
               return (
-                <View key={row.productId} style={[styles.row, styles.dashboardDataRow, startsNewSubcategory(rows, index) && styles.subcategoryStartRow]}>
+                <View
+                  key={row.productId}
+                  style={[
+                    styles.row,
+                    styles.dashboardDataRow,
+                    startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                    isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                  ]}
+                >
                   {DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
                       const manualOrderKey = column.key;
                       return (
-                        <View
-                          key={column.key}
-                          style={[
-                            styles.cell,
-                            styles.dashboardValueCell,
-                            dashboardColumnStyle(column),
-                            dashboardValueToneStyle(column.tone),
-                          ]}
-                        >
-                          <TextInput
-                            value={value}
-                            onChangeText={(nextValue) => setOrderCellValue(row.productId, manualOrderKey, nextValue)}
-                            keyboardType="number-pad"
-                            style={[styles.dashboardOrderInput, styles.dashboardOrderInputExpanded]}
-                            maxLength={MAX_ORDER_VALUE_LEN}
-                            placeholder="-"
-                            placeholderTextColor="#6d7d72"
-                          />
+                        <View key={column.key} style={styles.dashboardColumnSlot}>
+                          <View
+                            style={[
+                              styles.cell,
+                              styles.dashboardValueCell,
+                              dashboardColumnStyle(column),
+                              dashboardValueToneStyle(column.tone),
+                            ]}
+                          >
+                            <TextInput
+                              value={value}
+                              onChangeText={(nextValue) => setOrderCellValue(row.productId, manualOrderKey, nextValue)}
+                              keyboardType="number-pad"
+                              style={[styles.dashboardOrderInput, styles.dashboardOrderInputExpanded]}
+                              maxLength={MAX_ORDER_VALUE_LEN}
+                              placeholder="-"
+                              placeholderTextColor="#6d7d72"
+                            />
+                          </View>
                         </View>
                       );
                     }
@@ -1064,37 +1238,40 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                       const pending = date ? pendingKeys[`${row.productId}:${date}`] : false;
 
                       return (
-                        <Pressable
-                          key={column.key}
+                        <View key={column.key} style={styles.dashboardColumnSlot}>
+                          {column.key === 'currentTue' && <View style={[styles.tuesdaySeparator, styles.dashboardValueCell, styles.dashboardTuesdaySeparatorColumn]} />}
+                          <Pressable
+                            style={[
+                              styles.cell,
+                              styles.dashboardValueCell,
+                              dashboardColumnStyle(column),
+                              dashboardValueToneStyle(column.tone),
+                              pending && styles.pendingCell,
+                            ]}
+                            onPress={() => {
+                              if (date) {
+                                openEditCell(row, date);
+                              }
+                            }}
+                          >
+                            <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
+                          </Pressable>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <View key={column.key} style={styles.dashboardColumnSlot}>
+                        <View
                           style={[
                             styles.cell,
                             styles.dashboardValueCell,
                             dashboardColumnStyle(column),
                             dashboardValueToneStyle(column.tone),
-                            pending && styles.pendingCell,
                           ]}
-                          onPress={() => {
-                            if (date) {
-                              openEditCell(row, date);
-                            }
-                          }}
                         >
                           <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
-                        </Pressable>
-                      );
-                    }
-
-                    return (
-                      <View
-                        key={column.key}
-                        style={[
-                          styles.cell,
-                          styles.dashboardValueCell,
-                          dashboardColumnStyle(column),
-                          dashboardValueToneStyle(column.tone),
-                        ]}
-                      >
-                        <Text style={dashboardValueTextStyle(column)}>{value || '-'}</Text>
+                        </View>
                       </View>
                     );
                   })}
@@ -1111,23 +1288,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const renderStockTab = () => (
     <>
       <View style={styles.controls}>
-        <View style={styles.businessTabs}>
-          {BUSINESS_CATEGORIES.map((category) => {
-            const active = activeBusinessCategory === category;
-            return (
-              <Pressable
-                key={category}
-                style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
-                onPress={() => {
-                  setActiveBusinessCategory(category);
-                  setNewProductCategory(null);
-                }}
-              >
-                <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <BusinessCategoryTabs
+          active={activeBusinessCategory}
+          onSelect={(category) => {
+            setActiveBusinessCategory(category);
+            setNewProductCategory(null);
+          }}
+        />
         <View style={styles.controlButtons}>
           {canManage && (
             <>
@@ -1301,7 +1468,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             onPress={() => void checkForAppUpdate()}
             disabled={checkingUpdate}
           >
-            <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить'}</Text>
+            <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить приложение'}</Text>
           </Pressable>
           <Pressable style={styles.logoutButton} onPress={() => void logout()}>
             <Text style={styles.logoutButtonText}>Выйти</Text>
@@ -1477,6 +1644,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               keyboardType="number-pad"
               maxLength={2}
               autoFocus
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                if (!savingEdit) void saveCell(true);
+              }}
             />
             <View style={styles.modalActions}>
               <Pressable style={styles.modalCancelButton} onPress={() => setEditingCell(null)} disabled={savingEdit}>
@@ -1561,8 +1733,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
   title: {
     fontSize: 30,
@@ -1626,31 +1800,6 @@ const styles = StyleSheet.create({
   controls: {
     gap: 10,
   },
-  businessTabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  businessTabButton: {
-    borderWidth: 1,
-    borderColor: '#bccabf',
-    borderRadius: 10,
-    backgroundColor: '#f3f6f4',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  businessTabButtonActive: {
-    backgroundColor: '#1f4f37',
-    borderColor: '#1f4f37',
-  },
-  businessTabText: {
-    color: '#2f4437',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  businessTabTextActive: {
-    color: '#ffffff',
-  },
   searchInput: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -1665,6 +1814,7 @@ const styles = StyleSheet.create({
   controlButtons: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 8,
   },
   primaryButton: {
@@ -1698,8 +1848,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#b8c7bb',
     backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
   calendarNavButtonDisabled: {
     opacity: 0.7,
@@ -1707,7 +1857,7 @@ const styles = StyleSheet.create({
   calendarNavButtonText: {
     color: '#2d4034',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
   },
   sortRow: {
     marginTop: 10,
@@ -1797,8 +1947,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f7f7f7',
   },
   workerStickyColumn: {
-    width: '31%',
-    minWidth: 140,
+    width: '40%',
+    minWidth: 180,
   },
   scrollableColumns: {
     flex: 1,
@@ -1810,6 +1960,31 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     backgroundColor: '#ecf1ec',
+  },
+  workerDateSlot: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    flexDirection: 'row',
+  },
+  dailyDateSlot: {
+    flexDirection: 'row',
+  },
+  dashboardColumnSlot: {
+    flexDirection: 'row',
+  },
+  tuesdaySeparator: {
+    minHeight: 46,
+    backgroundColor: '#ffffff',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#7f8d81',
+  },
+  workerTuesdaySeparator: {
+    flexShrink: 0,
+  },
+  workerTuesdaySeparatorColumn: {
+    width: 16,
   },
   headerCell: {
     justifyContent: 'center',
@@ -1867,6 +2042,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 4,
     borderTopColor: '#526557',
   },
+  breadSectionEndRow: {
+    borderBottomWidth: 4,
+    borderBottomColor: '#526557',
+  },
   emptyRow: {
     minHeight: 46,
     alignItems: 'center',
@@ -1894,7 +2073,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   nameColumn: {
-    width: 320,
+    width: 460,
     alignItems: 'flex-start',
     paddingHorizontal: 10,
     backgroundColor: '#f7f7f7',
@@ -1912,6 +2091,7 @@ const styles = StyleSheet.create({
   },
   workerHeaderCell: {
     minHeight: 54,
+    height: 54,
   },
   workerCell: {
     minHeight: 52,
@@ -1922,8 +2102,11 @@ const styles = StyleSheet.create({
   dashboardStockColumn: {
     width: 118,
   },
+  dashboardTuesdaySeparatorColumn: {
+    width: 118,
+  },
   dashboardOrderColumn: {
-    width: 122,
+    width: 92,
   },
   dashboardMetricColumn: {
     width: 106,
@@ -1937,6 +2120,7 @@ const styles = StyleSheet.create({
   },
   nameScroll: {
     width: '100%',
+    flexGrow: 0,
   },
   nameText: {
     fontSize: 14,
@@ -2031,7 +2215,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f4f6f4',
   },
   dailyHeaderGroup: {
-    width: 168,
+    width: 154,
     minHeight: 82,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -2052,14 +2236,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 10,
   },
+  breadDailySubHeaderText: {
+    fontSize: 8,
+    lineHeight: 9,
+  },
+  dailyOrderSubHeaderText: {
+    width: 42,
+  },
   dailyValueGroup: {
-    width: 168,
+    width: 154,
     flexDirection: 'row',
   },
   dailyValueCell: {
     width: 56,
     height: 68,
     backgroundColor: '#f4f6f4',
+  },
+  dailyOrderValueCell: {
+    width: 42,
   },
   dashboardValueNeutral: {
     backgroundColor: '#f2f2f2',

@@ -1,7 +1,50 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
 const { NexaraSttProvider, GigaChatAnalysisProvider, mapNexaraTranscript } = require('../dist/quality-control/providers');
 const { validateAnalysis, classifyQuality, calculateOverallScore, criterionKeys, dialogAnalysisJsonSchema } = require('../dist/quality-control/analysis');
+const { qcConfig, validateQcConfig } = require('../dist/quality-control/config');
+
+test('QC production preflight accepts explicit standard DB names without opening DB or provider connections', () => {
+  const result = spawnSync(process.execPath, [path.resolve(__dirname, '../dist/quality-control/preflight.js')], {
+    env: { ...process.env, NODE_ENV: 'production', JWT_SECRET: 'test-jwt', OPS_JWT_SECRET: 'test-ops',
+      CORS_ORIGIN: 'https://example.com', PERSONAL_POSTGRES_HOST: 'postgres-ru', PERSONAL_POSTGRES_USER: 'analitika',
+      PERSONAL_POSTGRES_DB: 'analitika_personal', PERSONAL_POSTGRES_PASSWORD: 'test-db-password',
+      QC_ENABLED: 'true', QC_WORKER_ENABLED: 'true', S3_ENDPOINT_URL: 'http://minio.internal:9000',
+      S3_ACCESS_KEY: 'test-key', S3_SECRET_KEY: 'test-secret', NEXARA_API_KEY: 'test-nexara', GIGACHAT_AUTH_KEY: 'test-giga',
+      GIGACHAT_CA_BUNDLE_PATH: path.resolve(__dirname, '../certs/russian_trusted_ca_bundle.crt') },
+    encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes('QC configuration valid enabled=true worker=true'));
+  assert.ok(!result.stdout.includes('test-secret'));
+});
+
+test('QC startup rejects invalid endpoints, unsupported providers, missing certificates and short leases', () => {
+  const original = { ...qcConfig };
+  try {
+    Object.assign(qcConfig, { enabled: true, workerEnabled: true, storageEndpoint: 'http://minio.internal:9000',
+      storageAccessKey: 'test-key', storageSecretKey: 'test-secret', nexaraApiKey: 'test-nexara', gigachatAuthKey: 'test-giga',
+      gigachatCaBundlePath: '', sttProvider: 'nexara', llmProvider: 'gigachat', leaseMs: 900000,
+      nexaraTimeoutMs: 600000, storageTimeoutMs: 60000, gigachatTimeoutMs: 120000 });
+    assert.doesNotThrow(validateQcConfig);
+    for (const [key, value, message] of [
+      ['storageEndpoint', 'http://minio.internal:9000/audio', /S3_ENDPOINT_URL/],
+      ['nexaraBaseUrl', 'http://provider.internal/v1', /NEXARA_BASE_URL/],
+      ['gigachatAuthUrl', 'https://user:private@example.com/oauth', /GIGACHAT_AUTH_URL/],
+      ['gigachatCaBundlePath', 'missing-qc-ca-bundle.pem', /GIGACHAT_CA_BUNDLE_PATH/],
+      ['sttProvider', 'unsupported', /Unsupported QC provider/],
+      ['storageSecretKey', '   ', /S3_SECRET_KEY/],
+      ['leaseMs', 600000, /QC_JOB_LEASE_MS/],
+    ]) {
+      const previous = qcConfig[key];
+      qcConfig[key] = value;
+      assert.throws(validateQcConfig, message);
+      qcConfig[key] = previous;
+    }
+  } finally { Object.assign(qcConfig, original); }
+});
 
 const transcript = { sessionId: 'private-session-id', language: 'ru', duration: 12, segments: [
   { start: 0, end: 3, speaker: 'speaker_0', text: 'Здравствуйте! Чем могу помочь?' },

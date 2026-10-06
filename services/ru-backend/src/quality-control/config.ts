@@ -1,4 +1,21 @@
 import '../config/config';
+import { readFileSync } from 'node:fs';
+import { createSecureContext } from 'node:tls';
+
+const boolean = (name: string, fallback: boolean): boolean => {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  if (raw !== 'true' && raw !== 'false') throw new Error(`Invalid ${name}: expected true or false`);
+  return raw === 'true';
+};
+
+const validateEndpoint = (name: string, value: string, storage = false) => {
+  try {
+    const url = new URL(value);
+    if (!(storage ? ['http:', 'https:'] : ['https:']).includes(url.protocol) ||
+        url.username || url.password || url.search || url.hash || (storage && url.pathname !== '/')) throw new Error();
+  } catch { throw new Error(`Invalid ${name}`); }
+};
 
 const integer = (name: string, fallback: number, min = 1, max = 2_147_483_647): number => {
   const raw = process.env[name];
@@ -8,8 +25,8 @@ const integer = (name: string, fallback: number, min = 1, max = 2_147_483_647): 
 };
 
 export const qcConfig = {
-  enabled: process.env.QC_ENABLED === 'true',
-  workerEnabled: process.env.QC_WORKER_ENABLED !== 'false',
+  enabled: boolean('QC_ENABLED', false),
+  workerEnabled: boolean('QC_WORKER_ENABLED', true),
   pollIntervalMs: integer('QC_POLL_INTERVAL_MS', 2000),
   maxAttempts: integer('QC_MAX_ATTEMPTS', 3, 1, 10),
   retryBaseMs: integer('QC_RETRY_BASE_MS', 5000),
@@ -54,7 +71,21 @@ export const validateQcConfig = () => {
     required.GIGACHAT_AUTH_KEY = qcConfig.gigachatAuthKey;
   }
   for (const [name, value] of Object.entries(required)) {
-    if (!value) throw new Error(`${name} is required when QC_ENABLED=true`);
+    if (!value.trim()) throw new Error(`${name} is required when QC_ENABLED=true`);
+  }
+  validateEndpoint('S3_ENDPOINT_URL', qcConfig.storageEndpoint, true);
+  if (qcConfig.workerEnabled) {
+    if (qcConfig.sttProvider !== 'nexara' || qcConfig.llmProvider !== 'gigachat') throw new Error('Unsupported QC provider');
+    validateEndpoint('NEXARA_BASE_URL', qcConfig.nexaraBaseUrl);
+    validateEndpoint('GIGACHAT_BASE_URL', qcConfig.gigachatBaseUrl);
+    validateEndpoint('GIGACHAT_AUTH_URL', qcConfig.gigachatAuthUrl);
+    if (qcConfig.gigachatCaBundlePath) {
+      try {
+        const ca = readFileSync(qcConfig.gigachatCaBundlePath, 'utf8');
+        if (!ca.includes('-----BEGIN CERTIFICATE-----')) throw new Error();
+        createSecureContext({ ca });
+      } catch { throw new Error('Invalid GIGACHAT_CA_BUNDLE_PATH: expected a readable PEM certificate bundle'); }
+    }
   }
   if (qcConfig.qualityGoodThreshold <= qcConfig.qualityNeutralThreshold) throw new Error('Invalid QC quality thresholds');
   if (qcConfig.workerEnabled && qcConfig.leaseMs <= Math.max(qcConfig.nexaraTimeoutMs, qcConfig.gigachatTimeoutMs) + qcConfig.storageTimeoutMs + 30_000) {

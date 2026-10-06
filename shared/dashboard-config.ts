@@ -1,4 +1,4 @@
-export const BUSINESS_CATEGORIES = ['Хлеб', 'Молоко', 'Деликатесы', 'Сыр', 'Мороженое'] as const;
+export const BUSINESS_CATEGORIES = ['Хлеб', 'Молоко', 'Деликатесы', 'Сыр', 'Мороженое', 'Курица'] as const;
 export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number];
 export const DEFAULT_BUSINESS_CATEGORY: BusinessCategory = 'Молоко';
 
@@ -12,6 +12,7 @@ export const DEFAULT_SUBCATEGORIES_BY_BUSINESS_CATEGORY: Record<BusinessCategory
   Деликатесы: ['Колбасы', 'Мясо', 'Готовая продукция'],
   Сыр: ['Твердый сыр', 'Мягкий сыр', 'Творожный сыр'],
   Мороженое: ['Мороженое'],
+  Курица: ['Курица'],
 };
 
 export type MachineNumber = 1 | 2 | 3;

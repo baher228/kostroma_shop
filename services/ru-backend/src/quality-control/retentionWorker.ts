@@ -16,7 +16,7 @@ export class QualityControlRetentionWorker {
     let deleted = 0;
     for (const { media, claimToken } of expired) {
       try {
-        await this.storage.remove(media.storageKey);
+        await this.storage.remove(media.storageKey, media.storageBucket);
         await this.repository.markMediaDeleted(media.id, claimToken);
         deleted += 1;
       } catch {

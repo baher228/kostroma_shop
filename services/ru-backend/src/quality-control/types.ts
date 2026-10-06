@@ -40,7 +40,7 @@ export interface LlmAnalysisProvider { analyzeDialog(transcript: DialogTranscrip
 export interface QcStorage {
   put(key: string, audio: Buffer, mimeType: string): Promise<void>;
   get(key: string, bucket?: string): Promise<Buffer>;
-  remove(key: string): Promise<void>;
+  remove(key: string, bucket?: string): Promise<void>;
   bucket: string;
 }
 export type QcJob = {

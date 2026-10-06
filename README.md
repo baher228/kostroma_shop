@@ -158,6 +158,8 @@ The Russia backend also has `observability/` for audit-related helpers.
 The integrated Audio AI Quality Control design, API, migration, provider flow,
 configuration, tests, and production checklist are documented in
 [`services/ru-backend/QUALITY_CONTROL_IMPLEMENTATION.md`](services/ru-backend/QUALITY_CONTROL_IMPLEMENTATION.md).
+The current release configuration, retention rules and live test steps are in
+[`services/ru-backend/AI_QC_PRODUCTION.md`](services/ru-backend/AI_QC_PRODUCTION.md).
 
 ## CI/CD
 

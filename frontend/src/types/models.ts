@@ -42,7 +42,7 @@ export type Shop = {
   machineNumber: number;
 };
 
-export type BusinessCategory = 'Хлеб' | 'Молоко' | 'Деликатесы' | 'Сыр' | 'Мороженое';
+export type BusinessCategory = 'Хлеб' | 'Молоко' | 'Деликатесы' | 'Сыр' | 'Мороженое' | 'Курица';
 export type ProductCategory = string;
 
 export type StockTableRow = {

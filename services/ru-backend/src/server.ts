@@ -8,6 +8,7 @@ import { createQualityControlWorker } from './quality-control/worker';
 import { createQualityControlRetentionWorker } from './quality-control/retentionWorker';
 
 const startServer = async () => {
+  validateQcConfig();
   await runMigrations();
   void cleanupExpiredTaskPhotos().catch((error) => {
     console.error('Failed to clean up expired task photos:', error);
@@ -17,7 +18,6 @@ const startServer = async () => {
       console.error('Failed to clean up expired task photos:', error);
     });
   }, 5 * 60 * 1000).unref();
-  validateQcConfig();
   const app = createRussiaApp();
   const worker = qcConfig.enabled && qcConfig.workerEnabled ? createQualityControlWorker() : null;
   const retentionWorker = qcConfig.enabled ? createQualityControlRetentionWorker() : null;

@@ -7,7 +7,7 @@ export const AppDownloadPanel = () => {
   return (
     <section className="page-section">
       <PageHeader
-        title="Приложения"
+        title="Приложение"
         subtitle="Отдельные Android APK для планшета магазина и телефона сотрудника."
         action={<RefreshButton onClick={() => void load()} />}
       />

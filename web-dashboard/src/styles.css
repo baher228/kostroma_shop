@@ -1127,6 +1127,7 @@ label {
 
 .form-grid.compact {
   grid-template-columns: repeat(4, minmax(160px, 220px));
+  font-size: inherit;
 }
 
 .product-form {
@@ -1262,23 +1263,6 @@ td.sticky {
   gap: 10px;
 }
 
-.stock-page-section .page-header {
-  border-bottom: 0;
-  padding-bottom: 2px;
-}
-
-.stock-page-section .page-header h2 {
-  font-size: 30px;
-  font-weight: 800;
-}
-
-.stock-page-section .page-header p {
-  margin-top: 3px;
-  color: #4f6155;
-  font-size: 14px;
-  font-weight: 600;
-}
-
 .manager-controls {
   display: grid;
   gap: 10px;
@@ -1383,10 +1367,19 @@ td.sticky {
 }
 
 .manager-name-col-width {
-  width: 156px;
+  width: 320px;
 }
 
-.dashboard-data-col-width {
+.dashboard-col-stock-width,
+.dashboard-col-metric-width {
+  width: 76px;
+}
+
+.dashboard-col-order-width {
+  width: 64px;
+}
+
+.dashboard-tuesday-separator-width {
   width: 76px;
 }
 
@@ -1417,9 +1410,9 @@ td.sticky {
   position: sticky;
   left: 0;
   z-index: 2;
-  width: 156px;
-  min-width: 156px;
-  max-width: 156px;
+  width: 320px;
+  min-width: 320px;
+  max-width: 320px;
   border-right: 2px solid #657667;
   background: #f7f7f7;
   text-align: left;
@@ -1498,11 +1491,24 @@ td.sticky {
 }
 
 .dashboard-col-stock,
-.dashboard-col-order,
 .dashboard-col-metric {
   width: 76px;
   min-width: 76px;
   max-width: 76px;
+}
+
+.dashboard-col-order {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+}
+
+.dashboard-tuesday-separator {
+  width: 76px;
+  min-width: 76px;
+  max-width: 76px;
+  padding: 0 !important;
+  background: #ffffff !important;
 }
 
 .dashboard-tone-neutral {
@@ -1923,8 +1929,6 @@ td.sticky {
 
 .promotions-documents-button {
   width: 220px;
-  min-height: 52px;
-  font-size: 18px;
 }
 
 .promotions-table-scroll {
@@ -2521,6 +2525,7 @@ select:focus {
   color: var(--color-text);
   font-size: 32px;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .metric-card small,
@@ -2642,6 +2647,7 @@ td.sticky {
 }
 
 .chart-card {
+  align-content: start;
   border-radius: 8px;
 }
 
@@ -2672,19 +2678,6 @@ td.sticky {
 
 .stock-page-section {
   gap: 12px;
-}
-
-.stock-page-section .page-header {
-  align-items: center;
-  padding: 2px 2px 8px;
-}
-
-.stock-page-section .page-header h2 {
-  color: var(--color-text);
-}
-
-.stock-page-section .page-header p {
-  color: var(--color-text-muted);
 }
 
 .manager-controls {
@@ -2783,6 +2776,10 @@ td.sticky {
 .manager-stock-table tbody tr.subcategory-start-row > td,
 .order-sheet-table tbody tr.subcategory-start-row > td {
   border-top: 4px solid #526557;
+}
+
+.manager-stock-table tbody tr.bread-section-end-row > td {
+  border-bottom: 4px solid #526557;
 }
 
 .manager-stock-table th {
@@ -3023,13 +3020,23 @@ td.sticky {
   }
 
   .manager-name-col-width {
-    width: 142px;
+    width: 240px;
+  }
+
+  .dashboard-col-order-width {
+    width: 56px;
   }
 
   .manager-stock-table .manager-name-col {
-    width: 142px;
-    min-width: 142px;
-    max-width: 142px;
+    width: 240px;
+    min-width: 240px;
+    max-width: 240px;
+  }
+
+  .dashboard-col-order {
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
   }
 
   .order-sheet-table .order-name-col {
@@ -3086,8 +3093,12 @@ td.sticky {
 }
 
 .tasks-page-header {
-  align-items: center;
   padding-bottom: 18px;
+}
+
+.task-field input,
+.task-field select {
+  font-weight: 500;
 }
 
 .tasks-title-row {
@@ -3743,4 +3754,39 @@ input[type='datetime-local'] {
   .download-button {
     transition: none;
   }
+}
+
+.category-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.category-tabs button,
+.category-tabs button:hover:not(:disabled) {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #bccabf;
+  border-radius: 10px;
+  background: #f3f6f4;
+  box-shadow: none;
+  color: #2f4437;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 8px 10px;
+  transform: none;
+}
+
+.category-tabs button:hover:not(:disabled) {
+  border-color: #9fb3a5;
+  background: #e8efea;
+}
+
+.category-tabs button.active,
+.category-tabs button.active:hover:not(:disabled) {
+  border-color: #1f4f37;
+  background: #1f4f37;
+  color: #fff;
 }

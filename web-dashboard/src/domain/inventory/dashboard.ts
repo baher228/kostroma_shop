@@ -11,6 +11,7 @@ import type { Product, ProductPayload } from '../../types';
 import { formatOptionalPrice } from '../../shared/format';
 export {
   buildDashboardRowValues,
+  computeDashboardSold,
   computeSold,
   dashboardDateFor,
   dashboardHeaderSubtitle,
@@ -48,12 +49,15 @@ export const productToForm = (product?: Product): ProductPayload => ({
   maxStockUnits: product?.maxStockUnits ?? 0,
 });
 
+const hasNumber = (value: number | null | undefined): value is number =>
+  value !== null && value !== undefined && Number.isFinite(Number(value));
+
 export const productReferenceLabel = (row: Product): string => {
   const parts: string[] = [];
   if (row.packType) parts.push(row.packType);
-  if (Number.isFinite(Number(row.unitsInPack))) parts.push(`${row.unitsInPack} шт/уп`);
-  if (Number.isFinite(Number(row.packWeightKg))) parts.push(`${row.packWeightKg} кг`);
-  if (Number.isFinite(Number(row.shelfLifeDays))) parts.push(`${row.shelfLifeDays} сут`);
+  if (hasNumber(row.unitsInPack)) parts.push(`${row.unitsInPack} шт/уп`);
+  if (hasNumber(row.packWeightKg)) parts.push(`${row.packWeightKg} кг`);
+  if (hasNumber(row.shelfLifeDays)) parts.push(`${row.shelfLifeDays} сут`);
   const price = formatOptionalPrice(row.unitPriceRubVat);
   if (price) parts.push(price);
   if (row.minStockUnits !== null || row.maxStockUnits !== null) {

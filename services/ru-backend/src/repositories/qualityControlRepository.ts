@@ -235,7 +235,13 @@ export class QualityControlRepository {
       const exhausted = await client.query(`UPDATE qc_processing_jobs SET status='failed',error_code='PROCESSING_LEASE_EXPIRED',
         error_message='Processing lease expired after the last attempt.',lease_token=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
         WHERE status='running' AND lease_expires_at<NOW() AND attempt >= $1 RETURNING session_id,stage`, [maxAttempts]);
-      for (const r of exhausted.rows) await client.query('UPDATE qc_sessions SET status=$2,updated_at=NOW() WHERE id=$1', [r.session_id, `${r.stage}_failed`]);
+      for (const r of exhausted.rows) {
+        await client.query('UPDATE qc_sessions SET status=$2,updated_at=NOW() WHERE id=$1', [r.session_id, `${r.stage}_failed`]);
+        await client.query(`UPDATE qc_media SET retention_class='bad',retention_reason='Failed processing retained for diagnosis.',
+          expires_at=NOW()+($2 * INTERVAL '1 millisecond')
+          WHERE session_id=$1 AND type='audio' AND pinned_at IS NULL AND deleted_at IS NULL`,
+        [r.session_id, qcConfig.retentionBadHours * 60 * 60 * 1000]);
+      }
       const result = await client.query(`SELECT * FROM qc_processing_jobs
         WHERE (status='queued' AND available_at<=NOW()) OR (status='running' AND lease_expires_at<NOW() AND attempt<$1)
         ORDER BY available_at,created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, [maxAttempts]);
@@ -345,21 +351,25 @@ export class QualityControlRepository {
 
   async setAudioPinned(user: SessionUser, sessionId: string, pinned: boolean): Promise<QcMedia> {
     if (user.role !== 'manager') throw new QcError('FORBIDDEN', 'Only managers can change audio retention.', 403);
-    await this.session(user, sessionId, this.db, false, true);
+    const session = await this.session(user, sessionId, this.db, false, true);
     let retentionClass = 'standard';
     let retentionReason = 'Routine dialog restored to the standard retention policy.';
     let retentionMs = qcConfig.retentionStandardHours * 60 * 60 * 1000;
     if (!pinned) {
-      const latest = await this.db.query(`SELECT quality_class,has_conflict,has_complaint,critical_violations_count,structured_result
+      const latest = await this.db.query(`SELECT quality_class,structured_result
         FROM qc_analysis_results WHERE session_id=$1 ORDER BY version DESC LIMIT 1`, [sessionId]);
       const analysis = latest.rows[0];
-      const dialog = analysis?.structured_result?.dialog ?? {};
-      if (analysis?.quality_class === 'good' && (dialog.upsellDetected === true || dialog.crossSellDetected === true)) {
-        retentionClass = 'interesting'; retentionReason = 'Strong dialog with upsell or cross-sell.';
-        retentionMs = qcConfig.retentionInterestingHours * 60 * 60 * 1000;
-      } else if (analysis?.quality_class === 'bad' || analysis?.has_conflict || analysis?.has_complaint || Number(analysis?.critical_violations_count) > 0) {
-        retentionClass = 'bad'; retentionReason = 'Poor or escalated dialog retained for review.';
+      if (session.status === 'transcription_failed' || session.status === 'analysis_failed') {
+        retentionClass = 'bad'; retentionReason = 'Failed processing retained for diagnosis.';
         retentionMs = qcConfig.retentionBadHours * 60 * 60 * 1000;
+      } else if (analysis) {
+        const policy = retentionForAnalysis(analysis.structured_result, analysis.quality_class, {
+          standardMs: qcConfig.retentionStandardHours * 60 * 60 * 1000,
+          badMs: qcConfig.retentionBadHours * 60 * 60 * 1000,
+          interestingMs: qcConfig.retentionInterestingHours * 60 * 60 * 1000,
+        });
+        retentionClass = policy.retentionClass; retentionReason = policy.retentionReason;
+        retentionMs = policy.retentionMs;
       }
     }
     const result = await this.db.query(`UPDATE qc_media SET

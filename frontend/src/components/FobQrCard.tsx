@@ -135,13 +135,16 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     borderRadius: 10,
-    backgroundColor: '#2f6f4f',
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    backgroundColor: '#ffffff',
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   refreshButtonText: {
-    color: '#ffffff',
-    fontWeight: '800',
+    color: '#2f4437',
+    fontSize: 13,
+    fontWeight: '700',
   },
   disabled: {
     opacity: 0.7,

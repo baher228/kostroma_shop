@@ -73,9 +73,9 @@ export class MinioQcStorage implements QcStorage {
     });
   }
 
-  async remove(key: string): Promise<void> {
+  async remove(key: string, bucket = this.bucket): Promise<void> {
     await this.withTimeout(signal => this.getClient().send(new DeleteObjectCommand({
-      Bucket: this.bucket, Key: key,
+      Bucket: bucket, Key: key,
     }), { abortSignal: signal })).then(() => undefined);
   }
 }

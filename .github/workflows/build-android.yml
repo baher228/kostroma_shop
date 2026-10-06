@@ -22,6 +22,9 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'frontend/**'
+      - 'modules/audio-qc-vad/**'
+      - 'scripts/prepare-audio-qc-vad.mjs'
+      - '.npmrc'
       - 'worker-app/**'
       - 'shared/**'
       - 'assets/**'
@@ -63,6 +66,9 @@ jobs:
             echo "::error::Only the preview profile produces dashboard-downloadable APK files"
             exit 1
           fi
+
+      - name: Check Expo app config safety
+        run: node scripts/check-app-config-clean.mjs
 
       - name: Setup Java
         uses: actions/setup-java@v4

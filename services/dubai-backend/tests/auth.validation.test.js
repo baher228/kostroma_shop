@@ -174,6 +174,22 @@ test('Dubai stock schemas validate operational fields', () => {
     minStockUnits: 0,
     maxStockUnits: 0,
   }).businessCategory, 'Мороженое');
+  assert.equal(createRowSchema.parse({
+    name: 'Курица охлажденная',
+    businessCategory: 'Курица',
+    category: 'Курица',
+    packType: 'короб',
+    unitsInPack: 1,
+    packWeightKg: 1,
+    shelfLifeDays: 1,
+    unitPriceRubVat: 0,
+    minStockUnits: 0,
+    maxStockUnits: 0,
+  }).businessCategory, 'Курица');
+  assert.equal(orderSheetQuerySchema.parse({
+    businessCategory: 'Курица',
+    date: '2026-05-01',
+  }).businessCategory, 'Курица');
   assert.throws(() => createRowSchema.parse({
     name: 'Missing category',
     packType: 'ПЭТ',

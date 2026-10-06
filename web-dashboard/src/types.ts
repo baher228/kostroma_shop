@@ -259,7 +259,7 @@ export type Shop = {
   machineNumber: number;
 };
 
-export type BusinessCategory = 'Хлеб' | 'Молоко' | 'Деликатесы' | 'Сыр' | 'Мороженое';
+export type BusinessCategory = 'Хлеб' | 'Молоко' | 'Деликатесы' | 'Сыр' | 'Мороженое' | 'Курица';
 export type ProductCategory = string;
 
 export type Product = {
@@ -442,12 +442,24 @@ export type WorkerCheckInEvent = {
   scannedByTabletDisplayName: string | null;
 };
 
+export type WorkerCheckInDay = {
+  date: string;
+  present: boolean;
+  firstInAt: string | null;
+  lastOutAt: string | null;
+  workedMinutes: number;
+  late: boolean;
+  missingCheckOut: boolean;
+};
+
 export type WorkerCheckInSummary = WorkerCheckInStatus & {
   totalCheckIns: number;
   daysPresent: number;
   workedMinutes: number;
   lateDays: number;
   missingDays: number;
+  missingCheckOuts: number;
+  days: WorkerCheckInDay[];
 };
 
 export type DailyCheckInSummary = {
@@ -468,6 +480,7 @@ export type CheckInStats = {
   workedMinutes: number;
   lateCount: number;
   missingCount: number;
+  missingCheckOuts: number;
   workers: WorkerCheckInSummary[];
   daily: DailyCheckInSummary[];
   events: WorkerCheckInEvent[];

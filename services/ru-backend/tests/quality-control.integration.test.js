@@ -182,6 +182,30 @@ test('QC audio MVP runs asynchronously end-to-end, preserves history and aggrega
   await assert.rejects(service.downloadAudio(manager, session.id), { code: 'AUDIO_EXPIRED', status: 410 });
 });
 
+test('QC unpin restores critical-problem retention from the canonical analysis', async () => {
+  const repository = new QualityControlRepository(db);
+  const session = await repository.createSession(manager, { shopId: 'shop_main', sellerId: workerUser.id,
+    externalSessionId: 'unpin-critical-problem', startedAt: '2026-08-04T10:00:00Z' });
+  const storage = { bucket: 'test', async put() {}, async get() { return wav(); }, async remove() {} };
+  const service = new QualityControlService(repository, storage, 1024);
+  const audio = wav();
+  await service.uploadAudio(manager, session.id, { originalname: 'test.wav', mimetype: 'audio/wav', buffer: audio, size: audio.length });
+  const analysis = makeAnalysis(9);
+  analysis.problems.push({ type: 'test-incident', severity: 'critical', description: 'Критическая проблема.',
+    evidence: [{ segmentIndex: 0, quote: 'Тест.' }] });
+  const worker = new QualityControlWorker({ repository, storage,
+    stt: { async transcribe({ sessionId }) { return { transcript: { sessionId, language: 'ru', duration: 1,
+      segments: [{ start: null, end: null, speaker: 'unknown', text: 'Тест.' }] }, metadata: { provider: 'nexara', model: 'test' } }; } },
+    analysis: { async analyzeDialog() { return { analysis, metadata: { provider: 'gigachat', model: 'test' },
+      promptVersion: '1.1', scorecardVersion: '1.0', schemaVersion: '1.1' }; } },
+    maxAttempts: 2, retryBaseMs: 1, leaseMs: 60000, pollIntervalMs: 50 });
+  await worker.runOnce();
+  await worker.runOnce();
+  assert.equal((await repository.getAudioInfo(manager, session.id)).retentionClass, 'bad');
+  await repository.setAudioPinned(manager, session.id, true);
+  assert.equal((await repository.setAudioPinned(manager, session.id, false)).retentionClass, 'bad');
+});
+
 test('QC retention keeps strong upsells longer and prioritizes incidents', () => {
   const durations = { standardMs: 3, badMs: 7, interestingMs: 30 };
   const routine = makeAnalysis(9, 'positive');
@@ -223,6 +247,26 @@ test('QC worker retries transient stage errors and records safe terminal errors'
   assert.equal(status.status, 'transcription_failed');
   assert.equal(status.latestJob.status, 'failed');
   assert.equal(status.latestJob.attempt, 2);
+  await repository.setAudioPinned(manager, session.id, true);
+  assert.equal((await repository.setAudioPinned(manager, session.id, false)).retentionClass, 'bad');
+});
+
+test('QC exhausted lease keeps failed audio for diagnosis instead of deleting it immediately', async () => {
+  const repository = new QualityControlRepository(db);
+  const session = await repository.createSession(manager, { shopId: 'shop_main', sellerId: workerUser.id,
+    externalSessionId: 'exhausted-lease', startedAt: '2026-08-07T10:00:00Z' });
+  const service = new QualityControlService(repository, { bucket: 'test', async put() {}, async get() {}, async remove() {} }, 1024);
+  const audio = wav();
+  await service.uploadAudio(manager, session.id, { originalname: 'test.wav', mimetype: 'audio/wav', buffer: audio, size: audio.length });
+  const job = await repository.claimJob(1, 60000);
+  await db.query("UPDATE qc_processing_jobs SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE id=$1", [job.id]);
+  await db.query("UPDATE qc_media SET expires_at=NOW()-INTERVAL '1 second' WHERE session_id=$1", [session.id]);
+  await repository.claimJob(1, 60000);
+  assert.equal((await repository.getStatus(manager, session.id)).status, 'transcription_failed');
+  const media = await repository.getAudioInfo(manager, session.id);
+  assert.equal(media.retentionClass, 'bad');
+  assert.ok(Date.parse(media.expiresAt) > Date.now() + 6 * 24 * 60 * 60 * 1000);
+  assert.equal((await repository.claimExpiredMedia(10)).length, 0);
 });
 
 test('QC job lease token fences stale repeated delivery and creates one downstream job', async () => {
@@ -261,10 +305,12 @@ test('QC MinIO adapter uses the existing private bucket with bounded S3 operatio
   await storage.put('private/key.wav', Buffer.from('audio'), 'audio/wav');
   assert.deepEqual(await storage.get('private/key.wav'), Buffer.from('abcdef'));
   await storage.remove('private/key.wav');
+  await storage.remove('old/key.wav', 'previous-audio-bucket');
   assert.deepEqual(calls.map(call => [call.constructor.name, call.input.Bucket, call.input.Key]), [
     ['PutObjectCommand', 'existing-audio', 'private/key.wav'],
     ['GetObjectCommand', 'existing-audio', 'private/key.wav'],
     ['DeleteObjectCommand', 'existing-audio', 'private/key.wav'],
+    ['DeleteObjectCommand', 'previous-audio-bucket', 'old/key.wav'],
   ]);
   const oversized = new MinioQcStorage({ endpoint: 'http://minio.internal:9000', accessKey: 'key', secretKey: 'secret',
     bucket: 'existing-audio', region: 'us-east-1', maxAudioBytes: 2 });

@@ -227,7 +227,10 @@ test('task notification sounds on the tasks channel and removes invalid devices'
     const { notifyTaskAssigneeOfNewTask } = loadWithMock('../dist/services/notificationService', {
       '../dist/repositories/notificationRepository': {
         savePushToken: async () => undefined,
-        listPushTokens: async () => ['ExpoPushToken[first]', 'ExpoPushToken[stale]'],
+        listPushTokens: async () => [
+          { token: 'ExpoPushToken[first]', alarmSound: true },
+          { token: 'ExpoPushToken[stale]', alarmSound: false },
+        ],
         deletePushToken: async (_userId, token) => removedTokens.push(token),
       },
     });
@@ -367,7 +370,10 @@ test('deadline reminders use the loud deadline channel for claimed tasks only', 
     const { sendTaskDeadlineReminders } = loadWithMock('../dist/services/notificationService', {
       '../dist/repositories/notificationRepository': {
         savePushToken: async () => undefined,
-        listPushTokens: async () => ['ExpoPushToken[tablet]'],
+        listPushTokens: async () => [
+          { token: 'ExpoPushToken[old_apk]', alarmSound: false },
+          { token: 'ExpoPushToken[alarm_apk]', alarmSound: true },
+        ],
         deletePushToken: async () => undefined,
       },
       '../dist/repositories/taskRepository': {
@@ -381,16 +387,23 @@ test('deadline reminders use the loud deadline channel for claimed tasks only', 
     await sendTaskDeadlineReminders();
     assert.deepEqual(claimedKinds, ['hour_before', 'deadline']);
     assert.equal(requests.length, 2);
-    const [soon] = requests[0];
-    const [due] = requests[1];
+    const [soon, soonAlarm] = requests[0];
+    const [due, dueAlarm] = requests[1];
     assert.equal(soon.title, 'Через 1 час срок задачи');
     assert.equal(soon.body, 'Check fridge');
     assert.deepEqual(soon.data, { type: 'task_deadline', kind: 'hour_before', taskId: 'task_soon' });
     assert.equal(due.title, 'Срок задачи истёк');
     assert.deepEqual(due.data, { type: 'task_deadline', kind: 'deadline', taskId: 'task_due' });
     for (const message of [soon, due]) {
+      assert.equal(message.to, 'ExpoPushToken[old_apk]');
       assert.equal(message.channelId, 'task-deadlines');
       assert.equal(message.sound, 'default');
+      assert.equal(message.priority, 'high');
+    }
+    for (const message of [soonAlarm, dueAlarm]) {
+      assert.equal(message.to, 'ExpoPushToken[alarm_apk]');
+      assert.equal(message.channelId, 'task-deadline-alarm');
+      assert.equal(message.sound, 'deadline_alarm.wav');
       assert.equal(message.priority, 'high');
     }
   } finally {

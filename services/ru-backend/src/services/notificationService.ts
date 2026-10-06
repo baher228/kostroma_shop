@@ -16,11 +16,14 @@ type PushMessage = {
   title: string;
   body: string;
   channelId: string;
+  alarmChannelId?: string;
   data: Record<string, string>;
 };
 
-export const registerTaskAssigneePushToken = (userId: string, token: string) =>
-  savePushToken(userId, token);
+const deadlineAlarmSound = 'deadline_alarm.wav';
+
+export const registerTaskAssigneePushToken = (userId: string, token: string, alarmSound: boolean) =>
+  savePushToken(userId, token, alarmSound);
 
 export const removeTaskAssigneePushToken = (userId: string, token: string) =>
   deletePushToken(userId, token);
@@ -39,15 +42,18 @@ const sendPushToUser = async (userId: string, message: PushMessage) => {
           : {}),
       },
       body: JSON.stringify(
-        batch.map((to) => ({
-          to,
-          title: message.title,
-          body: message.body,
-          sound: 'default',
-          priority: 'high',
-          channelId: message.channelId,
-          data: message.data,
-        })),
+        batch.map(({ token: to, alarmSound }) => {
+          const alarmChannelId = alarmSound ? message.alarmChannelId : undefined;
+          return {
+            to,
+            title: message.title,
+            body: message.body,
+            sound: alarmChannelId ? deadlineAlarmSound : 'default',
+            priority: 'high',
+            channelId: alarmChannelId ?? message.channelId,
+            data: message.data,
+          };
+        }),
       ),
     });
     if (!response.ok) continue;
@@ -56,7 +62,7 @@ const sendPushToUser = async (userId: string, message: PushMessage) => {
     await Promise.all(
       (result.data ?? []).map((ticket, index) =>
         ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered'
-          ? deletePushToken(userId, batch[index])
+          ? deletePushToken(userId, batch[index].token)
           : undefined,
       ),
     );
@@ -85,6 +91,7 @@ export const sendTaskDeadlineReminders = async () => {
           title: deadlineReminderTitles[kind],
           body: task.title,
           channelId: 'task-deadlines',
+          alarmChannelId: 'task-deadline-alarm',
           data: { type: 'task_deadline', kind, taskId: task.id },
         }).catch((error) => {
           console.error(`Failed to send ${kind} reminder for task ${task.id}:`, error);

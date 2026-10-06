@@ -593,7 +593,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                               <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
                             </>
                           ) : (
-                            <button className="secondary" onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
+                            <button className={task.status === 'open' ? 'task-done-button' : 'secondary'} onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
                               {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
                             </button>
                           )}

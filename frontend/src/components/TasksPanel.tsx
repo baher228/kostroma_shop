@@ -564,8 +564,8 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
             <View key={group.key} style={styles.taskGroup}>
               <View style={styles.groupHeader}>
                 <View style={[styles.groupDot, groupDotStyles[group.key]]} />
-                <Text style={styles.groupTitle}>{group.label}</Text>
-                <Text style={styles.groupCount}>{group.tasks.length}</Text>
+                <Text style={[styles.groupTitle, group.key === "overdue" && styles.groupTitleOverdue]}>{group.label}</Text>
+                <Text style={[styles.groupCount, group.key === "overdue" && styles.groupCountOverdue]}>{group.tasks.length}</Text>
               </View>
               {group.tasks.map((task) => {
                 const pending = pendingTaskIds[task.id];
@@ -578,7 +578,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                   task.completedAt ? `Выполнена ${formatDate(task.completedAt)}` : "",
                 ].filter(Boolean);
                 return (
-                  <View key={task.id} style={[styles.taskCard, pending && styles.taskCardPending]}>
+                  <View key={task.id} style={[styles.taskCard, group.key === "overdue" && styles.taskCardOverdue, pending && styles.taskCardPending]}>
                     <View style={[styles.timeBlock, timeBlockStyles[group.key]]}>
                       <Text style={[styles.timeText, timeTextStyles[group.key]]}>{time.time}</Text>
                       <Text style={[styles.timeDay, timeTextStyles[group.key]]}>{time.day}</Text>
@@ -922,10 +922,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   error: {
-    color: "#af4234",
-    fontWeight: "700",
+    color: "#ffffff",
+    backgroundColor: "#ff2d20",
+    borderRadius: 10,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontWeight: "800",
     fontSize: 13,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   loadingBox: {
     paddingVertical: 12,
@@ -977,17 +982,12 @@ const styles = StyleSheet.create({
   },
   taskCard: {
     flexDirection: "row",
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e3eae4",
+    borderColor: "#cfdbd1",
     backgroundColor: "#ffffff",
     overflow: "hidden",
-    minHeight: 80,
-    shadowColor: "#1f2f26",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    minHeight: 76,
   },
   timeBlock: {
     width: 88,
@@ -1006,12 +1006,10 @@ const styles = StyleSheet.create({
   },
   timeDay: {
     color: "#1f2a23",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    opacity: 0.85,
-    marginTop: 4,
+    opacity: 0.9,
+    marginTop: 3,
   },
   taskBody: {
     flex: 1,
@@ -1034,13 +1032,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   photoBadge: {
-    borderRadius: 10,
-    backgroundColor: "#e3f0e7",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#c8d9cd",
+    backgroundColor: "#e8f2eb",
     color: "#245d43",
     fontSize: 11,
     fontWeight: "800",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
     overflow: "hidden",
   },
   taskTitleDone: {
@@ -1056,6 +1056,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 3,
     overflow: "hidden",
+  },
+  taskCardOverdue: {
+    borderColor: "#ff8a80",
+    backgroundColor: "#fff5f4",
+  },
+  groupTitleOverdue: {
+    color: "#d91e18",
+  },
+  groupCountOverdue: {
+    backgroundColor: "#ff2d20",
+    color: "#ffffff",
   },
   taskCardPending: {
     opacity: 0.7,
@@ -1124,33 +1135,33 @@ const styles = StyleSheet.create({
 });
 
 const timeBlockStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
-  overdue: { backgroundColor: "#c2412d" },
-  soon: { backgroundColor: "#f4cf5d" },
-  later: { backgroundColor: "#e5ebf0" },
+  overdue: { backgroundColor: "#ff2d20" },
+  soon: { backgroundColor: "#ffc61a" },
+  later: { backgroundColor: "#e3e9ef" },
   noDeadline: { backgroundColor: "#eef3ee" },
   done: { backgroundColor: "#dceee3" },
 });
 
 const timeTextStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
   overdue: { color: "#ffffff" },
-  soon: { color: "#3b300c" },
+  soon: { color: "#2b2100" },
   later: { color: "#1f2a23" },
   noDeadline: { color: "#5b6b62" },
   done: { color: "#245236" },
 });
 
 const groupDotStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
-  overdue: { backgroundColor: "#c2412d" },
-  soon: { backgroundColor: "#e5b520" },
+  overdue: { backgroundColor: "#ff2d20" },
+  soon: { backgroundColor: "#ffb800" },
   later: { backgroundColor: "#9aabb8" },
   noDeadline: { backgroundColor: "#b7c2bb" },
   done: { backgroundColor: "#4f9a6c" },
 });
 
 const dueChipStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
-  overdue: { backgroundColor: "#fbe7e3", color: "#a5301f" },
-  soon: { backgroundColor: "#fdf3d1", color: "#7a5a00" },
-  later: {},
+  overdue: { backgroundColor: "#ff2d20", color: "#ffffff" },
+  soon: { backgroundColor: "#ffc61a", color: "#2b2100" },
+  later: { backgroundColor: "#e3e9ef", color: "#2c3e50" },
   noDeadline: {},
   done: {},
 });

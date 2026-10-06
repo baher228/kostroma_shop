@@ -53,7 +53,7 @@ Defaults can be overridden in `ENV_FILE`:
 | --- | --- | --- |
 | Routine / awaiting analysis | `QC_RETENTION_STANDARD_HOURS` | 72 hours |
 | Bad quality, complaint, conflict, critical problem or violation | `QC_RETENTION_BAD_HOURS` | 168 hours |
-| Good quality with upsell/cross-sell | `QC_RETENTION_INTERESTING_HOURS` | 720 hours |
+| Good quality with upsell/cross-sell | `QC_RETENTION_INTERESTING_HOURS` | 168 hours |
 | Terminal processing failure, including exhausted lease | `QC_RETENTION_BAD_HOURS` | 168 hours |
 | Manager-pinned audio | No expiration until unpinned | Indefinite |
 
@@ -62,6 +62,11 @@ gets the interesting retention period even if its analysis also flags an
 incident. Otherwise incidents get the bad retention period. Pinning takes
 precedence over automatic classification. After unpinning, the latest
 analysis or terminal failure determines the policy and a fresh period starts.
+
+Set `QC_RETENTION_INTERESTING_HOURS=168` in `ENV_FILE` if it previously explicitly
+overrode the default with 720. Migration `012_qc_interesting_retention_7_days.sql`
+caps existing unpinned interesting audio deadlines at seven days from migration
+time; earlier deadlines and pinned/deleted recordings are preserved.
 
 The initial deadline starts at upload; completed analysis/reanalysis or a
 terminal failure resets it from that event. Cleanup runs on startup and then

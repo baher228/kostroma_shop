@@ -34,7 +34,7 @@ export const qcConfig = {
   maxUploadBytes: integer('QC_MAX_UPLOAD_BYTES', 50 * 1024 * 1024, 1024, 200 * 1024 * 1024),
   retentionStandardHours: integer('QC_RETENTION_STANDARD_HOURS', 72, 1, 24 * 365),
   retentionBadHours: integer('QC_RETENTION_BAD_HOURS', 24 * 7, 1, 24 * 365 * 5),
-  retentionInterestingHours: integer('QC_RETENTION_INTERESTING_HOURS', 24 * 30, 1, 24 * 365 * 10),
+  retentionInterestingHours: integer('QC_RETENTION_INTERESTING_HOURS', 24 * 7, 1, 24 * 365 * 10),
   retentionCleanupIntervalMs: integer('QC_RETENTION_CLEANUP_INTERVAL_MS', 60 * 60 * 1000, 10_000),
   retentionCleanupBatchSize: integer('QC_RETENTION_CLEANUP_BATCH_SIZE', 25, 1, 500),
   storageEndpoint: process.env.S3_ENDPOINT_URL || '',

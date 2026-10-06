@@ -23,7 +23,7 @@ test('all Russia migrations apply and the existing migration runner is repeatabl
   const first = await db.query('SELECT name FROM schema_migrations ORDER BY name');
   const migrationCount = readdirSync(path.resolve(__dirname, '../migrations')).filter(name => name.endsWith('.sql')).length;
   assert.equal(first.rows.length, migrationCount);
-  assert.equal(first.rows.at(-1).name, '011_qc_audio_retention.sql');
+  assert.equal(first.rows.at(-1).name, '012_qc_interesting_retention_7_days.sql');
   await migrate();
   assert.deepEqual((await db.query('SELECT name FROM schema_migrations ORDER BY name')).rows, first.rows);
   const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'qc_%'");
@@ -207,7 +207,7 @@ test('QC unpin restores critical-problem retention from the canonical analysis',
 });
 
 test('QC retention keeps strong upsells longer and prioritizes incidents', () => {
-  const durations = { standardMs: 3, badMs: 7, interestingMs: 30 };
+  const durations = { standardMs: 3, badMs: 7, interestingMs: 7 };
   const routine = makeAnalysis(9, 'positive');
   assert.deepEqual(retentionForAnalysis(routine, 'good', durations).retentionClass, 'standard');
   routine.dialog.upsellDetected = true;

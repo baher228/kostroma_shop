@@ -8,8 +8,8 @@ import { registerTaskAssigneePushToken, removeTaskAssigneePushToken } from '../s
 export const registerNotificationRoutes = (app: Express) => {
   app.put('/api/notifications/push-token', requireAuth, requireRole('store_tablet'), async (req: Request, res: Response) => {
     try {
-      const { pushToken } = pushTokenSchema.parse(req.body);
-      await registerTaskAssigneePushToken((req as AuthorizedRequest).user.id, pushToken);
+      const { pushToken, alarmSound } = pushTokenSchema.parse(req.body);
+      await registerTaskAssigneePushToken((req as AuthorizedRequest).user.id, pushToken, alarmSound);
       res.status(204).send();
     } catch (error) {
       if (error instanceof ZodError) {

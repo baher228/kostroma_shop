@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Vibration } from 'react-native';
 import { notificationsApi } from '../api/notifications';
@@ -10,6 +11,16 @@ import { Session, Task } from '../types/models';
 const TASK_NOTIFICATION_TYPES = new Set(['task_assigned', 'task_deadline']);
 const DEADLINE_NOTIFICATION_TYPE = 'task_deadline';
 const DEADLINE_VIBRATION_PATTERN = [0, 1000, 500, 1000, 500, 1000, 500, 1000];
+const DEADLINE_ALARM_CHANNEL_ID = 'task-deadline-alarm';
+const DEADLINE_ALARM_SOUND = 'deadline_alarm.wav';
+// APKs from versionCode 2 bundle res/raw/deadline_alarm; older installs only get OTA JS.
+const DEADLINE_ALARM_MIN_BUILD = 2;
+
+const nativeApplication =
+  Platform.OS === 'android'
+    ? requireOptionalNativeModule<{ nativeBuildVersion?: string | null }>('ExpoApplication')
+    : null;
+const hasDeadlineAlarmSound = Number(nativeApplication?.nativeBuildVersion ?? 0) >= DEADLINE_ALARM_MIN_BUILD;
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
@@ -116,6 +127,21 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
           bypassDnd: true,
           lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         });
+        if (hasDeadlineAlarmSound) {
+          await Notifications.setNotificationChannelAsync(DEADLINE_ALARM_CHANNEL_ID, {
+            name: 'Сроки задач (сигнал)',
+            importance: Notifications.AndroidImportance.MAX,
+            sound: DEADLINE_ALARM_SOUND,
+            audioAttributes: {
+              usage: Notifications.AndroidAudioUsage.ALARM,
+              contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+            },
+            vibrationPattern: DEADLINE_VIBRATION_PATTERN,
+            enableVibrate: true,
+            bypassDnd: true,
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          });
+        }
       }
 
       const permissions = await Notifications.getPermissionsAsync();
@@ -129,13 +155,13 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
 
       const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
       pushTokenRef.current = pushToken;
-      await notificationsApi.registerPushToken(session.token, pushToken);
+      await notificationsApi.registerPushToken(session.token, pushToken, hasDeadlineAlarmSound);
     };
 
     void register().catch(() => undefined);
     const tokenSubscription = Notifications.addPushTokenListener(({ data }) => {
       pushTokenRef.current = data;
-      void notificationsApi.registerPushToken(session.token, data).catch(() => undefined);
+      void notificationsApi.registerPushToken(session.token, data, hasDeadlineAlarmSound).catch(() => undefined);
     });
     return () => tokenSubscription.remove();
   }, [isTaskAssignee, session.token]);

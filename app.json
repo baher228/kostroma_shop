@@ -23,6 +23,7 @@
     },
     "android": {
       "package": "com.gringobochka.analitika",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#166534"
@@ -37,7 +38,14 @@
     },
     "plugins": [
       "expo-updates",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/deadline_alarm.wav"
+          ]
+        }
+      ],
       [
         "expo-camera",
         {

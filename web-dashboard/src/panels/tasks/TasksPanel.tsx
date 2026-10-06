@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
-import { Feedback, RefreshButton, Table } from '../../components/ui';
+import { Feedback, RefreshButton } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
 import type { Session, Shop, StoreTablet, Task } from '../../types';
+import { groupTasksByUrgency, taskDueLabel, taskTimeParts } from '../../../../shared/task-timeline';
 
 const statusLabel = (task: Task) => {
   if (task.photoReviewStatus === 'pending') return 'На проверке';
@@ -243,19 +244,6 @@ const tabletSearchText = (tablet: StoreTablet, shopsById: Record<string, Shop>) 
 const tabletLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
   `${tablet.fullName} - ${tabletShopLabel(tablet, shopsById)}`;
 
-const taskAssigneeLabel = (
-  task: Task,
-  tabletsById: Record<string, StoreTablet>,
-  shopsById: Record<string, Shop>,
-) => {
-  const tablet = tabletsById[task.assigneeId];
-  const shop = tablet?.shopId ? shopsById[tablet.shopId] : null;
-  return {
-    primary: shop?.name ?? task.assigneeDisplayName,
-    secondary: shop ? task.assigneeDisplayName : null,
-  };
-};
-
 const TabletPicker = ({
   tablets,
   shopsById,
@@ -399,10 +387,15 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [now, setNow] = useState(() => Date.now());
   const openCount = tasks.filter((task) => task.status === 'open').length;
   const overdueCount = tasks.filter((task) => task.overdue).length;
   const shopsById = Object.fromEntries(shops.map((shop) => [shop.id, shop]));
-  const tabletsById = Object.fromEntries(storeTablets.map((tablet) => [tablet.id, tablet]));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -488,20 +481,6 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     }
   };
 
-  const remove = async (task: Task) => {
-    if (!window.confirm(`Удалить задачу «${task.title}»?`)) return;
-    try {
-      setPendingId(task.id);
-      await api.tasks.delete(session.token, task.id);
-      setTasks((current) => current.filter((item) => item.id !== task.id));
-      setNotice('Задача удалена.');
-    } catch (err) {
-      setError(messageOf(err));
-    } finally {
-      setPendingId(null);
-    }
-  };
-
   return (
     <section className="page-section tasks-page">
       <header className="page-header tasks-page-header">
@@ -563,37 +542,53 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           <p>Заполните форму выше, чтобы назначить первую задачу планшету магазина.</p>
         </section>
       ) : (
-        <div className="tasks-table">
-          <Table>
-          <thead><tr><th scope="col">Задача</th><th scope="col">Точка</th><th scope="col">Статус</th><th scope="col">Дедлайн</th><th scope="col">Фото</th><th scope="col">Действия</th></tr></thead>
-          <tbody>
-            {tasks.map((task) => {
-              const assignee = taskAssigneeLabel(task, tabletsById, shopsById);
-              return (
-                <tr key={task.id}>
-                  <td className="task-name-cell"><strong>{task.title}</strong><small>Создана {formatDateTime(task.createdAt)}</small></td>
-                  <td className="task-assignee-cell"><strong>{assignee.primary}</strong>{assignee.secondary && <small>{assignee.secondary}</small>}</td>
-                  <td><span className={`pill ${task.overdue ? 'overdue' : task.photoReviewStatus === 'pending' ? 'new' : task.status === 'open' ? 'new' : 'processed'}`}>{task.overdue ? 'Просрочена' : statusLabel(task)}</span></td>
-                  <td>{task.deadlineAt ? formatDateTime(task.deadlineAt) : 'Без дедлайна'}</td>
-                  <td><TaskPhotoPreview token={session.token} task={task} /></td>
-                  <td className="actions">
-                    {task.photoReviewStatus === 'pending' ? (
-                      <>
-                        <button className="secondary" onClick={() => void reviewPhoto(task, 'approve')} disabled={pendingId === task.id}>Approve</button>
-                        <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
-                      </>
-                    ) : (
-                      <button className="secondary" onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
-                        {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
-                      </button>
-                    )}
-                    <button className="danger" onClick={() => void remove(task)} disabled={pendingId === task.id}>Удалить</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          </Table>
+        <div className="task-timeline">
+          {groupTasksByUrgency(tasks, now).map((group) => (
+            <section key={group.key} className={`task-group task-group-${group.key}`} aria-labelledby={`task-group-${group.key}`}>
+              <h3 id={`task-group-${group.key}`}><i className="task-group-dot" aria-hidden="true" />{group.label}<span>{group.tasks.length}</span></h3>
+              <ul className="task-list">
+                {group.tasks.map((task) => {
+                  const time = taskTimeParts(task.deadlineAt, now);
+                  const due = taskDueLabel(task, now);
+                  return (
+                    <li key={task.id} className={`task-row task-row-${group.key}`} aria-busy={pendingId === task.id}>
+                      <div className="task-time" aria-label={task.deadlineAt ? `Дедлайн ${formatDateTime(task.deadlineAt)}` : 'Без дедлайна'}>
+                        <strong>{time.time}</strong>
+                        <small>{time.day}</small>
+                      </div>
+                      <div className="task-row-body">
+                        <div className="task-row-title">
+                          {task.requiresPhotoConfirmation && <span className="task-badge">Фото</span>}
+                          <strong>{task.title}</strong>
+                        </div>
+                        {(task.completedAt || task.photoConfirmationUrl) && (
+                          <div className="task-row-meta">
+                            {task.completedAt && <span>Выполнена {formatDateTime(task.completedAt)}</span>}
+                            {task.photoConfirmationUrl && <TaskPhotoPreview token={session.token} task={task} />}
+                          </div>
+                        )}
+                      </div>
+                      <div className="task-row-side">
+                        {due && <span className={`task-due task-due-${group.key}`}>{due}</span>}
+                        <div className="actions">
+                          {task.photoReviewStatus === 'pending' ? (
+                            <>
+                              <button className="secondary" onClick={() => void reviewPhoto(task, 'approve')} disabled={pendingId === task.id}>Approve</button>
+                              <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
+                            </>
+                          ) : (
+                            <button className={task.status === 'open' ? 'task-done-button' : 'secondary'} onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
+                              {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
         </div>
       )}
     </section>

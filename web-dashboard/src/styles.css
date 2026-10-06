@@ -3054,21 +3054,42 @@ input[type='datetime-local'] {
 
 .task-timeline {
   display: grid;
-  gap: 22px;
+  gap: 26px;
 }
 
 .task-group h3 {
-  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
   color: var(--color-text);
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
+.task-group-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #9aabb8;
+}
+
+.task-group-overdue .task-group-dot { background: #c2412d; }
+.task-group-soon .task-group-dot { background: #e5b520; }
+.task-group-noDeadline .task-group-dot { background: #b7c2bb; }
+.task-group-done .task-group-dot { background: #4f9a6c; }
+
 .task-group h3 span {
-  margin-left: 4px;
+  min-width: 22px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
   color: var(--color-text-soft);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 20px;
+  padding: 0 7px;
+  text-align: center;
 }
 
 .task-list {
@@ -3082,11 +3103,18 @@ input[type='datetime-local'] {
 .task-row {
   display: flex;
   align-items: stretch;
-  min-height: 76px;
+  min-height: 84px;
   overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border: 1px solid rgba(31, 47, 38, 0.06);
+  border-radius: 14px;
   background: var(--color-surface);
+  box-shadow: 0 1px 2px rgba(31, 47, 38, 0.06), 0 4px 14px rgba(31, 47, 38, 0.05);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.task-row:hover {
+  box-shadow: 0 2px 4px rgba(31, 47, 38, 0.08), 0 10px 24px rgba(31, 47, 38, 0.08);
+  transform: translateY(-1px);
 }
 
 .task-row[aria-busy="true"] {
@@ -3095,50 +3123,62 @@ input[type='datetime-local'] {
 
 .task-time {
   display: flex;
-  flex: 0 0 104px;
+  flex: 0 0 108px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 10px 8px;
-  background: #e5ebf0;
-  color: var(--color-text);
+  padding: 12px 8px;
+  background: linear-gradient(160deg, #eef2f6, #dfe6ed);
+  color: #33465a;
 }
 
 .task-time strong {
   font-size: 28px;
   font-weight: 800;
+  letter-spacing: -0.02em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .task-time small {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .task-row-overdue .task-time {
-  background: #b9402f;
+  background: linear-gradient(160deg, #d0503a, #ad3423);
   color: #ffffff;
 }
 
 .task-row-soon .task-time {
-  background: #f6d66b;
-  color: #2a2410;
+  background: linear-gradient(160deg, #fbe28a, #f2c94c);
+  color: #3b300c;
 }
 
 .task-row-noDeadline .task-time {
   background: var(--color-surface-muted);
-  color: var(--color-text-muted);
+  color: var(--color-text-soft);
+}
+
+.task-row-done {
+  box-shadow: none;
+  background: #fbfcfb;
 }
 
 .task-row-done .task-time {
-  background: #dceee3;
-  color: #245236;
+  background: #e3f1e8;
+  color: #2f6b45;
 }
 
 .task-row-done .task-row-title strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-soft);
+  text-decoration: line-through;
+  text-decoration-color: rgba(31, 47, 38, 0.3);
 }
 
 .task-row-body {
@@ -3147,7 +3187,7 @@ input[type='datetime-local'] {
   align-content: center;
   gap: 6px;
   min-width: 0;
-  padding: 12px 16px;
+  padding: 14px 18px;
 }
 
 .task-row-title {
@@ -3160,28 +3200,35 @@ input[type='datetime-local'] {
 .task-row-title strong {
   color: var(--color-text);
   font-size: 16px;
+  font-weight: 750;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .task-badge {
   flex: 0 0 auto;
-  border: 1px solid #c8d9cd;
-  border-radius: 6px;
+  border-radius: 999px;
   background: var(--color-primary-soft);
   color: var(--color-primary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  padding: 1px 7px;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
 }
 
 .task-row-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 18px;
+  gap: 4px 0;
   color: var(--color-text-soft);
   font-size: 13px;
+}
+
+.task-row-meta > * + *::before {
+  content: "·";
+  margin: 0 8px;
+  color: var(--color-border-strong, #b7c5b8);
 }
 
 .task-row-side {
@@ -3190,19 +3237,35 @@ input[type='datetime-local'] {
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+.task-row-side .actions button {
+  min-height: 34px;
+  border-radius: 9px;
+  font-size: 13px;
+  padding: 6px 14px;
 }
 
 .task-due {
-  color: var(--color-text);
-  font-size: 13px;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #33465a;
+  font-size: 12px;
   font-weight: 800;
+  padding: 3px 10px;
   white-space: nowrap;
 }
 
-.task-due.overdue {
-  color: var(--color-danger);
+.task-due-overdue {
+  background: #fbe7e3;
+  color: #a5301f;
+}
+
+.task-due-soon {
+  background: #fdf3d1;
+  color: #7a5a00;
 }
 
 @media (max-width: 760px) {
@@ -3217,6 +3280,10 @@ input[type='datetime-local'] {
 
   .task-time strong {
     font-size: 22px;
+  }
+
+  .task-time small {
+    letter-spacing: 0.02em;
   }
 
   .task-row-body {

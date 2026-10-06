@@ -305,35 +305,6 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
     }
   };
 
-  const removeTask = (task: Task) => {
-    if (!canManage) {
-      return;
-    }
-    Alert.alert(
-      "Удалить задачу?",
-      "Задача будет удалена без возможности восстановления.",
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Удалить",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setTaskPending(task.id, true);
-              await tasksApi.remove(session.token, task.id);
-              setTasks((current) => current.filter((item) => item.id !== task.id));
-              setError("");
-            } catch (removeError) {
-              setError(errorMessage(removeError));
-            } finally {
-              setTaskPending(task.id, false);
-            }
-          },
-        },
-      ],
-    );
-  };
-
   const renderCreateControls = () => (
     <View style={styles.createBox}>
       <TextInput
@@ -591,9 +562,11 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
         <ScrollView style={styles.tasksList} contentContainerStyle={styles.tasksListContent}>
           {groupTasksByUrgency(tasks, now).map((group) => (
             <View key={group.key} style={styles.taskGroup}>
-              <Text style={styles.groupTitle}>
-                {group.label} <Text style={styles.groupCount}>{group.tasks.length}</Text>
-              </Text>
+              <View style={styles.groupHeader}>
+                <View style={[styles.groupDot, groupDotStyles[group.key]]} />
+                <Text style={styles.groupTitle}>{group.label}</Text>
+                <Text style={styles.groupCount}>{group.tasks.length}</Text>
+              </View>
               {group.tasks.map((task) => {
                 const pending = pendingTaskIds[task.id];
                 const time = taskTimeParts(task.deadlineAt, now);
@@ -619,12 +592,12 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                           </Text>
                         </View>
                         {!!due && (
-                          <Text style={[styles.dueText, group.key === "overdue" && styles.dueTextOverdue]}>
+                          <Text style={[styles.dueText, dueChipStyles[group.key]]}>
                             {due}
                           </Text>
                         )}
                       </View>
-                      <Text style={styles.taskMeta}>{meta.join("   ")}</Text>
+                      <Text style={styles.taskMeta}>{meta.join("  ·  ")}</Text>
                       {cameraTaskId === task.id && (
                         <View style={styles.photoCameraBox}>
                           <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
@@ -658,12 +631,6 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                                   ? "Отметить выполненной"
                                   : "Открыть снова"}
                               </Text>
-                            </Pressable>
-                            <Pressable
-                              style={[styles.actionButton, styles.deleteButton]}
-                              onPress={() => removeTask(task)}
-                            >
-                              <Text style={styles.actionButtonText}>Удалить</Text>
                             </Pressable>
                           </>
                         ) : task.status === "open" ? (
@@ -979,50 +946,78 @@ const styles = StyleSheet.create({
   taskGroup: {
     gap: 8,
   },
+  groupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 2,
+  },
+  groupDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#9aabb8",
+  },
   groupTitle: {
     color: "#1d2f24",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
   },
   groupCount: {
-    color: "#738177",
-    fontSize: 13,
-    fontWeight: "700",
+    minWidth: 22,
+    borderRadius: 11,
+    backgroundColor: "#e6ece7",
+    color: "#5f7266",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 20,
+    paddingHorizontal: 7,
+    textAlign: "center",
+    overflow: "hidden",
   },
   taskCard: {
     flexDirection: "row",
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#cfdbd1",
+    borderColor: "#e3eae4",
     backgroundColor: "#ffffff",
     overflow: "hidden",
-    minHeight: 72,
+    minHeight: 80,
+    shadowColor: "#1f2f26",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   timeBlock: {
-    width: 84,
+    width: 88,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 4,
     backgroundColor: "#e5ebf0",
   },
   timeText: {
     color: "#1f2a23",
-    fontSize: 24,
+    fontSize: 25,
     fontWeight: "800",
+    letterSpacing: -0.5,
     fontVariant: ["tabular-nums"],
   },
   timeDay: {
     color: "#1f2a23",
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    opacity: 0.85,
+    marginTop: 4,
   },
   taskBody: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 5,
     justifyContent: "center",
   },
   taskHeaderRow: {
@@ -1039,27 +1034,28 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   photoBadge: {
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#c8d9cd",
-    backgroundColor: "#e8f2eb",
+    borderRadius: 10,
+    backgroundColor: "#e3f0e7",
     color: "#245d43",
     fontSize: 11,
     fontWeight: "800",
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     overflow: "hidden",
   },
   taskTitleDone: {
-    color: "#5b6b62",
+    color: "#6b7a71",
+    textDecorationLine: "line-through",
   },
   dueText: {
-    color: "#1f2a23",
-    fontSize: 12,
+    borderRadius: 10,
+    backgroundColor: "#eef2f6",
+    color: "#33465a",
+    fontSize: 11,
     fontWeight: "800",
-  },
-  dueTextOverdue: {
-    color: "#9b3b34",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    overflow: "hidden",
   },
   taskCardPending: {
     opacity: 0.7,
@@ -1067,7 +1063,7 @@ const styles = StyleSheet.create({
   taskTitle: {
     color: "#1d2f24",
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   taskMeta: {
     color: "#64786b",
@@ -1082,14 +1078,11 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     borderRadius: 9,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
   statusButton: {
     backgroundColor: "#2f6f4f",
-  },
-  deleteButton: {
-    backgroundColor: "#9f4038",
   },
   cancelButton: {
     backgroundColor: "#edf3ee",
@@ -1131,8 +1124,8 @@ const styles = StyleSheet.create({
 });
 
 const timeBlockStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
-  overdue: { backgroundColor: "#b9402f" },
-  soon: { backgroundColor: "#f6d66b" },
+  overdue: { backgroundColor: "#c2412d" },
+  soon: { backgroundColor: "#f4cf5d" },
   later: { backgroundColor: "#e5ebf0" },
   noDeadline: { backgroundColor: "#eef3ee" },
   done: { backgroundColor: "#dceee3" },
@@ -1140,8 +1133,24 @@ const timeBlockStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
 
 const timeTextStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
   overdue: { color: "#ffffff" },
-  soon: { color: "#2a2410" },
+  soon: { color: "#3b300c" },
   later: { color: "#1f2a23" },
   noDeadline: { color: "#5b6b62" },
   done: { color: "#245236" },
+});
+
+const groupDotStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { backgroundColor: "#c2412d" },
+  soon: { backgroundColor: "#e5b520" },
+  later: { backgroundColor: "#9aabb8" },
+  noDeadline: { backgroundColor: "#b7c2bb" },
+  done: { backgroundColor: "#4f9a6c" },
+});
+
+const dueChipStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { backgroundColor: "#fbe7e3", color: "#a5301f" },
+  soon: { backgroundColor: "#fdf3d1", color: "#7a5a00" },
+  later: {},
+  noDeadline: {},
+  done: {},
 });

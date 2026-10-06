@@ -495,20 +495,6 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     }
   };
 
-  const remove = async (task: Task) => {
-    if (!window.confirm(`Удалить задачу «${task.title}»?`)) return;
-    try {
-      setPendingId(task.id);
-      await api.tasks.delete(session.token, task.id);
-      setTasks((current) => current.filter((item) => item.id !== task.id));
-      setNotice('Задача удалена.');
-    } catch (err) {
-      setError(messageOf(err));
-    } finally {
-      setPendingId(null);
-    }
-  };
-
   return (
     <section className="page-section tasks-page">
       <header className="page-header tasks-page-header">
@@ -572,8 +558,8 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       ) : (
         <div className="task-timeline">
           {groupTasksByUrgency(tasks, now).map((group) => (
-            <section key={group.key} className="task-group" aria-labelledby={`task-group-${group.key}`}>
-              <h3 id={`task-group-${group.key}`}>{group.label} <span>{group.tasks.length}</span></h3>
+            <section key={group.key} className={`task-group task-group-${group.key}`} aria-labelledby={`task-group-${group.key}`}>
+              <h3 id={`task-group-${group.key}`}><i className="task-group-dot" aria-hidden="true" />{group.label}<span>{group.tasks.length}</span></h3>
               <ul className="task-list">
                 {group.tasks.map((task) => {
                   const assignee = taskAssigneeLabel(task, tabletsById, shopsById);
@@ -599,7 +585,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                         </div>
                       </div>
                       <div className="task-row-side">
-                        {due && <span className={`task-due${group.key === 'overdue' ? ' overdue' : ''}`}>{due}</span>}
+                        {due && <span className={`task-due task-due-${group.key}`}>{due}</span>}
                         <div className="actions">
                           {task.photoReviewStatus === 'pending' ? (
                             <>
@@ -611,7 +597,6 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                               {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
                             </button>
                           )}
-                          <button className="danger" onClick={() => void remove(task)} disabled={pendingId === task.id}>Удалить</button>
                         </div>
                       </div>
                     </li>

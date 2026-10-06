@@ -32,10 +32,11 @@ test('due labels show lateness or time left', () => {
   assert.equal(formatTaskDuration(50 * 60 * 60 * 1000), '2 дн.');
 });
 
-test('task cards no longer show the creation date', async () => {
+test('task cards show neither the creation date nor a delete button', async () => {
   for (const path of ['../src/panels/tasks/TasksPanel.tsx', '../../frontend/src/components/TasksPanel.tsx']) {
     const source = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /Создана/);
+    assert.doesNotMatch(source, /Удалить/);
     assert.match(source, /groupTasksByUrgency\(tasks, now\)/);
   }
 });

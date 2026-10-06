@@ -129,8 +129,21 @@ const xlsxCellXml = (cell: XlsxCell, rowIndex: number, colIndex: number): string
   return `<c r="${ref}" t="inlineStr"${style}><is><t>${escapeXml(String(cell.value))}</t></is></c>`;
 };
 
-export const makeXlsxBlob = (sheetName: string, rows: XlsxCell[][], merges: string[]): Blob => {
-  const lastColumn = xlsxColumnName(Math.max(...rows.map((row) => row.length), 1));
+export const makeXlsxBlob = (
+  sheetName: string,
+  rows: XlsxCell[][],
+  merges: string[],
+  options: { nameColumns?: number[] } = {},
+): Blob => {
+  const columnCount = Math.max(...rows.map((row) => row.length), 1);
+  const lastColumn = xlsxColumnName(columnCount);
+  const colsXml = options.nameColumns
+    ? `<cols>${Array.from({ length: columnCount }, (_, index) => {
+        const column = index + 1;
+        const width = options.nameColumns?.includes(column) ? 42 : 12;
+        return `<col min="${column}" max="${column}" width="${width}" customWidth="1"/>`;
+      }).join('')}</cols>`
+    : '<cols><col min="1" max="1" width="42" customWidth="1"/><col min="2" max="200" width="12" customWidth="1"/></cols>';
   const sheetData = rows
     .map((row, rowIndex) =>
       `<row r="${rowIndex + 1}">${row.map((cell, colIndex) => xlsxCellXml(cell, rowIndex + 1, colIndex + 1)).join('')}</row>`,
@@ -196,7 +209,7 @@ export const makeXlsxBlob = (sheetName: string, rows: XlsxCell[][], merges: stri
         '<?xml version="1.0" encoding="UTF-8"?>' +
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
         `<dimension ref="A1:${lastColumn}${Math.max(rows.length, 1)}"/>` +
-        '<cols><col min="1" max="1" width="42" customWidth="1"/><col min="2" max="200" width="12" customWidth="1"/></cols>' +
+        colsXml +
         `<sheetData>${sheetData}</sheetData>${mergeXml}` +
         '</worksheet>',
     },

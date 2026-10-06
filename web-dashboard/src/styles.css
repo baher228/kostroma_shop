@@ -3256,6 +3256,11 @@ input[type='datetime-local'] {
   font-weight: 600;
 }
 
+.task-row-meta .task-shop {
+  color: #1f5a3a;
+  font-weight: 800;
+}
+
 .task-row-meta > * + *::before {
   content: "·";
   margin: 0 8px;

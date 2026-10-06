@@ -244,6 +244,16 @@ const tabletSearchText = (tablet: StoreTablet, shopsById: Record<string, Shop>) 
 const tabletLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
   `${tablet.fullName} - ${tabletShopLabel(tablet, shopsById)}`;
 
+const taskShopLabel = (
+  task: Task,
+  tabletsById: Record<string, StoreTablet>,
+  shopsById: Record<string, Shop>,
+) => {
+  const tablet = tabletsById[task.assigneeId];
+  const shop = tablet?.shopId ? shopsById[tablet.shopId] : null;
+  return shop?.name ?? task.assigneeDisplayName;
+};
+
 const TabletPicker = ({
   tablets,
   shopsById,
@@ -391,6 +401,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const openCount = tasks.filter((task) => task.status === 'open').length;
   const overdueCount = tasks.filter((task) => task.overdue).length;
   const shopsById = Object.fromEntries(shops.map((shop) => [shop.id, shop]));
+  const tabletsById = Object.fromEntries(storeTablets.map((tablet) => [tablet.id, tablet]));
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -561,12 +572,11 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                           {task.requiresPhotoConfirmation && <span className="task-badge">Фото</span>}
                           <strong>{task.title}</strong>
                         </div>
-                        {(task.completedAt || task.photoConfirmationUrl) && (
-                          <div className="task-row-meta">
-                            {task.completedAt && <span>Выполнена {formatDateTime(task.completedAt)}</span>}
-                            {task.photoConfirmationUrl && <TaskPhotoPreview token={session.token} task={task} />}
-                          </div>
-                        )}
+                        <div className="task-row-meta">
+                          <span className="task-shop">{taskShopLabel(task, tabletsById, shopsById)}</span>
+                          {task.completedAt && <span>Выполнена {formatDateTime(task.completedAt)}</span>}
+                          {task.photoConfirmationUrl && <TaskPhotoPreview token={session.token} task={task} />}
+                        </div>
                       </div>
                       <div className="task-row-side">
                         {due && <span className={`task-due task-due-${group.key}`}>{due}</span>}

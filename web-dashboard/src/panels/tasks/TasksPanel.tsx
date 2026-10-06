@@ -244,19 +244,6 @@ const tabletSearchText = (tablet: StoreTablet, shopsById: Record<string, Shop>) 
 const tabletLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
   `${tablet.fullName} - ${tabletShopLabel(tablet, shopsById)}`;
 
-const taskAssigneeLabel = (
-  task: Task,
-  tabletsById: Record<string, StoreTablet>,
-  shopsById: Record<string, Shop>,
-) => {
-  const tablet = tabletsById[task.assigneeId];
-  const shop = tablet?.shopId ? shopsById[tablet.shopId] : null;
-  return {
-    primary: shop?.name ?? task.assigneeDisplayName,
-    secondary: shop ? task.assigneeDisplayName : null,
-  };
-};
-
 const TabletPicker = ({
   tablets,
   shopsById,
@@ -409,7 +396,6 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-  const tabletsById = Object.fromEntries(storeTablets.map((tablet) => [tablet.id, tablet]));
 
   const load = async () => {
     setLoading(true);
@@ -562,7 +548,6 @@ export const TasksPanel = ({ session }: { session: Session }) => {
               <h3 id={`task-group-${group.key}`}><i className="task-group-dot" aria-hidden="true" />{group.label}<span>{group.tasks.length}</span></h3>
               <ul className="task-list">
                 {group.tasks.map((task) => {
-                  const assignee = taskAssigneeLabel(task, tabletsById, shopsById);
                   const time = taskTimeParts(task.deadlineAt, now);
                   const due = taskDueLabel(task, now);
                   return (
@@ -576,13 +561,12 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                           {task.requiresPhotoConfirmation && <span className="task-badge">Фото</span>}
                           <strong>{task.title}</strong>
                         </div>
-                        <div className="task-row-meta">
-                          <span>{assignee.primary}</span>
-                          {assignee.secondary && <span>{assignee.secondary}</span>}
-                          <span>{statusLabel(task)}</span>
-                          {task.completedAt && <span>Выполнена {formatDateTime(task.completedAt)}</span>}
-                          {task.requiresPhotoConfirmation && <TaskPhotoPreview token={session.token} task={task} />}
-                        </div>
+                        {(task.completedAt || task.photoConfirmationUrl) && (
+                          <div className="task-row-meta">
+                            {task.completedAt && <span>Выполнена {formatDateTime(task.completedAt)}</span>}
+                            {task.photoConfirmationUrl && <TaskPhotoPreview token={session.token} task={task} />}
+                          </div>
+                        )}
                       </div>
                       <div className="task-row-side">
                         {due && <span className={`task-due task-due-${group.key}`}>{due}</span>}

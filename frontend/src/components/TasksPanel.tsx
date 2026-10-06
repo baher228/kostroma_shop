@@ -71,9 +71,6 @@ const toDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const statusLabel = (status: TaskStatus) =>
-  status === "open" ? "Открыта" : "Выполнена";
-
 const reviewLabel = (task: Task) => {
   if (!task.requiresPhotoConfirmation) return "";
   if (task.photoReviewStatus === "pending") return "Фото на проверке";
@@ -572,13 +569,11 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                 const time = taskTimeParts(task.deadlineAt, now);
                 const due = taskDueLabel(task, now);
                 const meta = [
-                  canManage ? task.assigneeDisplayName : "",
-                  statusLabel(task.status),
                   reviewLabel(task),
                   task.completedAt ? `Выполнена ${formatDate(task.completedAt)}` : "",
                 ].filter(Boolean);
                 return (
-                  <View key={task.id} style={[styles.taskCard, group.key === "overdue" && styles.taskCardOverdue, pending && styles.taskCardPending]}>
+                  <View key={task.id} style={[styles.taskCard, group.key === "overdue" && styles.taskCardOverdue, group.key === "soon" && styles.taskCardSoon, pending && styles.taskCardPending]}>
                     <View style={[styles.timeBlock, timeBlockStyles[group.key]]}>
                       <Text style={[styles.timeText, timeTextStyles[group.key]]}>{time.time}</Text>
                       <Text style={[styles.timeDay, timeTextStyles[group.key]]}>{time.day}</Text>
@@ -597,7 +592,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                           </Text>
                         )}
                       </View>
-                      <Text style={styles.taskMeta}>{meta.join("  ·  ")}</Text>
+                      {meta.length > 0 && <Text style={styles.taskMeta}>{meta.join("  ·  ")}</Text>}
                       {cameraTaskId === task.id && (
                         <View style={styles.photoCameraBox}>
                           <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
@@ -1060,6 +1055,10 @@ const styles = StyleSheet.create({
   taskCardOverdue: {
     borderColor: "#ff8a80",
     backgroundColor: "#fff5f4",
+  },
+  taskCardSoon: {
+    borderColor: "#ffd24d",
+    backgroundColor: "#fff8db",
   },
   groupTitleOverdue: {
     color: "#d91e18",

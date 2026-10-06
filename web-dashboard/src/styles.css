@@ -3136,6 +3136,24 @@ input[type='datetime-local'] {
   box-shadow: 0 4px 16px rgba(255, 45, 32, 0.18);
 }
 
+.task-row-soon {
+  border-color: #ffd24d;
+  background: #fff8db;
+  box-shadow: 0 0 0 1px rgba(255, 184, 0, 0.14);
+}
+
+.task-row-soon:hover {
+  border-color: #ffb800;
+  box-shadow: 0 4px 16px rgba(255, 184, 0, 0.22);
+}
+
+.task-group-soon h3 { color: #8a6100; }
+
+.task-group-soon h3 span {
+  background: #ffc61a;
+  color: #2b2100;
+}
+
 .task-time {
   display: flex;
   flex: 0 0 104px;

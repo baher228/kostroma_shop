@@ -40,14 +40,13 @@ type LocalDeadlineReminder = {
   at: number;
 };
 
-export const plannedDeadlineReminders = (tasks: Task[], now: number): LocalDeadlineReminder[] =>
+export const plannedDeadlineReminders = (tasks: Task[]): LocalDeadlineReminder[] =>
   tasks.flatMap((task) => {
     if (task.status !== 'open' || !task.deadlineAt) return [];
     const deadline = Date.parse(task.deadlineAt);
     if (!Number.isFinite(deadline)) return [];
     return (['hour_before', 'deadline'] as const)
       .map((kind) => ({ kind, at: kind === 'hour_before' ? deadline - HOUR_MS : deadline }))
-      .filter(({ at }) => at > now)
       .map(({ kind, at }) => ({
         id: `${LOCAL_REMINDER_PREFIX}${task.id}:${kind}:${deadline}`,
         taskId: task.id,
@@ -63,14 +62,16 @@ const listLocalReminderIds = async () =>
     .filter((identifier) => identifier.startsWith(LOCAL_REMINDER_PREFIX));
 
 const syncLocalDeadlineReminders = async (tasks: Task[]) => {
-  const planned = plannedDeadlineReminders(tasks, Date.now());
+  const planned = plannedDeadlineReminders(tasks);
   const plannedIds = new Set(planned.map((reminder) => reminder.id));
   const scheduledIds = new Set(await listLocalReminderIds());
+  // Android may deliver an alarm after its time, so only cancel reminders whose task or deadline changed.
   for (const identifier of scheduledIds) {
     if (!plannedIds.has(identifier)) await Notifications.cancelScheduledNotificationAsync(identifier);
   }
+  const now = Date.now();
   for (const reminder of planned) {
-    if (scheduledIds.has(reminder.id)) continue;
+    if (scheduledIds.has(reminder.id) || reminder.at <= now) continue;
     await Notifications.scheduleNotificationAsync({
       identifier: reminder.id,
       content: {

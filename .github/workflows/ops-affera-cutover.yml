@@ -53,10 +53,10 @@ jobs:
           docker ps --format '{{.Names}} {{.Status}}' | grep -E 'analitika-(postgres|backend)' || true
 
           echo "== data counts =="
-          docker exec analitika-postgres-ru psql -U analitika_ru -d analitika_ru -Atc "select 'ru_users=' || count(*) from users;"
-          docker exec analitika-postgres-dubai psql -U analitika_dubai -d analitika_dubai -Atc "select 'dubai_stock_products=' || count(*) from stock_products;"
-          docker exec analitika-postgres-dubai psql -U analitika_dubai -d analitika_dubai -Atc "select 'dubai_order_sheet_values=' || count(*) from order_sheet_values;"
-          docker exec analitika-postgres-dubai psql -U analitika_dubai -d analitika_dubai -Atc "select 'dubai_stock_values=' || count(*) from stock_values;"
+          docker exec analitika-postgres-ru sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select '\''ru_users='\'' || count(*) from users;"'
+          docker exec analitika-postgres-dubai sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select '\''dubai_stock_products='\'' || count(*) from stock_products;"'
+          docker exec analitika-postgres-dubai sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select '\''dubai_order_sheet_values='\'' || count(*) from order_sheet_values;"'
+          docker exec analitika-postgres-dubai sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select '\''dubai_stock_values='\'' || count(*) from stock_values;"'
 
           echo "== nginx =="
           nginx -t

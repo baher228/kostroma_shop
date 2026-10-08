@@ -1,0 +1,79 @@
+name: Ops affera cutover
+
+on:
+  workflow_dispatch:
+
+jobs:
+  finish-cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-dashboard
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+    steps:
+      - name: Setup SSH
+        run: |
+          missing=0
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit "$missing"
+          fi
+
+          PORT="${SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          fi
+
+      - name: Verify data and enable HTTPS
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          echo "== host =="
+          hostname
+          whoami
+          date -u
+
+          echo "== services =="
+          docker ps --format '{{.Names}} {{.Status}}' | grep -E 'analitika-(postgres|backend)' || true
+
+          echo "== data counts =="
+          docker exec analitika-postgres-ru psql -U analitika_ru -d analitika_ru -Atc "select 'ru_users=' || count(*) from users;"
+          docker exec analitika-postgres-dubai psql -U analitika_dubai -d analitika_dubai -Atc "select 'dubai_stock_products=' || count(*) from stock_products;"
+          docker exec analitika-postgres-dubai psql -U analitika_dubai -d analitika_dubai -Atc "select 'dubai_order_sheet_values=' || count(*) from order_sheet_values;"
+          docker exec analitika-postgres-dubai psql -U analitika_dubai -d analitika_dubai -Atc "select 'dubai_stock_values=' || count(*) from stock_values;"
+
+          echo "== nginx =="
+          nginx -t
+
+          if ! command -v certbot >/dev/null 2>&1; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx
+          fi
+
+          certbot --nginx --non-interactive --agree-tos --redirect \
+            --email admin@affera.co.uk \
+            -d affera.co.uk -d www.affera.co.uk
+
+          nginx -t
+          systemctl reload nginx
+
+          echo "== local smoke =="
+          curl --fail --silent --show-error --max-time 20 https://affera.co.uk/healthz
+          curl --fail --silent --show-error --max-time 20 https://www.affera.co.uk/healthz
+          REMOTE

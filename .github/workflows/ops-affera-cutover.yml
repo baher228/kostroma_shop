@@ -2,6 +2,11 @@ name: Ops affera cutover
 
 on:
   workflow_dispatch:
+    inputs:
+      ssh_public_key:
+        description: Optional public key to add to the production host.
+        required: false
+        type: string
 
 jobs:
   finish-cutover:
@@ -37,6 +42,24 @@ jobs:
           else
             ssh-keyscan -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
           fi
+
+      - name: Add temporary operator SSH key
+        if: ${{ inputs.ssh_public_key != '' }}
+        env:
+          OPS_PUBLIC_KEY: ${{ inputs.ssh_public_key }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE' "$OPS_PUBLIC_KEY"
+          set -euo pipefail
+          key="$1"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          touch ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          if ! grep -qxF "$key" ~/.ssh/authorized_keys; then
+            printf '%s\n' "$key" >> ~/.ssh/authorized_keys
+          fi
+          REMOTE
 
       - name: Verify data and enable HTTPS
         run: |

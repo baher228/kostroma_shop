@@ -20,13 +20,24 @@ and makes no AI calls. CI runs the same check against a disposable MinIO.
 
 The deployment source is GitHub Environment `production-backend`, secret
 `ENV_FILE` (the complete backend `.env` file). Nonempty individual Environment
-secrets override matching values in that file: `QC_ENABLED`, `QC_WORKER_ENABLED`,
+secrets override matching values in that file: `PERSONAL_POSTGRES_PASSWORD`,
+`QC_ENABLED`, `QC_WORKER_ENABLED`,
 the `S3_*` credentials/endpoint/bucket/region, `NEXARA_API_KEY`,
 `GIGACHAT_AUTH_KEY`, `GIGACHAT_SCOPE`, and `GIGACHAT_CA_BUNDLE_PATH`.
 The Environment variable `CORS_ORIGIN` overrides the matching setting in
 `ENV_FILE` through the same writer; set it to the production dashboard origin.
 Other settings, including retention durations and model, come from `ENV_FILE`.
 Never commit the generated file; deployment writes it with mode 0600.
+
+Keep the individual `PERSONAL_POSTGRES_PASSWORD` secret stable after rotation.
+After successful QC configuration and storage checks, RU deployment updates
+the PostgreSQL container environment without removing its existing volume,
+then `scripts/rotate-ru-db-password.sh` sets the existing database role password
+through the local socket before replacing the backend. This aligns credentials
+for an existing database: `POSTGRES_PASSWORD` alone only initializes new data
+directories. The script uses psql identifier/value quoting and prints no password.
+External RU database clients must use the same credential; allow a brief
+reconnection interruption when changing it. Dubai credentials are separate.
 
 For processing, set `QC_ENABLED=true`, `QC_WORKER_ENABLED=true`, the existing
 private MinIO `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`,

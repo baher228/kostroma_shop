@@ -12,7 +12,32 @@ Gmail readonly OAuth → recursive MIME attachments → sender/file/content vali
 
 Google Drive постеры продолжают использовать отдельный service account и `drive.readonly`. Gmail OAuth не меняет Drive credentials и не имеет прав отправки, удаления, установки labels или изменения прочитанности писем.
 
-## Локальная OAuth настройка
+## Подключение из приложения (основной способ)
+
+Администратор открывает **Акции → Документы → Почта → Подключить Gmail**, выбирает Google-аккаунт и разрешает чтение почты. После возврата в приложение включается автоматический импорт. «Сменить аккаунт» повторяет авторизацию, «Отключить» прекращает импорт; уже загруженные документы сохраняются. Один подключённый ящик используется для общего списка акционных документов.
+
+Сервер сохраняет refresh token в PostgreSQL, зашифрованный AES-256-GCM. Подключение переживает перезапуск и deploy. Ключ `GMAIL_TOKEN_ENCRYPTION_KEY` должен оставаться неизменным; его потеря требует повторного подключения. API статуса возвращает только адрес почты и статус, без токенов. Начать и отключить подключение может только manager. Callback использует PKCE и одноразовый state сроком 10 минут, связанный с HttpOnly/SameSite=Lax cookie. Смена аккаунта и импорт сериализуются PostgreSQL lock; история и дедупликация разделены по ящикам.
+
+В Google Cloud проекте создайте **OAuth client ID → Web application**, включите Gmail API и настройте Google Auth Platform / consent screen. Добавьте authorized redirect URIs:
+
+- Production: `https://affera.co.uk/dxb/api/promotions/gmail/oauth/callback`
+- Local: `http://127.0.0.1:5173/dxb/api/promotions/gmail/oauth/callback`
+
+JSON для постеров имеет тип `service_account` и не подходит для входа пользователя. Новый OAuth JSON имеет объект `web`; сервисный аккаунт Drive продолжает работать независимо.
+
+Для локального запуска сохраните Web OAuth JSON в игнорируемом `services/dubai-backend/secrets/` и выполните:
+
+```powershell
+node scripts/configure-gmail-local.cjs services/dubai-backend/secrets/gmail-oauth-client.json
+./scripts/stop-email-dev.ps1
+./scripts/start-email-dev.ps1
+```
+
+Для production в GitHub environment `production-backend` нужны отдельные secrets `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_TOKEN_ENCRYPTION_KEY` (случайные 32 байта, 64 hex символа), а также variables `GMAIL_ENABLED=true`, `GMAIL_REDIRECT_URI=https://affera.co.uk/dxb/api/promotions/gmail/oauth/callback`. CI/CD добавляет только эти настройки к существующему ENV_FILE. Refresh token заранее не нужен: владелец почты авторизуется в приложении уже после deploy. Preflight проверяет настройки Web OAuth и R2 до перезапуска backend.
+
+Google документирует [серверный OAuth с offline access](https://developers.google.com/identity/protocols/oauth2/web-server). Для внешнего приложения в режиме Testing добавьте нужный аккаунт в Test users; refresh token с Gmail scope в таком режиме обычно истекает через 7 дней. Для постоянной работы настройте production consent согласно требованиям Google.
+
+## CLI OAuth (совместимость со старыми установками)
 
 1. В Google Cloud создайте OAuth client типа **Desktop app**, включите Gmail API и настройте consent screen. В режиме Testing добавьте Gmail аккаунт в test users.
 2. Сохраните предоставленный OAuth JSON в `services/dubai-backend/secrets/gmail-oauth-client.json`. JSON должен содержать объект `installed`.

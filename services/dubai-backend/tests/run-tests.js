@@ -9,6 +9,7 @@ require('./promotion-document-import-routes.test');
 require('./promotion-document-import.test');
 require('./promotion-import-transaction.test');
 require('./gmail-import.test');
+require('./gmail-oauth.test');
 require('./promotion-invoice-recognition.test');
 require('./promotion-price-tag-batch.test');
 require('./promotion-fonts.test');

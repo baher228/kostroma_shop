@@ -86,6 +86,8 @@ export const config = {
   gmailEnabled: parseBoolean(process.env.GMAIL_ENABLED, false),
   gmailClientId: trimToUndefined(process.env.GMAIL_CLIENT_ID),
   gmailClientSecret: trimToUndefined(process.env.GMAIL_CLIENT_SECRET),
+  gmailRedirectUri: trimToUndefined(process.env.GMAIL_REDIRECT_URI),
+  gmailTokenEncryptionKey: trimToUndefined(process.env.GMAIL_TOKEN_ENCRYPTION_KEY),
   gmailRefreshToken: trimToUndefined(process.env.GMAIL_REFRESH_TOKEN),
   gmailUser: trimToUndefined(process.env.GMAIL_USER) || 'me',
   gmailQuery: trimToUndefined(process.env.GMAIL_QUERY) || 'has:attachment newer_than:30d',

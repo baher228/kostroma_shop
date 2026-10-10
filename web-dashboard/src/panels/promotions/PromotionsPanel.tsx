@@ -134,7 +134,7 @@ const sortValue = (row: PromotionTableRow, key: SortKey): string | number | null
 };
 
 export const PromotionsPanel = ({ session }: { session: Session }) => {
-  const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [documentsOpen, setDocumentsOpen] = useState(() => new URLSearchParams(window.location.search).has('gmail'));
   const [batchOpen, setBatchOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<PromotionTableRow | null>(null);
   const [editingRow, setEditingRow] = useState<PromotionTableRow | null>(null);
@@ -866,7 +866,7 @@ const DocumentsModal = ({
                 onPreview={() => previewById(invoiceId)}
                 onDownload={() => void downloadById(invoiceId)}
                 onDelete={() => void deleteById(invoiceId)}
-                deleting={deletingDocumentId === invoiceId}
+                deleting={Boolean(deletingDocumentId) && deletingDocumentId === invoiceId}
               />
               <DownloadRow
                 label="План на два месяца"
@@ -877,7 +877,7 @@ const DocumentsModal = ({
                 onPreview={() => previewById(planId)}
                 onDownload={() => void downloadById(planId)}
                 onDelete={() => void deleteById(planId)}
-                deleting={deletingDocumentId === planId}
+                deleting={Boolean(deletingDocumentId) && deletingDocumentId === planId}
               />
               <DownloadRow
                 label="Прайс розничных цен"
@@ -888,7 +888,7 @@ const DocumentsModal = ({
                 onPreview={() => previewById(priceListId)}
                 onDownload={() => void downloadById(priceListId)}
                 onDelete={() => void deleteById(priceListId)}
-                deleting={deletingDocumentId === priceListId}
+                deleting={Boolean(deletingDocumentId) && deletingDocumentId === priceListId}
               />
               <DownloadRow
                 label="Итоговая таблица CSV"

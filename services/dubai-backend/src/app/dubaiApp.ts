@@ -8,6 +8,7 @@ import { registerShopRoutes } from '../routes/shopsRoutes';
 import { registerStockRoutes } from '../routes/stockRoutes';
 import { registerGmailRoutes } from '../routes/gmailRoutes';
 import { getGmailHealth } from '../gmail/gmailPoller';
+import { registerGmailOAuthCallback,registerGmailOAuthManagerRoutes } from '../routes/gmailOAuthRoutes';
 
 export const createDubaiApp = () => {
   const app = express();
@@ -18,7 +19,9 @@ export const createDubaiApp = () => {
     res.json({ ok: true, region: 'dubai', gmail: getGmailHealth() });
   });
 
+  registerGmailOAuthCallback(app);
   app.use(requireOpsAuth);
+  registerGmailOAuthManagerRoutes(app);
 
   registerShopRoutes(app);
   registerStockRoutes(app);

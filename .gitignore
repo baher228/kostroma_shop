@@ -40,6 +40,7 @@ services/dubai-backend/secrets/
 **/gmail-oauth-client*.json
 **/credentials*.json
 **/token.json
+/.local-runtime/
 
 # typescript
 *.tsbuildinfo

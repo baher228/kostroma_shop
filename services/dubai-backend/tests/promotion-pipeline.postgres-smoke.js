@@ -119,7 +119,34 @@ const main = async () => {
   assert.equal(await repository.withGmailPollLock(async () => true), null);
   release();
   assert.equal(await held, true);
+  // OAuth state expiry and one-time consumption use real PostgreSQL, rather
+  // than an in-memory approximation of DELETE ... RETURNING.
+  const connections = require('../dist/repositories/gmailConnectionRepository');
+  await connections.saveGmailOAuthState('expired-state','browser','encrypted-verifier');
+  await opsDb.query("UPDATE gmail_oauth_states SET expires_at=NOW() - INTERVAL '1 second' WHERE state_hash='expired-state';");
+  assert.equal(await connections.consumeGmailOAuthState('expired-state','browser'),null);
+  await connections.saveGmailOAuthState('valid-state','browser','encrypted-verifier');
+  assert.equal(await connections.consumeGmailOAuthState('valid-state','wrong-browser'),null);
+  assert.equal(await connections.consumeGmailOAuthState('valid-state','browser'),'encrypted-verifier');
+  assert.equal(await connections.consumeGmailOAuthState('valid-state','browser'),null);
+  await connections.saveGmailConnection('first@example.com','encrypted-token-one');
+  assert.equal((await connections.readGmailConnection()).refresh_token_encrypted,'encrypted-token-one');
+  await connections.saveGmailConnection('second@example.com','encrypted-token-two');
+  assert.equal((await connections.readGmailConnection()).email,'second@example.com');
+  assert.equal((await opsDb.query('SELECT COUNT(*)::int AS count FROM gmail_connection;')).rows[0].count,1);
+  await connections.deleteGmailConnection();
+  assert.equal(await connections.readGmailConnection(),null);
+  // Gmail message/attachment IDs are unique only within a mailbox. A switch
+  // must not inherit terminal claims from the previous mailbox.
+  const metadata = { messageId: `shared-id-${suffix}`,attachmentId: 'attachment',attachmentKey: 'shared-attachment',
+    filename: 'plan.csv',mimeType: 'text/csv',sender: 'sender@example.com',subject: '',receivedAt: null };
+  const claimOne = await repository.claimGmailImport({ ...metadata,mailbox: 'first@example.com' },3);
+  assert.ok(claimOne);
+  await repository.completeGmailImport(claimOne.id,'skipped');
+  assert.equal(await repository.claimGmailImport({ ...metadata,mailbox: 'first@example.com' },3),null);
+  assert.ok(await repository.claimGmailImport({ ...metadata,mailbox: 'second@example.com' },3));
   console.log('PostgreSQL smoke PASS: migrations, PDF recognition, priority, Gmail→document→parsers→row→A4 PDF, restart dedupe, terminal success, nested rollback, R2 compensation, poll locking.');
+  console.log('OAuth PostgreSQL smoke PASS: expiring browser-bound one-time states, persistent single mailbox, disconnect and mailbox-scoped import claims.');
 };
 
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => opsDb.close());

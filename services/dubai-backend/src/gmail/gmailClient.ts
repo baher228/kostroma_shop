@@ -9,7 +9,7 @@ export type GmailApiClient = {
 };
 export class GmailConfigurationError extends Error {
   constructor() {
-    super('Gmail включён, но GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET или GMAIL_REFRESH_TOKEN не заполнены.');
+    super('Gmail не подключён. Подключите аккаунт в разделе «Акции → Документы → Почта».');
     this.name = 'GmailConfigurationError';
   }
 }
@@ -38,18 +38,18 @@ export const withGmailRetry = async <T>(operation: () => Promise<T>, attempts = 
 // actionable diagnostics cross the logs, health and history API boundary.
 export const sanitizedGmailError = (error: unknown) => {
   if (error instanceof GmailConfigurationError) return error.message;
-  if (isGmailAuthenticationError(error)) return 'Gmail требует повторной авторизации: invalid_grant / 401. Выполните gmail:auth и обновите refresh token.';
+  if (isGmailAuthenticationError(error)) return 'Gmail требует повторной авторизации. Подключите аккаунт заново в разделе «Почта».';
   if (error instanceof Error && error.name === 'PromotionImportPrerequisiteError') return 'Не загружен прайс розничных цен; импорт накладной будет повторён.';
   if (isTemporaryGmailError(error)) return 'Временная ошибка Gmail, хранилища или базы данных; будет выполнена повторная попытка.';
   return 'Не удалось обработать вложение. Проверьте формат файла и настройки Gmail/R2/БД.';
 };
 
-export const createGmailClient = (): GmailApiClient => {
-  if (!config.gmailClientId || !config.gmailClientSecret || !config.gmailRefreshToken) throw new GmailConfigurationError();
+export const createGmailClient = (refreshToken = config.gmailRefreshToken): GmailApiClient => {
+  if (!config.gmailClientId || !config.gmailClientSecret || !refreshToken) throw new GmailConfigurationError();
   // Lazy loading avoids initializing Google OAuth when Gmail is disabled.
   const { google } = require('googleapis');
   const auth = new google.auth.OAuth2(config.gmailClientId,config.gmailClientSecret);
-  auth.setCredentials({ refresh_token: config.gmailRefreshToken });
+  auth.setCredentials({ refresh_token: refreshToken });
   const gmail = google.gmail({ version: 'v1', auth });
   const options = { timeout: 30000, retry: false };
   return {

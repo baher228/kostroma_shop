@@ -411,6 +411,9 @@ export type PromotionTablePreview = {
 };
 
 export type GmailHealth = {
+  configured?: boolean;
+  connected?: boolean;
+  email?: string | null;
   enabled: boolean;
   authenticated: boolean;
   running: boolean;

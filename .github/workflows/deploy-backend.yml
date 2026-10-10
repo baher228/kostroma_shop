@@ -58,6 +58,11 @@ jobs:
       DEPLOY_GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
       DEPLOY_GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
       DEPLOY_GIGACHAT_CA_BUNDLE_PATH: ${{ secrets.GIGACHAT_CA_BUNDLE_PATH }}
+      DEPLOY_GMAIL_ENABLED: ${{ vars.GMAIL_ENABLED }}
+      DEPLOY_GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+      DEPLOY_GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+      DEPLOY_GMAIL_REDIRECT_URI: ${{ vars.GMAIL_REDIRECT_URI }}
+      DEPLOY_GMAIL_TOKEN_ENCRYPTION_KEY: ${{ secrets.GMAIL_TOKEN_ENCRYPTION_KEY }}
       RU_HEALTH_URL: ${{ vars.RU_HEALTH_URL }}
       DUBAI_HEALTH_URL: ${{ vars.DUBAI_HEALTH_URL }}
       REGION: ${{ inputs.region || 'all' }}
@@ -134,7 +139,7 @@ jobs:
         if: env.REGION == 'all' || env.REGION == 'dubai'
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/dubai-backend/Dockerfile -t analitika-backend-dubai . && timeout 120 docker compose -f docker-compose.dubai.yml up -d --no-build backend-dubai"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/dubai-backend/Dockerfile -t analitika-backend-dubai . && timeout 60 docker compose -f docker-compose.dubai.yml run --rm --no-deps backend-dubai node dist/gmail/preflight.js && timeout 120 docker compose -f docker-compose.dubai.yml up -d --no-build backend-dubai"
 
       - name: Smoke test Dubai backend
         if: (env.REGION == 'all' || env.REGION == 'dubai') && vars.DUBAI_HEALTH_URL != ''

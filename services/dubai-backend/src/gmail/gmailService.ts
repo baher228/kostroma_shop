@@ -30,12 +30,18 @@ const receivedAt = (internalDate: string | null | undefined,dateHeader: string |
 export class GmailService {
   private readonly settings: ReturnType<typeof settings>;
   private readonly deps: typeof dependencies;
-  constructor(private readonly client: GmailApiClient,options: {
+  private mailbox: string;
+  private readonly resolveClient?: () => Promise<{ client: GmailApiClient; mailbox: string }>;
+  constructor(private client: GmailApiClient | null,options: {
     settings?: Partial<ReturnType<typeof settings>>;
     dependencies?: Partial<typeof dependencies>;
+    mailbox?: string;
+    resolveClient?: () => Promise<{ client: GmailApiClient; mailbox: string }>;
   } = {}) {
     this.settings = { ...settings(),...options.settings };
     this.deps = { ...dependencies,...options.dependencies };
+    this.mailbox = options.mailbox ?? 'legacy';
+    this.resolveClient = options.resolveClient;
   }
 
   async poll(): Promise<GmailPollResult> {
@@ -45,12 +51,19 @@ export class GmailService {
   }
 
   private async pollLocked(signal: AbortSignal): Promise<GmailPollResult> {
+    if (this.resolveClient) {
+      const connection = await this.resolveClient();
+      this.client = connection.client;
+      this.mailbox = connection.mailbox;
+    }
+    if (!this.client) throw new Error('Gmail client unavailable.');
     await this.deps.repository.recoverGmailImportObjects();
     await this.deps.repository.failExhaustedGmailImports(this.settings.maxAttempts);
     const ids = new Set<string>();
     const pages = new Set<string>();
     const query = buildGmailQuery(this.settings.query,this.settings.allowedSenders);
-    let pageToken = await this.deps.repository.getGmailPollCursor(query);
+    const cursorKey = this.mailbox === 'legacy' ? query : JSON.stringify([this.mailbox,query]);
+    let pageToken = await this.deps.repository.getGmailPollCursor(cursorKey);
     let resetCursor = false;
     do {
       const remaining = this.settings.maxMessages - ids.size;
@@ -60,7 +73,7 @@ export class GmailService {
       catch (error) {
         if (pageToken && !resetCursor && isInvalidGmailPageTokenError(error)) {
           pageToken=undefined; ids.clear(); pages.clear(); resetCursor=true;
-          await this.deps.repository.setGmailPollCursor(query);
+          await this.deps.repository.setGmailPollCursor(cursorKey);
           page = await this.client.listMessages(query,Math.min(this.settings.maxMessages,100));
         } else {
           throw error;
@@ -94,7 +107,7 @@ export class GmailService {
           summary.attachments++;
           console.info('gmail attachment found',{ messageId, attachmentKey: attachment.attachmentKey });
           const claim = await this.deps.repository.claimGmailImport({
-            messageId,attachmentId: attachment.attachmentId,attachmentKey: attachment.attachmentKey,
+            mailbox: this.mailbox,messageId,attachmentId: attachment.attachmentId,attachmentKey: attachment.attachmentKey,
             filename: attachment.filename,mimeType: attachment.mimeType,sender,subject,
             receivedAt: receivedAt(message.internalDate,gmailMessageHeader(message.payload,'Date')),
           },this.settings.maxAttempts);
@@ -161,16 +174,16 @@ export class GmailService {
       }
     }
     signal.throwIfAborted();
-    await this.deps.repository.setGmailPollCursor(query,pageToken);
+    await this.deps.repository.setGmailPollCursor(cursorKey,pageToken);
     return summary;
   }
 
   private async download(messageId: string,attachment: ReturnType<typeof extractGmailAttachments>[number]) {
     let data = attachment.inlineData;
     if (data === null) {
-      if (attachment.attachmentId) data = await this.client.getAttachment(messageId,attachment.attachmentId);
+      if (attachment.attachmentId) data = await this.client!.getAttachment(messageId,attachment.attachmentId);
       else {
-        const message = await this.client.getMessage(messageId);
+        const message = await this.client!.getMessage(messageId);
         if (!senderAllowed(senderAddress(gmailMessageHeader(message.payload,'From')),this.settings.allowedSenders)) throw new Error('sender_changed');
         data = extractGmailAttachments(message.payload).find((item) => item.attachmentKey === attachment.attachmentKey)?.inlineData || '';
       }

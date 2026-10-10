@@ -29,8 +29,15 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
   const [health, setHealth] = useState<GmailHealth | null>(null);
   const [imports, setImports] = useState<GmailImport[]>([]);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => {
+    const result = new URLSearchParams(window.location.search).get('gmail');
+    return result === 'connected' ? 'Gmail подключён. Почта будет проверяться автоматически.'
+      : result === 'busy' ? 'Сейчас выполняется импорт. Подключите Gmail повторно после завершения проверки.'
+      : result === 'failed' ? 'Gmail не подключён. Повторите подключение и разрешите чтение почты.' : '';
+  });
   const [polling, setPolling] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const connectionPending = useRef(false);
   const importedCallback = useRef(onImported);
   importedCallback.current = onImported;
   const lastImport = useRef<string | null | undefined>(undefined);
@@ -64,11 +71,41 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
 
   useEffect(() => {
     mounted.current = true;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('gmail')) {
+      url.searchParams.delete('gmail');
+      window.history.replaceState(window.history.state,'',url.pathname + url.search + url.hash);
+    }
     lastImport.current = undefined;
     void load();
     const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') void load(); }, 30_000);
     return () => { mounted.current = false; historyRequest.current = null; window.clearInterval(timer); };
   }, [session.token]);
+
+  const changeConnection = async (disconnect: boolean) => {
+    if (connectionPending.current) return;
+    connectionPending.current = true;
+    setConnecting(true);
+    setError('');
+    setNotice('');
+    try {
+      if (disconnect) {
+        await api.promotions.disconnectGmail(session.token);
+        if (mounted.current && sessionToken.current === session.token) {
+          setNotice('Gmail отключён. Новые письма больше не импортируются.');
+          await load();
+        }
+      } else {
+        const result = await api.promotions.connectGmail(session.token);
+        if (mounted.current && sessionToken.current === session.token) window.location.assign(result.authorizationUrl);
+      }
+    } catch (error) {
+      if (mounted.current && sessionToken.current === session.token) setError(messageOf(error));
+    } finally {
+      connectionPending.current = false;
+      if (mounted.current) setConnecting(false);
+    }
+  };
 
   const poll = async () => {
     if (pollPending.current) return;
@@ -95,16 +132,25 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
   };
 
   const label = !health ? 'Проверяем подключение...' : !health.enabled ? 'Автоматический импорт выключен'
-    : health.authenticated ? 'Подключена' : health.lastError ? 'Требует авторизации или проверки настроек' : 'Ожидает первой проверки';
+    : health.connected === false ? 'Не подключена' : health.authenticated ? 'Подключена'
+      : health.lastError ? 'Требует повторного подключения' : 'Ожидает первой проверки';
   return (
     <section className="documents-panel gmail-import-panel">
       <div className="gmail-status-heading">
         <h4>Почта</h4>
-        {session.user.role === 'manager' && <button className="secondary" disabled={polling || !health?.enabled || health.running} onClick={() => void poll()}>
-          {polling || health?.running ? 'Проверяем...' : 'Проверить сейчас'}
-        </button>}
+        {session.user.role === 'manager' && <div className="gmail-connection-actions">
+          <button className="secondary" disabled={connecting || !health?.configured || health.running} onClick={() => void changeConnection(false)}>
+            {connecting ? 'Подключаем...' : health?.connected ? 'Сменить аккаунт' : 'Подключить Gmail'}
+          </button>
+          {health?.email && <button className="secondary" disabled={connecting || health.running} onClick={() => void changeConnection(true)}>Отключить</button>}
+          <button className="secondary" disabled={connecting || polling || !health?.enabled || health.connected === false || health.running} onClick={() => void poll()}>
+            {polling || health?.running ? 'Проверяем...' : 'Проверить сейчас'}
+          </button>
+        </div>}
       </div>
       <p className="gmail-connection-status"><span className={`status-dot ${health?.enabled && health.authenticated ? 'in' : ''}`} />{label}</p>
+      {health?.email && <p className="batch-hint">Аккаунт: {health.email}. Вложения из этой почты импортируются в общий список документов.</p>}
+      {health?.configured === false && <p className="batch-hint">Подключение Gmail пока не настроено.</p>}
       {health && <dl className="gmail-health-details">
         <div><dt>Последняя проверка</dt><dd>{dateTime(health.lastPollAt)}</dd></div>
         <div><dt>Последний успешный импорт</dt><dd>{dateTime(health.lastImportAt)}</dd></div>

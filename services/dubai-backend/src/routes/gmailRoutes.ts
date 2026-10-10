@@ -4,6 +4,7 @@ import { GmailImportStatus, listGmailImports } from '../repositories/gmailImport
 import { getGmailHealth, GmailDisabledError, pollGmailNow } from '../gmail/gmailPoller';
 import { GmailPollBusyError } from '../gmail/gmailService';
 import { sanitizedGmailError } from '../gmail/gmailClient';
+import { getGmailConnectionStatus } from '../gmail/gmailOAuth';
 
 const statuses = new Set<GmailImportStatus>(['processing','success','failed','skipped']);
 const integer = (value: unknown,fallback: number,min: number,max: number) => {
@@ -22,7 +23,7 @@ export const registerGmailRoutes = (app: Express) => {
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Некорректные параметры.' }); return;
     }
-    try { res.json({ imports: await listGmailImports(options),health: getGmailHealth() }); }
+    try { res.json({ imports: await listGmailImports(options),health: { ...getGmailHealth(),...await getGmailConnectionStatus() } }); }
     catch { res.status(503).json({ message: 'История импорта временно недоступна.',health: getGmailHealth() }); }
   });
   app.post('/api/promotions/gmail/poll',requireOpsRole('manager'),async (_req: Request,res: Response) => {

@@ -1,5 +1,6 @@
 import { config } from '../config/config';
-import { createGmailClient, isGmailAuthenticationError, sanitizedGmailError } from './gmailClient';
+import { GmailConfigurationError, isGmailAuthenticationError, sanitizedGmailError } from './gmailClient';
+import { getConnectedGmailClient } from './gmailOAuth';
 import { GmailPollBusyError, GmailPollResult, GmailService } from './gmailService';
 import { getLastSuccessfulGmailImportAt } from '../repositories/gmailImportsRepository';
 
@@ -22,7 +23,7 @@ export class GmailPoller {
     lastImportAt?: () => Promise<string | null>;
   } = {
     enabled: config.gmailEnabled,intervalMs: config.gmailPollIntervalMs,
-    createService: () => new GmailService(createGmailClient()),
+    createService: () => new GmailService(null,{ resolveClient: getConnectedGmailClient }),
     lastImportAt: getLastSuccessfulGmailImportAt,
   }) {
     this.health = { enabled: options.enabled,authenticated: false,running: false,lastPollAt: null,lastSuccessfulPollAt: null,lastImportAt: null,lastError: null };
@@ -61,7 +62,11 @@ export class GmailPoller {
         console.info('gmail poll completed',result);
         return result;
       } catch (error) {
-        if (isGmailAuthenticationError(error)) this.health.authenticated = false;
+        if (isGmailAuthenticationError(error) || error instanceof GmailConfigurationError) this.health.authenticated = false;
+        if (error instanceof GmailConfigurationError) {
+          this.health.lastError = null;
+          throw error;
+        }
         if (!(error instanceof GmailPollBusyError)) {
           this.health.lastError = sanitizedGmailError(error);
           console.error('gmail poll failed',{ error: this.health.lastError });

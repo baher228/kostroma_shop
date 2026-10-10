@@ -4408,3 +4408,8 @@ input[type='datetime-local'] {
     width: 100%;
   }
 }
+.gmail-connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

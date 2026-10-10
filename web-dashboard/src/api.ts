@@ -398,6 +398,10 @@ export const api = {
       (await dxbRequest<{ order: SellerOrder }>(`/api/orders/${orderId}/status`, { method: 'PATCH', token, body: { status } })).order,
   },
   promotions: {
+    connectGmail: async (token: string) =>
+      dxbRequest<{ authorizationUrl: string }>('/api/promotions/gmail/connect', { method: 'POST', token }),
+    disconnectGmail: async (token: string) =>
+      dxbRequest<{ ok: boolean }>('/api/promotions/gmail/disconnect', { method: 'POST', token }),
     gmailImports: async (token: string) =>
       dxbRequest<{ imports: GmailImport[]; health: GmailHealth }>('/api/promotions/gmail/imports?limit=10', { token }),
     pollGmail: async (token: string) =>

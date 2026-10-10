@@ -4,6 +4,7 @@ import { deleteObject } from '../services/r2StorageService';
 
 export type GmailImportStatus = 'processing' | 'success' | 'failed' | 'skipped';
 export type GmailImportMetadata = {
+  mailbox?: string;
   messageId: string; attachmentId: string | null; attachmentKey: string;
   filename: string; mimeType: string; sender: string; subject: string;
   receivedAt: string | null;
@@ -15,7 +16,7 @@ export type GmailImport = GmailImportMetadata & {
 };
 const date = (value: Date | string | null) => value ? new Date(value).toISOString() : null;
 const mapImport = (row: Record<string, any>): GmailImport => ({
-  id: row.id, messageId: row.message_id, attachmentId: row.attachment_id, attachmentKey: row.attachment_key,
+  id: row.id, mailbox: row.mailbox,messageId: row.message_id, attachmentId: row.attachment_id, attachmentKey: row.attachment_key,
   filename: row.filename, mimeType: row.mime_type, sender: row.sender, subject: row.subject || '',
   receivedAt: date(row.received_at), fileHash: row.file_hash, status: row.status, error: row.error,
   retryable: row.retryable, attemptCount: Number(row.attempt_count), promotionDocumentId: row.promotion_document_id,
@@ -66,14 +67,14 @@ export const recoverGmailImportObjects = async () => {
 // and failed retries; success/skipped/deterministic failures remain terminal.
 export const claimGmailImport = async (input: GmailImportMetadata, maxAttempts: number) => {
   const result = await opsDb.query<{ id: string; attempt_count: number }>(
-    `INSERT INTO gmail_imports (id,message_id,attachment_id,attachment_key,filename,mime_type,sender,subject,received_at,status,attempt_count)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'processing',1)
-     ON CONFLICT (message_id,attachment_key) DO UPDATE SET
+    `INSERT INTO gmail_imports (id,message_id,attachment_id,attachment_key,filename,mime_type,sender,subject,received_at,status,attempt_count,mailbox)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'processing',1,$11)
+     ON CONFLICT (mailbox,message_id,attachment_key) DO UPDATE SET
        status='processing',error=NULL,retryable=FALSE,attempt_count=gmail_imports.attempt_count+1,updated_at=NOW()
      WHERE (gmail_imports.status='failed' AND gmail_imports.retryable=TRUE OR gmail_imports.status='processing')
        AND gmail_imports.attempt_count < $10
      RETURNING id,attempt_count;`,
-    [randomUUID(),input.messageId,input.attachmentId,input.attachmentKey,input.filename,input.mimeType,input.sender,input.subject,input.receivedAt,maxAttempts],
+    [randomUUID(),input.messageId,input.attachmentId,input.attachmentKey,input.filename,input.mimeType,input.sender,input.subject,input.receivedAt,maxAttempts,input.mailbox ?? 'legacy'],
   );
   const row = result.rows[0];
   return row ? { id: row.id, attemptCount: Number(row.attempt_count) } : null;

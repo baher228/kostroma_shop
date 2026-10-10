@@ -23,6 +23,8 @@ The deployment source is GitHub Environment `production-backend`, secret
 secrets override matching values in that file: `QC_ENABLED`, `QC_WORKER_ENABLED`,
 the `S3_*` credentials/endpoint/bucket/region, `NEXARA_API_KEY`,
 `GIGACHAT_AUTH_KEY`, `GIGACHAT_SCOPE`, and `GIGACHAT_CA_BUNDLE_PATH`.
+The Environment variable `CORS_ORIGIN` overrides the matching setting in
+`ENV_FILE` through the same writer; set it to the production dashboard origin.
 Other settings, including retention durations and model, come from `ENV_FILE`.
 Never commit the generated file; deployment writes it with mode 0600.
 

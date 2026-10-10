@@ -44,6 +44,7 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       APP_PATH: ${{ secrets.APP_PATH }}
       ENV_FILE: ${{ secrets.ENV_FILE }}
+      DEPLOY_CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
       DEPLOY_QC_ENABLED: ${{ secrets.QC_ENABLED }}
       DEPLOY_QC_WORKER_ENABLED: ${{ secrets.QC_WORKER_ENABLED }}
       DEPLOY_S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}

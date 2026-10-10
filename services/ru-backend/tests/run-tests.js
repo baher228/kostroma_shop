@@ -4,3 +4,7 @@ require('./access.visibility.test');
 require('./checkin.stats.test');
 require('./user.management.test');
 require('./fob.qr.test');
+require('./audio.qc.test');
+require('./quality-control.providers.test');
+require('./quality-control.integration.test');
+require('./quality-control.routes.test');

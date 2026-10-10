@@ -1,10 +1,20 @@
 import {
+  AudioQcPolicy,
+  AudioQcPolicyWithHeartbeat,
+  AudioQcRecordingsPage,
   CheckInStats,
   BusinessCategory,
   ManagedUser,
   OrderSheet,
   OrderValueEntry,
   ProductPayload,
+  QcAnalysis,
+  QcAudioInfo,
+  QcOverview,
+  QcSession,
+  QcStatus,
+  QcTranscript,
+  QcTrendPoint,
   PromotionDocument,
   PromotionDocumentType,
   PromotionRowPayload,
@@ -36,10 +46,12 @@ type CachedOpsToken = {
 
 export class ApiError extends Error {
   status: number;
+  code: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -90,7 +102,7 @@ const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOpt
   const parsed = text
     ? (() => {
         try {
-          return JSON.parse(text) as { message?: string };
+          return JSON.parse(text) as { message?: string; code?: string };
         } catch {
           return null;
         }
@@ -98,7 +110,7 @@ const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOpt
     : null;
 
   if (!response.ok) {
-    throw new ApiError(parsed?.message || 'Request failed.', response.status);
+    throw new ApiError(parsed?.message || 'Request failed.', response.status, parsed?.code ?? null);
   }
 
   return (parsed ?? {}) as T;
@@ -405,5 +417,64 @@ export const api = {
   checkin: {
     stats: async (token: string, from: string, to: string, shopId?: string) =>
       (await ruRequest<{ stats: CheckInStats }>(`/api/checkin/stats${query({ from, to, shopId })}`, { token })).stats,
+  },
+  audioQc: {
+    policies: async (token: string) =>
+      (await ruRequest<{ policies: AudioQcPolicyWithHeartbeat[] }>('/api/audio-qc/policies', { token })).policies,
+    savePolicy: async (token: string, shopId: string, policy: AudioQcPolicy) =>
+      (await ruRequest<{ policy: AudioQcPolicyWithHeartbeat }>(
+        `/api/audio-qc/shops/${encodeURIComponent(shopId)}/policy`,
+        {
+          method: 'PUT',
+          token,
+          body: {
+            enabled: policy.enabled,
+            mode: policy.mode,
+            maxSegmentDurationSec: policy.maxSegmentDurationSec,
+            silenceToStopSec: policy.silenceToStopSec,
+            preRollSec: policy.preRollSec,
+            uploadImmediately: policy.uploadImmediately,
+          },
+        },
+      )).policy,
+    recordings: async (token: string, filters: {
+      shopId?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+      offset?: number;
+    } = {}): Promise<AudioQcRecordingsPage> =>
+      ruRequest<AudioQcRecordingsPage>(
+        `/api/audio-qc/recordings${query({
+          shopId: filters.shopId,
+          from: filters.from,
+          to: filters.to,
+          limit: String(filters.limit ?? 25),
+          offset: String(filters.offset ?? 0),
+        })}`,
+        { token },
+      ),
+  },
+  qualityControl: {
+    session: async (token: string, sessionId: string) =>
+      (await ruRequest<{ session: QcSession }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}`, { token })).session,
+    status: async (token: string, sessionId: string) =>
+      ruRequest<QcStatus>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/status`, { token }),
+    transcript: async (token: string, sessionId: string) =>
+      ruRequest<QcTranscript>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/transcript`, { token }),
+    analysis: async (token: string, sessionId: string) =>
+      (await ruRequest<{ analysis: QcAnalysis }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/analysis`, { token })).analysis,
+    audioInfo: async (token: string, sessionId: string) =>
+      (await ruRequest<{ audio: QcAudioInfo }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/audio-info`, { token })).audio,
+    audioDownload: async (token: string, sessionId: string) =>
+      makeDownloadBlobRequest(RU_API_BASE_URL, `/api/quality-control/sessions/${encodeURIComponent(sessionId)}/audio`, token),
+    setAudioPinned: async (token: string, sessionId: string, pinned: boolean) =>
+      (await ruRequest<{ audio: QcAudioInfo }>(`/api/quality-control/sessions/${encodeURIComponent(sessionId)}/audio-retention`, {
+        method: 'PUT', token, body: { pinned },
+      })).audio,
+    overview: async (token: string, filters: { shopId?: string; from?: string; to?: string }) =>
+      ruRequest<QcOverview>(`/api/quality-control/analytics/overview${query(filters)}`, { token }),
+    trends: async (token: string, filters: { shopId?: string; from?: string; to?: string; interval: 'day' | 'week' | 'month' }) =>
+      ruRequest<QcTrendPoint[]>(`/api/quality-control/analytics/trends${query(filters)}`, { token }),
   },
 };

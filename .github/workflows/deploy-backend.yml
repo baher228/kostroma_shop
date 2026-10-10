@@ -16,8 +16,10 @@ on:
     branches: [main, master]
     paths:
       - '.github/workflows/deploy-backend.yml'
+      - 'scripts/write-production-env.mjs'
       - 'docker-compose.ru.yml'
       - 'docker-compose.dubai.yml'
+      - 'ops/minio/**'
       - 'services/ru-backend/**'
       - 'services/dubai-backend/**'
       - 'services/shared/**'
@@ -32,7 +34,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     environment: production-backend
     env:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -42,12 +44,28 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       APP_PATH: ${{ secrets.APP_PATH }}
       ENV_FILE: ${{ secrets.ENV_FILE }}
+      DEPLOY_QC_ENABLED: ${{ secrets.QC_ENABLED }}
+      DEPLOY_QC_WORKER_ENABLED: ${{ secrets.QC_WORKER_ENABLED }}
+      DEPLOY_S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
+      DEPLOY_S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+      DEPLOY_S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+      DEPLOY_S3_BUCKET_AUDIO: ${{ secrets.S3_BUCKET_AUDIO }}
+      DEPLOY_S3_REGION: ${{ secrets.S3_REGION }}
+      DEPLOY_NEXARA_API_KEY: ${{ secrets.NEXARA_API_KEY }}
+      DEPLOY_GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+      DEPLOY_GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
+      DEPLOY_GIGACHAT_CA_BUNDLE_PATH: ${{ secrets.GIGACHAT_CA_BUNDLE_PATH }}
       RU_HEALTH_URL: ${{ vars.RU_HEALTH_URL }}
       DUBAI_HEALTH_URL: ${{ vars.DUBAI_HEALTH_URL }}
       REGION: ${{ inputs.region || 'all' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Preflight deployment config
         run: |
@@ -73,6 +91,10 @@ jobs:
           ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_PATH'"
           rsync -az --delete \
             --exclude '.git/' \
+            --exclude '.env' \
+            --exclude '.env*.local' \
+            --exclude '.codex/' \
+            --exclude 'email-downloading-discount/' \
             --exclude 'node_modules/' \
             --exclude '.expo/' \
             --exclude 'android/app/build/' \
@@ -84,13 +106,14 @@ jobs:
       - name: Write production env file
         run: |
           PORT="${SSH_PORT:-22}"
-          printf '%s' "$ENV_FILE" | ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && cat > .env"
+          node scripts/write-production-env.mjs "$RUNNER_TEMP/production.env"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && umask 077 && cat > .env && chmod 600 .env" < "$RUNNER_TEMP/production.env"
 
       - name: Deploy RU backend
         if: env.REGION == 'all' || env.REGION == 'ru'
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/ru-backend/Dockerfile -t analitika-backend-ru . && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-build backend-ru"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/ru-backend/Dockerfile -t analitika-backend-ru . && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/preflight.js && DOCKER_BUILDKIT=0 timeout 900 docker build -f ops/minio/Dockerfile -t analitika-minio:RELEASE.2025-10-15T17-29-55Z . && timeout 180 docker compose -f docker-compose.ru.yml --profile qc up -d --no-build --wait minio && timeout 60 docker compose -f docker-compose.ru.yml --profile qc run --rm --no-deps minio-init && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/storagePreflight.js && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-build backend-ru"
 
       - name: Smoke test RU backend
         if: (env.REGION == 'all' || env.REGION == 'ru') && vars.RU_HEALTH_URL != ''

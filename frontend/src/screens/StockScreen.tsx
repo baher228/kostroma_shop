@@ -26,6 +26,10 @@ import { FobQrCard } from '../components/FobQrCard';
 import { FobScannerPanel } from '../components/FobScannerPanel';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import { useTaskNotifications } from '../hooks/useTaskNotifications';
+import { AudioQcAdminPanel } from '../features/audioQc/AudioQcAdminPanel';
+import { AudioQcControls } from '../features/audioQc/AudioQcControls';
+import { AudioQcRecordingsList } from '../features/audioQc/AudioQcRecordingsList';
+import { AudioQcStatusBadge } from '../features/audioQc/AudioQcStatusBadge';
 import {
   DASHBOARD_COLUMNS,
   BUSINESS_CATEGORIES,
@@ -58,7 +62,7 @@ import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 import { BusinessCategoryTabs } from '../components/BusinessCategoryTabs';
 
-type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob';
+type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
 type EditingCell = {
   productId: string;
@@ -1335,8 +1339,34 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const renderContent = () => {
     if (activeTab === 'fob') {
       return (
+        <ScrollView
+          style={styles.tabContentWrap}
+          contentContainerStyle={styles.fobScrollContent}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
+          <View style={styles.fobPanelWrap}>
+            {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
+          </View>
+        </ScrollView>
+      );
+    }
+    if (activeTab === 'audioQc') {
+      return (
         <View style={styles.tabContentWrap}>
-          {isStoreTablet ? <FobScannerPanel session={session} /> : <FobQrCard token={session.token} />}
+          {canManage ? (
+            <AudioQcAdminPanel shops={shops} selectedShopId={selectedShopId} />
+          ) : (
+            <ScrollView
+              style={styles.tabContentWrap}
+              contentContainerStyle={styles.audioQcStack}
+              keyboardShouldPersistTaps="handled"
+            >
+              <AudioQcStatusBadge />
+              <AudioQcControls />
+              <AudioQcRecordingsList />
+            </ScrollView>
+          )}
         </View>
       );
     }
@@ -1401,6 +1431,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     ? [
         { key: 'stock', label: 'Остатки' },
         { key: 'orderSheet', label: 'Заказ' },
+        { key: 'audioQc', label: 'AI QC' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
         { key: 'users', label: 'Пользователи' },
@@ -1410,6 +1441,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
+        ...(isStoreTablet ? [{ key: 'audioQc' as ScreenTab, label: 'Запись' }] : []),
         ...((isWorker || isStoreTablet)
           ? [{ key: 'fob' as ScreenTab, label: isStoreTablet ? 'FOB-сканер' : 'FOB' }]
           : []),
@@ -1749,6 +1781,17 @@ const styles = StyleSheet.create({
   tabContentWrap: {
     flex: 1,
     paddingBottom: 8,
+  },
+  audioQcStack: {
+    gap: 8,
+    marginBottom: 8,
+  },
+  fobScrollContent: {
+    gap: 8,
+    paddingBottom: 16,
+  },
+  fobPanelWrap: {
+    minHeight: 520,
   },
   controls: {
     gap: 10,

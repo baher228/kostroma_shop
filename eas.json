@@ -22,6 +22,21 @@
         "EXPO_PUBLIC_DXB_API_URL": "https://affera.co.uk/dxb"
       }
     },
+    "local-apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_LOCAL_APK": "1",
+        "EXPO_LOCAL_APK_SLUG": "kostroma",
+        "EXPO_LOCAL_APK_PROJECT_ID": "531a62b9-9f92-4d40-9c41-57a6d155de00",
+        "EXPO_DISABLE_UPDATES": "1",
+        "EXPO_PUBLIC_RU_API_URL": "http://127.0.0.1:4000",
+        "EXPO_PUBLIC_DXB_API_URL": "http://127.0.0.1:4001"
+      }
+    },
     "production": {
       "channel": "production",
       "android": {

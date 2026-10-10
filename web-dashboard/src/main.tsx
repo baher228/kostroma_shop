@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
 import { Login } from './app/Login';
+import { AudioQcPanel } from './panels/audioQc/AudioQcPanel';
 import { AttendancePanel } from './panels/attendance/AttendancePanel';
 import { AppDownloadPanel } from './panels/app/AppDownloadPanel';
 import { OrdersPanel } from './panels/orders/OrdersPanel';
@@ -14,7 +15,7 @@ import { UsersPanel } from './panels/users/UsersPanel';
 import './styles.css';
 import { Session } from './types';
 
-type Section = 'overview' | 'attendance' | 'users' | 'tasks' | 'shops' | 'products' | 'orders' | 'promotions' | 'app';
+type Section = 'overview' | 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'orders' | 'promotions' | 'app';
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -72,6 +73,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
   const nav: Array<{ key: Section; label: string }> = [
     { key: 'overview', label: 'Обзор' },
     { key: 'attendance', label: 'Посещаемость' },
+    { key: 'audioQc', label: 'AI QC' },
     { key: 'users', label: 'Пользователи' },
     { key: 'tasks', label: 'Задачи' },
     { key: 'shops', label: 'Магазины' },
@@ -105,6 +107,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
       <main className={section === 'products' ? 'content stock-content' : 'content'}>
         {section === 'overview' && <OverviewPanel session={session} setSection={setSection} />}
         {section === 'attendance' && <AttendancePanel session={session} />}
+        {section === 'audioQc' && <AudioQcPanel session={session} />}
         {section === 'users' && <UsersPanel session={session} />}
         {section === 'tasks' && <TasksPanel session={session} />}
         {section === 'shops' && <ShopsPanel session={session} />}

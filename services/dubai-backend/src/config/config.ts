@@ -15,6 +15,11 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: false });
 const isProduction = process.env.NODE_ENV === 'production';
 
 const opsDatabaseUrl = trimToUndefined(process.env.OPS_DATABASE_URL || process.env.DATABASE_URL);
+const positiveInteger = (value: string | undefined, fallback: number, max: number) => {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? Math.min(number,max) : fallback;
+};
+const commaSeparated = (value: string | undefined) => [...new Set((value || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean))];
 
 export const config = {
   port: parsePort(process.env.PORT, 4000),
@@ -78,4 +83,19 @@ export const config = {
   googleApplicationCredentials: trimToUndefined(process.env.GOOGLE_APPLICATION_CREDENTIALS),
   googleServiceAccountJson: trimToUndefined(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
   googleServiceAccountJsonBase64: trimToUndefined(process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64),
+  gmailEnabled: parseBoolean(process.env.GMAIL_ENABLED, false),
+  gmailClientId: trimToUndefined(process.env.GMAIL_CLIENT_ID),
+  gmailClientSecret: trimToUndefined(process.env.GMAIL_CLIENT_SECRET),
+  gmailRedirectUri: trimToUndefined(process.env.GMAIL_REDIRECT_URI),
+  gmailTokenEncryptionKey: trimToUndefined(process.env.GMAIL_TOKEN_ENCRYPTION_KEY),
+  gmailRefreshToken: trimToUndefined(process.env.GMAIL_REFRESH_TOKEN),
+  gmailUser: trimToUndefined(process.env.GMAIL_USER) || 'me',
+  gmailQuery: trimToUndefined(process.env.GMAIL_QUERY) || 'has:attachment newer_than:30d',
+  gmailAllowedSenders: commaSeparated(process.env.GMAIL_ALLOWED_SENDERS),
+  gmailAllowedExtensions: commaSeparated(process.env.GMAIL_ALLOWED_EXTENSIONS || '.pdf,.xlsx,.xls,.csv'),
+  gmailPollIntervalMs: positiveInteger(process.env.GMAIL_POLL_INTERVAL_MS,60000,86400000),
+  gmailMaxMessagesPerPoll: positiveInteger(process.env.GMAIL_MAX_MESSAGES_PER_POLL,100,1000),
+  gmailMaxRetries: positiveInteger(process.env.GMAIL_MAX_RETRIES,3,20),
+  gmailMaxAttachmentBytes: positiveInteger(process.env.GMAIL_MAX_ATTACHMENT_BYTES,25 * 1024 * 1024,25 * 1024 * 1024),
+  gmailGlobalDedupeByHash: parseBoolean(process.env.GMAIL_GLOBAL_DEDUPE_BY_HASH,false),
 };

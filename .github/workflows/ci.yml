@@ -9,6 +9,18 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      email-postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: email_ci
+          POSTGRES_PASSWORD: ci-email-password
+          POSTGRES_DB: analitika_email_pipeline_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U email_ci -d analitika_email_pipeline_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       JWT_SECRET: ci-jwt-secret
       OPS_JWT_SECRET: ci-ops-jwt-secret
@@ -50,6 +62,11 @@ jobs:
 
       - name: Validate deployment env generation
         run: node --test scripts/write-production-env.test.mjs
+
+      - name: Verify Gmail import and OAuth persistence on PostgreSQL
+        env:
+          PROMOTION_SMOKE_DATABASE_URL: postgresql://email_ci:ci-email-password@127.0.0.1:5432/analitika_email_pipeline_test
+        run: node services/dubai-backend/tests/promotion-pipeline.postgres-smoke.js
 
       - name: Check Expo app config safety
         run: npm run security:check-app-config

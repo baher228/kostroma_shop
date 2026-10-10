@@ -5,7 +5,7 @@ import {
 import { upsertPromotionDocumentRows } from '../repositories/promotionRowsRepository';
 import { matchPromotionProduct } from './promotionProductMatcher';
 
-type ParsedInvoiceItem = {
+export type ParsedInvoiceItem = {
   rawName: string;
   promoPrice: number;
   sourceLineText: string;
@@ -109,10 +109,41 @@ const extractPdfText = async (buffer: Buffer) => {
   const parser = new PDFParse({ data: Buffer.from(buffer) as unknown as Uint8Array });
   try {
     const result = await parser.getText();
-    return result.text;
+    // Combined text includes pdf-parse's page-number joiners even for an
+    // image-only page. Inspect actual page text to diagnose no_text_layer.
+    return result.pages.map((page) => page.text).join('\n');
   } finally {
     await parser.destroy?.();
   }
+};
+
+export class PromotionInvoiceRecognitionError extends Error {
+  constructor(readonly reason: 'no_text_layer' | 'invoice_structure_not_recognized' | 'invalid_pdf', message: string) {
+    super(message);
+    this.name = 'PromotionInvoiceRecognitionError';
+  }
+}
+
+export const parsePromotionInvoiceText = (text: string) => {
+  if (!text.trim()) throw new PromotionInvoiceRecognitionError('no_text_layer', 'no_text_layer: PDF не содержит текстового слоя.');
+  try {
+    return { period: extractPeriod(text), items: extractRecommendedPriceItems(text) };
+  } catch (error) {
+    throw new PromotionInvoiceRecognitionError('invoice_structure_not_recognized', error instanceof Error ? error.message : 'Структура накладной не распознана.');
+  }
+};
+
+export const parsePromotionInvoice = async (buffer: Buffer) => {
+  if (buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+    throw new PromotionInvoiceRecognitionError('invalid_pdf', 'Файл не является PDF.');
+  }
+  let text: string;
+  try {
+    text = await extractPdfText(buffer);
+  } catch {
+    throw new PromotionInvoiceRecognitionError('invalid_pdf', 'Не удалось прочитать PDF.');
+  }
+  return parsePromotionInvoiceText(text);
 };
 
 export const importPromotionInvoice = async (input: {
@@ -120,9 +151,7 @@ export const importPromotionInvoice = async (input: {
   sourceDocumentId: string;
   sourceFileName: string;
 }) => {
-  const text = await extractPdfText(input.buffer);
-  const period = extractPeriod(text);
-  const parsedItems = extractRecommendedPriceItems(text);
+  const { period, items: parsedItems } = await parsePromotionInvoice(input.buffer);
   const priceListItems = await listPromotionPriceListItems();
   const status = statusForPeriod(period.startDate, period.endDate);
 

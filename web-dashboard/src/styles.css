@@ -1922,13 +1922,15 @@ td.sticky {
 
 .promotions-toolbar {
   display: grid;
-  grid-template-columns: 220px minmax(240px, 1fr) 180px auto;
+  grid-template-columns: 170px auto minmax(180px, 1fr) 160px auto;
   gap: 10px;
   align-items: center;
 }
 
 .promotions-documents-button {
-  width: 220px;
+  width: 170px;
+  min-height: 52px;
+  font-size: 18px;
 }
 
 .promotions-table-scroll {
@@ -2233,19 +2235,19 @@ td.sticky {
 
 .documents-download-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px 116px;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: end;
   gap: 10px;
 }
 
 .documents-download-button,
 .documents-delete-button {
-  width: 132px;
+  width: auto;
   min-height: 42px;
 }
 
 .documents-delete-button {
-  width: 116px;
+  width: auto;
 }
 
 .documents-loading {
@@ -4157,4 +4159,257 @@ input[type='datetime-local'] {
   min-width: 150px;
   max-width: 190px;
   overflow-wrap: anywhere;
+}
+
+.document-preview-backdrop {
+  z-index: 30;
+}
+
+.modal-card.document-preview-card {
+  width: min(90vw, 1500px);
+  height: 90dvh;
+  max-height: calc(100dvh - 36px);
+  gap: 12px;
+}
+
+.document-preview-card > header {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.document-preview-card h3 {
+  overflow-wrap: anywhere;
+  flex: 1;
+  min-width: 180px;
+}
+
+.document-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.document-preview-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  gap: 10px;
+}
+
+.document-preview-content iframe {
+  flex: 1;
+  min-height: 180px;
+  width: 100%;
+  border: 1px solid #c8d2cb;
+  border-radius: 6px;
+  background: #f4f6f3;
+}
+
+.document-preview-content > a {
+  color: #245d43;
+  font-size: 13px;
+}
+
+.document-table-preview {
+  display: grid;
+  gap: 18px;
+}
+
+.document-table-preview td {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  vertical-align: top;
+  min-width: 90px;
+}
+
+.document-table-preview h4 {
+  margin: 0 0 8px;
+}
+
+.batch-price-tags-form,
+.batch-selection,
+.gmail-import-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.batch-scopes {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  border: 1px solid #c8d2cb;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.batch-scopes label,
+.batch-selection-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.batch-scopes input,
+.batch-selection-list input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: #245d43;
+}
+
+.batch-date-range,
+.gmail-health-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.batch-hint {
+  margin: 0;
+  color: #52645a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.batch-selection-list {
+  display: grid;
+  gap: 12px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #d5ded8;
+  border-radius: 6px;
+}
+
+.batch-selection-list small {
+  display: block;
+  color: #52645a;
+  font-weight: 400;
+  margin-top: 4px;
+}
+
+.batch-selection-actions,
+.gmail-status-heading,
+.gmail-import-list li > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.batch-count {
+  margin: 0;
+  font-weight: 700;
+}
+
+.gmail-status-heading h4,
+.gmail-connection-status,
+.gmail-health-details {
+  margin: 0;
+}
+
+.gmail-connection-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 700;
+}
+
+.gmail-health-details dt {
+  font-size: 13px;
+  color: #52645a;
+}
+
+.gmail-health-details dd {
+  margin: 4px 0 0;
+}
+
+.gmail-import-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.gmail-import-list li {
+  border-top: 1px solid #d5ded8;
+  padding-top: 10px;
+  overflow-wrap: anywhere;
+}
+
+.gmail-import-list small {
+  display: block;
+  margin-top: 5px;
+  color: #52645a;
+}
+
+.gmail-import-list li > p {
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.gmail-import-status {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gmail-import-status.success {
+  color: #245d43;
+}
+
+.gmail-import-status.failed {
+  color: #9f3c34;
+}
+
+@media (max-width: 1100px) {
+  .promotions-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .promotions-toolbar .search-field {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .modal-card.document-preview-card {
+    width: 100%;
+    height: calc(100dvh - 24px);
+    padding: 12px;
+  }
+
+  .document-preview-backdrop {
+    padding: 12px;
+  }
+
+  .document-preview-actions {
+    width: 100%;
+  }
+
+  .document-preview-actions button {
+    flex: 1;
+  }
+
+  .documents-download-row,
+  .promotions-toolbar,
+  .batch-date-range,
+  .gmail-health-details {
+    grid-template-columns: 1fr;
+  }
+
+  .promotions-documents-button {
+    width: 100%;
+  }
+}
+.gmail-connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

@@ -111,7 +111,7 @@ export const upsertPromotionPriceListItems = async (items: PromotionPriceListIte
       await client.query('COMMIT');
       return items.length;
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     }
   });

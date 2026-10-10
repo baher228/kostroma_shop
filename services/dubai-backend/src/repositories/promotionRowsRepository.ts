@@ -554,7 +554,7 @@ export const upsertPromotionDocumentRows = async (
       await client.query('COMMIT');
       return saved;
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     }
   });
@@ -608,7 +608,7 @@ export const updatePromotionRowByNumber = async (rowNumber: number, input: Promo
       await client.query('COMMIT');
       return mapRow(result.rows[0]);
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     }
   });

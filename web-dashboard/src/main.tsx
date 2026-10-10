@@ -69,7 +69,7 @@ const App = () => {
 };
 
 const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => void }) => {
-  const [section, setSection] = useState<Section>('overview');
+  const [section, setSection] = useState<Section>(() => new URLSearchParams(window.location.search).has('gmail') ? 'promotions' : 'overview');
   const nav: Array<{ key: Section; label: string }> = [
     { key: 'overview', label: 'Обзор' },
     { key: 'attendance', label: 'Посещаемость' },

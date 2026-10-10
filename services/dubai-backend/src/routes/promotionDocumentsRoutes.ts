@@ -10,11 +10,9 @@ import {
   getPromotionDocumentById,
   listPromotionDocuments,
 } from '../repositories/promotionDocumentsRepository';
-import { hasPromotionPriceListItems } from '../repositories/promotionPriceListRepository';
 import { listPromotionRows } from '../repositories/promotionRowsRepository';
-import { importPromotionInvoice } from '../services/promotionInvoiceImportService';
-import { importPromotionPlan } from '../services/promotionPlanImportService';
-import { importPromotionPriceList } from '../services/promotionPriceListImportService';
+import { importPromotionDocument } from '../services/promotionDocumentImportService';
+import { createPromotionCsvPreview, createPromotionDocumentPreview } from '../services/promotionDocumentPreviewService';
 import {
   PromotionDocumentFileMissingError,
   createPromotionDocumentStorageKey,
@@ -50,19 +48,6 @@ const decodeFileName = (fileName: string) => {
 const documentTypeFromRequest = (raw: unknown): PromotionDocumentType | null => {
   const value = String(raw ?? '').trim();
   return allowedTypes.has(value as PromotionDocumentType) ? value as PromotionDocumentType : null;
-};
-
-const validateUpload = (documentType: PromotionDocumentType, fileName: string) => {
-  const lower = fileName.toLowerCase();
-  if (documentType === 'invoice' && !lower.endsWith('.pdf')) {
-    throw new Error('Накладная должна быть в формате PDF.');
-  }
-  if (documentType === 'two_month_plan' && !lower.endsWith('.xlsx') && !lower.endsWith('.xls') && !lower.endsWith('.csv')) {
-    throw new Error('План на два месяца должен быть в формате Excel или CSV.');
-  }
-  if (documentType === 'retail_price_list' && !lower.endsWith('.xlsx')) {
-    throw new Error('Прайс розничных цен должен быть в формате XLSX.');
-  }
 };
 
 const csvEscape = (value: string | number | null) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -134,30 +119,15 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
           res.status(400).json({ message: 'Прикрепите файл.' });
           return;
         }
-        if (documentType === 'invoice' && !(await hasPromotionPriceListItems())) {
-          res.status(400).json({ message: 'Сначала загрузите XLSX прайс розничных цен. Без него накладная не сможет посчитать разницу и проценты акций.' });
-          return;
-        }
         const fileName = decodeFileName(req.file.originalname);
-        validateUpload(documentType, fileName);
-        const key = createPromotionDocumentStorageKey(documentType, fileName);
-        await uploadObject({ key, body: req.file.buffer, contentType: req.file.mimetype || 'application/octet-stream' });
-        const document = await createPromotionDocument({
+        const result = await importPromotionDocument({
           documentType,
           fileName,
           contentType: req.file.mimetype || 'application/octet-stream',
-          storageKey: key,
-          sizeBytes: req.file.size,
+          buffer: req.file.buffer,
           uploadedBy: uploadedBy(req),
         });
-        const importResult = documentType === 'retail_price_list'
-          ? await importPromotionPriceList({ buffer: req.file.buffer, sourceDocumentId: document.id, sourceFileName: fileName })
-          : documentType === 'invoice'
-            ? await importPromotionInvoice({ buffer: req.file.buffer, sourceDocumentId: document.id, sourceFileName: fileName })
-            : documentType === 'two_month_plan'
-              ? await importPromotionPlan({ buffer: req.file.buffer, sourceDocumentId: document.id, sourceFileName: fileName })
-              : null;
-        res.status(201).json({ document, import: importResult });
+        res.status(201).json(result);
       } catch (error) {
         res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось прикрепить документ.' });
       }
@@ -180,6 +150,39 @@ export const registerPromotionDocumentRoutes = (app: Express) => {
       res.send(body);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ РёС‚РѕРіРѕРІСѓСЋ С‚Р°Р±Р»РёС†Сѓ.' });
+    }
+  });
+
+  app.get('/api/promotions/documents/final-table/preview', async (_req: Request, res: Response) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.json(createPromotionCsvPreview(await buildFinalTableCsv(), 'Итоговая таблица'));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось открыть итоговую таблицу.' });
+    }
+  });
+
+  app.get('/api/promotions/documents/:documentId/preview', async (req: Request, res: Response) => {
+    try {
+      const document = await getPromotionDocumentById(String(req.params.documentId ?? '').trim());
+      if (!document) {
+        res.status(404).json({ message: 'Документ не найден.' });
+        return;
+      }
+      const file = await downloadPromotionDocument(document);
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      if (document.documentType === 'invoice' || /\.pdf$/i.test(document.fileName)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Length', String(file.body.byteLength));
+        res.setHeader('Content-Disposition', contentDisposition(document.fileName).replace(/^attachment/, 'inline'));
+        res.send(file.body);
+        return;
+      }
+      res.json(await createPromotionDocumentPreview(document.fileName, file.body));
+    } catch (error) {
+      res.status(error instanceof PromotionDocumentFileMissingError ? 404 : 400).json({
+        message: error instanceof Error ? error.message : 'Не удалось открыть документ.',
+      });
     }
   });
 

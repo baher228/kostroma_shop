@@ -11,6 +11,9 @@ const TEMPLATE_WIDTH = 1181;
 const TEMPLATE_HEIGHT = 1358;
 const PAGE_WIDTH_PT = 100 / 25.4 * 72;
 const PAGE_HEIGHT_PT = 115 / 25.4 * 72;
+const A4_WIDTH_PT = 210 / 25.4 * 72;
+const A4_HEIGHT_PT = 297 / 25.4 * 72;
+const SHEET_GAP_PT = 2 / 25.4 * 72;
 const WHITE = '#ffffff';
 const STRIKE_COLOR = '#985dff';
 
@@ -617,37 +620,75 @@ const pdfObject = (id: number, body: string | Buffer) => ({
   content: Buffer.isBuffer(body) ? body : Buffer.from(body, 'binary'),
 });
 
-const buildPdf = (image: PromotionPriceTagImage) => {
-  const compressedRgb = zlib.deflateSync(image.rgb, { level: 9 });
+type PdfImagePlacement = {
+  render: () => PromotionPriceTagImage;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type PriceTagPdfPage = {
+  width: number;
+  height: number;
+  images: PdfImagePlacement[];
+};
+
+// Single tags and print sheets share the same PDF image/stream encoding. Images
+// are rendered and compressed one at a time so a batch does not retain all RGB
+// rasters (about 4.8 MB per tag) in memory.
+const buildPdf = (pages: PriceTagPdfPage[]) => {
   const objects = [
     pdfObject(1, '<< /Type /Catalog /Pages 2 0 R >>\n'),
-    pdfObject(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>\n'),
-    pdfObject(
-      3,
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH_PT.toFixed(2)} ${PAGE_HEIGHT_PT.toFixed(2)}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\n`,
-    ),
-    pdfObject(
-      4,
-      Buffer.concat([
+    pdfObject(2, ''),
+  ];
+  const addObject = (body: string | Buffer) => {
+    const objectId = objects.length + 1;
+    objects.push(pdfObject(objectId, body));
+    return objectId;
+  };
+  const pageIds: number[] = [];
+  for (const page of pages) {
+    const pageId = addObject('');
+    pageIds.push(pageId);
+    const imageReferences: string[] = [];
+    const drawingCommands: string[] = [];
+    for (const [index, placement] of page.images.entries()) {
+      const image = placement.render();
+      const compressedRgb = zlib.deflateSync(image.rgb, { level: 9 });
+      const imageId = addObject(Buffer.concat([
         Buffer.from(
           `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${compressedRgb.length} >>\nstream\n`,
           'binary',
         ),
         compressedRgb,
         Buffer.from('\nendstream\n', 'binary'),
-      ]),
-    ),
-  ];
-  const content = `q\n${PAGE_WIDTH_PT.toFixed(2)} 0 0 ${PAGE_HEIGHT_PT.toFixed(2)} 0 0 cm\n/Im0 Do\nQ\n`;
-  objects.push(pdfObject(5, `<< /Length ${Buffer.byteLength(content, 'binary')} >>\nstream\n${content}endstream\n`));
+      ]));
+      imageReferences.push(`/Im${index} ${imageId} 0 R`);
+      drawingCommands.push(
+        `q\n${placement.width.toFixed(2)} 0 0 ${placement.height.toFixed(2)} ${placement.x.toFixed(2)} ${placement.y.toFixed(2)} cm\n/Im${index} Do\nQ\n`,
+      );
+    }
+    const content = drawingCommands.join('');
+    const contentId = addObject(`<< /Length ${Buffer.byteLength(content, 'binary')} >>\nstream\n${content}endstream\n`);
+    objects[pageId - 1] = pdfObject(
+      pageId,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width.toFixed(2)} ${page.height.toFixed(2)}] /Resources << /XObject << ${imageReferences.join(' ')} >> >> /Contents ${contentId} 0 R >>\n`,
+    );
+  }
+  objects[1] = pdfObject(2, `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>\n`);
 
   const chunks: Buffer[] = [Buffer.from('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n', 'binary')];
   const offsets = [0];
+  let byteOffset = chunks[0].length;
   for (const object of objects) {
-    offsets[object.id] = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    chunks.push(Buffer.from(`${object.id} 0 obj\n`, 'binary'), object.content, Buffer.from('endobj\n', 'binary'));
+    offsets[object.id] = byteOffset;
+    const objectHeader = Buffer.from(`${object.id} 0 obj\n`, 'binary');
+    const objectFooter = Buffer.from('endobj\n', 'binary');
+    chunks.push(objectHeader, object.content, objectFooter);
+    byteOffset += objectHeader.length + object.content.length + objectFooter.length;
   }
-  const xrefOffset = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const xrefOffset = byteOffset;
   chunks.push(Buffer.from([
     'xref',
     `0 ${objects.length + 1}`,
@@ -663,8 +704,14 @@ const buildPdf = (image: PromotionPriceTagImage) => {
   return Buffer.concat(chunks);
 };
 
+const buildSinglePriceTagPdf = (render: () => PromotionPriceTagImage) => buildPdf([{
+  width: PAGE_WIDTH_PT,
+  height: PAGE_HEIGHT_PT,
+  images: [{ render, x: 0, y: 0, width: PAGE_WIDTH_PT, height: PAGE_HEIGHT_PT }],
+}]);
+
 export const createPromotionPriceTagPdfFromPsd = (psdBuffer: Buffer, row: PromotionTableRow) =>
-  buildPdf(renderPromotionPriceTagImageFromPsd(psdBuffer, row));
+  buildSinglePriceTagPdf(() => renderPromotionPriceTagImageFromPsd(psdBuffer, row));
 
 export const promotionPriceTagFileName = (row: PromotionTableRow) => {
   const period = priceTagPeriod(row);
@@ -683,4 +730,26 @@ export const promotionPriceTagContentDisposition = (row: PromotionTableRow) => {
 };
 
 export const createPromotionPriceTagPdf = (row: PromotionTableRow): Buffer =>
-  buildPdf(renderPromotionPriceTagImage(loadPromotionPriceTagTemplate(), row));
+  buildSinglePriceTagPdf(() => renderPromotionPriceTagImage(loadPromotionPriceTagTemplate(), row));
+
+export const createPromotionPriceTagSheetPdf = (rows: readonly PromotionTableRow[]): Buffer => {
+  if (!rows.length) throw new Error('Нет акций для печати ценников.');
+  const template = loadPromotionPriceTagTemplate();
+  const pages: PriceTagPdfPage[] = [];
+  const left = (A4_WIDTH_PT - PAGE_WIDTH_PT * 2 - SHEET_GAP_PT) / 2;
+  const bottom = (A4_HEIGHT_PT - PAGE_HEIGHT_PT * 2 - SHEET_GAP_PT) / 2;
+  for (let offset = 0; offset < rows.length; offset += 4) {
+    pages.push({
+      width: A4_WIDTH_PT,
+      height: A4_HEIGHT_PT,
+      images: rows.slice(offset, offset + 4).map((row, index) => ({
+        render: () => renderPromotionPriceTagImage(template, row),
+        x: left + (index % 2) * (PAGE_WIDTH_PT + SHEET_GAP_PT),
+        y: bottom + (1 - Math.floor(index / 2)) * (PAGE_HEIGHT_PT + SHEET_GAP_PT),
+        width: PAGE_WIDTH_PT,
+        height: PAGE_HEIGHT_PT,
+      })),
+    });
+  }
+  return buildPdf(pages);
+};

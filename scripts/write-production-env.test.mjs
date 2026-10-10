@@ -14,13 +14,16 @@ test('deployment preserves ENV_FILE and overrides configured settings, including
       ENV_FILE: 'PERSONAL_POSTGRES_PASSWORD=test-db\nJWT_SECRET=test-jwt\nOPS_JWT_SECRET=test-ops\nCORS_ORIGIN=https://example.com\nQC_ENABLED=false\nS3_SECRET_KEY=old-value\nS3_BUCKET_AUDIO=preserved-bucket\n',
       DEPLOY_PERSONAL_POSTGRES_PASSWORD: credential,
       DEPLOY_CORS_ORIGIN: 'https://affera.co.uk', DEPLOY_QC_ENABLED: 'true', DEPLOY_S3_SECRET_KEY: credential, DEPLOY_S3_BUCKET_AUDIO: '',
+      DEPLOY_GMAIL_CLIENT_SECRET: credential,DEPLOY_GMAIL_ENABLED: 'true',
     };
     for (const key of Object.keys(env)) {
-      if (key.startsWith('DEPLOY_') && !['DEPLOY_PERSONAL_POSTGRES_PASSWORD', 'DEPLOY_CORS_ORIGIN', 'DEPLOY_QC_ENABLED', 'DEPLOY_S3_SECRET_KEY', 'DEPLOY_S3_BUCKET_AUDIO'].includes(key)) delete env[key];
+      if (key.startsWith('DEPLOY_') && !['DEPLOY_PERSONAL_POSTGRES_PASSWORD', 'DEPLOY_CORS_ORIGIN', 'DEPLOY_QC_ENABLED', 'DEPLOY_S3_SECRET_KEY', 'DEPLOY_S3_BUCKET_AUDIO', 'DEPLOY_GMAIL_CLIENT_SECRET', 'DEPLOY_GMAIL_ENABLED'].includes(key)) delete env[key];
     }
     const output = execFileSync(process.execPath, ['scripts/write-production-env.mjs', file], { env, encoding: 'utf8' });
     assert.equal(output, '', 'the env writer must not print credentials');
     assert.ok(readFileSync(file, 'utf8').startsWith(env.ENV_FILE));
+    assert.ok(readFileSync(file, 'utf8').includes(`GMAIL_CLIENT_SECRET=${JSON.stringify(credential).replace(/\$/gu, () => '$$')}`));
+    assert.ok(readFileSync(file, 'utf8').includes('GMAIL_ENABLED="true"'));
     const composeEnv = { ...process.env };
     for (const key of ['PERSONAL_POSTGRES_PASSWORD', 'CORS_ORIGIN', 'QC_ENABLED', 'S3_SECRET_KEY', 'S3_BUCKET_AUDIO']) delete composeEnv[key];
     const config = JSON.parse(execFileSync('docker', ['compose', '--env-file', file, '-f', 'docker-compose.ru.yml',

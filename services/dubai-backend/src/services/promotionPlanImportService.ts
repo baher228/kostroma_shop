@@ -251,13 +251,18 @@ const parseCsv = (buffer: Buffer) => {
   );
 };
 
+export const parsePromotionPlan = async (buffer: Buffer, fileName: string) => {
+  const items = fileName.toLowerCase().endsWith('.csv') ? parseCsv(buffer) : await parseXlsx(buffer);
+  if (!items.length) throw new Error('В плане не найдено ни одной акционной позиции.');
+  return items;
+};
+
 export const importPromotionPlan = async (input: {
   buffer: Buffer;
   sourceDocumentId: string;
   sourceFileName: string;
 }) => {
-  const lowerName = input.sourceFileName.toLowerCase();
-  const parsedItems = lowerName.endsWith('.csv') ? parseCsv(input.buffer) : await parseXlsx(input.buffer);
+  const parsedItems = await parsePromotionPlan(input.buffer, input.sourceFileName);
   const priceListItems = await listPromotionPriceListItems();
 
   const rows = await upsertPromotionDocumentRows(parsedItems.map((item) => {

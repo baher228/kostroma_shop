@@ -29,6 +29,8 @@ const minimumPosterMatchScore = 0.75;
 export const POSTER_NOT_READY_MESSAGE = 'Такой постер ещё не сделали.';
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
+const psdListingCache = new Map<string, { expiresAt: number; promise: Promise<DrivePosterFile[]> }>();
+const psdListingCacheTtlMs = 120_000;
 
 const base64Url = (input: Buffer | string) =>
   Buffer.from(input)
@@ -152,9 +154,28 @@ const listPosterFilesByQuery = async (mimeQuery: string, folderId = config.googl
 };
 
 export const listPosterPsdFiles = async (folderId = config.googleDrivePostersFolderId): Promise<DrivePosterFile[]> => {
-  const mimeQuery = psdMimeTypes.map((mimeType) => `mimeType = '${mimeType}'`).join(' or ');
-  const files = await listPosterFilesByQuery(mimeQuery, folderId);
-  return files.filter((file) => file.name.toLowerCase().endsWith('.psd') || psdMimeTypes.includes(file.mimeType));
+  if (!folderId) throw new Error('GOOGLE_DRIVE_POSTERS_FOLDER_ID is not configured.');
+  const cached = psdListingCache.get(folderId);
+  if (cached && cached.expiresAt > Date.now()) return [...await cached.promise];
+  const entry = {
+    expiresAt: Number.POSITIVE_INFINITY,
+    promise: (async () => {
+      const mimeQuery = psdMimeTypes.map((mimeType) => `mimeType = '${mimeType}'`).join(' or ');
+      const files = await listPosterFilesByQuery(mimeQuery, folderId);
+      return files.filter((file) => file.name.toLowerCase().endsWith('.psd') || psdMimeTypes.includes(file.mimeType));
+    })(),
+  };
+  // Concurrent card previews share the same request; only successful listings
+  // are cached, and errors are retried on the next user action.
+  psdListingCache.set(folderId, entry);
+  try {
+    const files = await entry.promise;
+    entry.expiresAt = Date.now() + psdListingCacheTtlMs;
+    return [...files];
+  } catch (error) {
+    if (psdListingCache.get(folderId) === entry) psdListingCache.delete(folderId);
+    throw error;
+  }
 };
 
 export const selectPosterFileForProduct = (productName: string, files: DrivePosterFile[]) => {

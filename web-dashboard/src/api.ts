@@ -19,6 +19,11 @@ import {
   PromotionDocumentType,
   PromotionRowPayload,
   PromotionTableRow,
+  PromotionTablePreview,
+  PromotionBatchRequest,
+  PromotionOutputs,
+  GmailHealth,
+  GmailImport,
   SellerOrder,
   Session,
   SessionUser,
@@ -37,6 +42,7 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   token?: string;
   body?: unknown;
+  timeoutMs?: number;
 };
 
 type CachedOpsToken = {
@@ -71,9 +77,9 @@ const parseJwtExp = (token: string): number => {
   }
 };
 
-const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Response> => {
+const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> => {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(url, { ...init, signal: controller.signal });
@@ -96,7 +102,7 @@ const makeRequest = async <T>(baseUrl: string, path: string, options: RequestOpt
       ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  }, options.timeoutMs);
 
   const text = await response.text();
   const parsed = text
@@ -165,22 +171,33 @@ const makeDownloadBlobRequest = async (
   path: string,
   bearerToken: string,
   selectedDocumentFileName?: string,
-): Promise<{ blob: Blob; fileName: string }> => {
+  options: Pick<RequestOptions, 'method' | 'body'> = {},
+): Promise<{ blob: Blob; fileName: string; count: number | null; skippedCount: number | null; pageCount: number | null }> => {
   const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method ?? 'GET',
     cache: 'no-store',
     headers: {
       Accept: '*/*',
       Authorization: `Bearer ${bearerToken}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     },
+    body: options.body ? JSON.stringify(options.body) : undefined,
   });
   if (!response.ok) {
     const parsed = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new ApiError(parsed?.message || 'Request failed.', response.status);
   }
   const disposition = response.headers.get('Content-Disposition') || '';
+  const numberHeader = (name: string) => {
+    const value = response.headers.get(name);
+    return value !== null && Number.isFinite(Number(value)) ? Number(value) : null;
+  };
   return {
     blob: await response.blob(),
     fileName: downloadFileName(disposition, response.headers.get('Content-Type'), selectedDocumentFileName),
+    count: numberHeader('X-Price-Tags-Count'),
+    skippedCount: numberHeader('X-Price-Tags-Skipped-Count'),
+    pageCount: numberHeader('X-Price-Tags-Page-Count'),
   };
 };
 
@@ -241,15 +258,18 @@ const dxbBlobRequest = async (path: string, token: string) => {
   }
 };
 
-const dxbDownloadBlobRequest = async (path: string, token: string, selectedDocumentFileName?: string) => {
+const dxbDownloadBlobRequest = async (
+  path: string, token: string, selectedDocumentFileName?: string,
+  options: Pick<RequestOptions, 'method' | 'body'> = {},
+) => {
   try {
     const opsToken = await fetchOpsToken(token);
-    return await makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken, selectedDocumentFileName);
+    return await makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken, selectedDocumentFileName, options);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       opsTokenCache.delete(token);
       const opsToken = await fetchOpsToken(token);
-      return makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken, selectedDocumentFileName);
+      return makeDownloadBlobRequest(DXB_API_BASE_URL, path, opsToken, selectedDocumentFileName, options);
     }
     throw error;
   }
@@ -378,6 +398,16 @@ export const api = {
       (await dxbRequest<{ order: SellerOrder }>(`/api/orders/${orderId}/status`, { method: 'PATCH', token, body: { status } })).order,
   },
   promotions: {
+    connectGmail: async (token: string) =>
+      dxbRequest<{ authorizationUrl: string }>('/api/promotions/gmail/connect', { method: 'POST', token }),
+    disconnectGmail: async (token: string) =>
+      dxbRequest<{ ok: boolean }>('/api/promotions/gmail/disconnect', { method: 'POST', token }),
+    gmailImports: async (token: string) =>
+      dxbRequest<{ imports: GmailImport[]; health: GmailHealth }>('/api/promotions/gmail/imports?limit=10', { token }),
+    pollGmail: async (token: string) =>
+      dxbRequest<{ health: GmailHealth; result: { messages: number; attachments: number; imported: number; skipped: number; failed: number } }>(
+        '/api/promotions/gmail/poll', { method: 'POST', token, timeoutMs: 10 * 60_000 },
+      ),
     rows: async (token: string) =>
       (await dxbRequest<{ rows: PromotionTableRow[] }>('/api/promotions/rows', { token })).rows,
     rowByNumber: async (token: string, rowNumber: number) =>
@@ -401,6 +431,14 @@ export const api = {
       (await dxbRequest<{ document: PromotionDocument }>('/api/promotions/documents/final-table', { method: 'POST', token })).document,
     downloadFinalTableCsv: async (token: string) =>
       dxbBlobRequest('/api/promotions/documents/final-table/download', token),
+    previewFinalTable: async (token: string) =>
+      dxbRequest<PromotionTablePreview>('/api/promotions/documents/final-table/preview', { token }),
+    previewDocument: async (token: string, documentId: string) =>
+      dxbRequest<PromotionTablePreview>(`/api/promotions/documents/${encodeURIComponent(documentId)}/preview`, { token }),
+    outputs: async (token: string, rowNumber: number) =>
+      dxbRequest<PromotionOutputs>(`/api/promotions/rows/by-number/${rowNumber}/outputs`, { token }),
+    batchPriceTags: async (token: string, payload: PromotionBatchRequest) =>
+      dxbDownloadBlobRequest('/api/promotions/price-tags/batch.pdf', token, undefined, { method: 'POST', body: payload }),
     downloadPriceTagPdf: async (token: string, rowNumber: number) =>
       dxbDownloadBlobRequest(`/api/promotions/rows/by-number/${rowNumber}/price-tag.pdf`, token),
     downloadGeneratedPosterPdf: async (token: string, rowNumber: number) =>

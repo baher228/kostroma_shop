@@ -13,6 +13,10 @@ existing objects. Keep those credentials stable across deployments.
 `ops/minio/Dockerfile` builds MinIO `RELEASE.2025-10-15T17-29-55Z` and mc
 `RELEASE.2025-08-13T08-35-41Z` from the pinned official Go modules. This avoids
 the withdrawn Docker Hub/Quay images. CI verifies the same image build.
+After bucket initialization, deployment runs `storagePreflight.js` to verify
+object write/read/delete with the actual backend credentials before replacing
+RU backend. It removes its uniquely named healthcheck object, touches no DB,
+and makes no AI calls. CI runs the same check against a disposable MinIO.
 
 The deployment source is GitHub Environment `production-backend`, secret
 `ENV_FILE` (the complete backend `.env` file). Nonempty individual Environment

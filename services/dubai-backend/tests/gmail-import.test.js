@@ -142,12 +142,36 @@ test('XLSX classifier recognizes price list and plan, rejects invalid and ambigu
   assert.equal((await classifyPromotionAttachment('binary.csv',Buffer.from([0,1,2]))).documentType,null);
 });
 test('same message and duplicate MIME attachment import once across100polls and new service restart', async () => {
-  const m=message(); m.payload.parts.push(m.payload.parts[0]);
+  const m=message(); m.payload.parts[0].partId='1'; m.payload.parts.push(m.payload.parts[0]);
   const h=harness({ messages: [m,m] });
   for (let i=0;i<100;i++) await h.service.poll();
   await new GmailService(h.client,h.options).poll();
   assert.equal(h.imports.length,1); assert.equal(h.repository.records.size,1);
   assert.equal(h.downloads.length,2); // classification + import; terminal polls download nothing.
+});
+
+test('rotating Gmail download IDs preserve MIME identity across polls and restart without global hash dedupe', async () => {
+  for (const partId of ['1', undefined]) {
+    const m=message(); m.payload.parts[0].partId=partId;
+    const h=harness({ messages: [m],settings: { globalDedupe: false } });
+    for (let i=0;i<5;i++) {
+      m.payload.parts[0].body.attachmentId=`download-${i}`;
+      await new GmailService(h.client,h.options).poll();
+    }
+    assert.equal(h.imports.length,1);
+    assert.equal(h.repository.records.size,1);
+    assert.deepEqual(h.downloads,['download-0','download-0']);
+  }
+});
+
+test('distinct MIME parts with identical names and bytes remain independent without global hash dedupe', async () => {
+  for (const partIds of [['1','2'],[undefined,undefined]]) {
+    const m=message();
+    m.payload.parts=partIds.map((partId) => ({ ...m.payload.parts[0],partId }));
+    const h=harness({ messages: [m],settings: { globalDedupe: false } });
+    assert.equal((await h.service.poll()).imported,2);
+    assert.equal(h.repository.records.size,2);
+  }
 });
 test('inline body.data imports through same service after releasing preparation payload', async () => {
   const m=message(); m.payload.parts[0].body={ data: plan.toString('base64url'),size: plan.length };

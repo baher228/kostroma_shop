@@ -49,16 +49,19 @@ const main = async () => {
     { filename: 'план.csv', mimeType: 'text/csv', body: { attachmentId: 'plan', size: plan.length } },
     { filename: 'прайс.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: { attachmentId: 'price', size: price.length } },
   ];
+  attachments.forEach((part,index) => { part.partId=String(index+1); });
+  let downloadEpoch=0;
+  let downloads=0;
   const client = {
     listMessages: async () => ({ messages: [{ id: messageId }, { id: messageId }] }),
     getMessage: async () => ({
       internalDate: String(Date.now()),
-      payload: { headers: [{ name: 'From', value: 'Allowed <allowed@example.com>' }, { name: 'Subject', value: '' }], parts: [{ parts: attachments }] },
+      payload: { headers: [{ name: 'From', value: 'Allowed <allowed@example.com>' }, { name: 'Subject', value: '' }], parts: [{ parts: attachments.map((part) => ({ ...part,body: { ...part.body,attachmentId: `${downloadEpoch}:${part.body.attachmentId}` } })) }] },
     }),
-    getAttachment: async (_id, attachmentId) => files.get(attachmentId).toString('base64url'),
+    getAttachment: async (_id, attachmentId) => { downloads++; return files.get(attachmentId.split(':')[1]).toString('base64url'); },
   };
   const options = {
-    settings: { allowedSenders: ['allowed@example.com'], allowedExtensions: ['.pdf', '.xlsx', '.csv'] },
+    settings: { allowedSenders: ['allowed@example.com'], allowedExtensions: ['.pdf', '.xlsx', '.csv'],globalDedupe: false },
     dependencies: { importDocument: importer },
   };
   const first = await new GmailService(client, options).poll();
@@ -77,9 +80,12 @@ const main = async () => {
   assert.equal(batch.pageCount, 1);
   assert.equal(batch.pdf.subarray(0, 5).toString(), '%PDF-');
 
-  // A fresh service simulates a backend restart; PostgreSQL keeps imports terminal.
+  // A fresh service and rotated Gmail download handles must keep claims terminal.
+  downloadEpoch++;
+  const firstDownloads=downloads;
   const repeated = await new GmailService(client, options).poll();
   assert.equal(repeated.imported, 0);
+  assert.equal(downloads,firstDownloads);
   assert.equal(objects.size, 3);
   const successful = await opsDb.query('SELECT * FROM gmail_imports WHERE message_id = $1;', [messageId]);
   assert.equal(successful.rows.length, 3);

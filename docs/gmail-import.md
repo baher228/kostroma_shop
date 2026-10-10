@@ -100,6 +100,8 @@ PostgreSQL session advisory lock допускает один poll одновре
 
 По умолчанию одинаковый файл в другом письме является отдельным вложением. `GMAIL_GLOBAL_DEDUPE_BY_HASH=true` запрещает повторный импорт уже успешно обработанного SHA-256. Удаление promotion document не сбрасывает успешный Gmail статус; тот же attachment не появится снова при следующем poll.
 
+Ключ вложения использует неизменяемый `partId` Gmail (при его отсутствии — позицию в MIME-дереве) и имя файла. `attachmentId` используется только для скачивания: изменение этого идентификатора между проверками не создаёт новый импорт. Google описывает `partId` как immutable в [Messages API](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages). В production включён `GMAIL_GLOBAL_DEDUPE_BY_HASH=true`; одноимённая GitHub variable в `production-backend` сохраняет настройку при следующих deploy и защищает старые записи с прежним ключом.
+
 ## Форматы и статусы
 
 PDF сначала проверяется на `%PDF-`, затем реальный текст проходит существующий invoice parser: период акции, блок рекомендованных розничных цен и хотя бы один товар. Неподходящий PDF получает `invoice_structure_not_recognized`; image-only PDF получает `no_text_layer`. OCR не выполняется.

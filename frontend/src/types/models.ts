@@ -86,6 +86,7 @@ export type Task = {
   id: string;
   groupId?: string | null;
   seriesId?: string | null;
+  instructionPhotoUrl?: string | null;
   title: string;
   assigneeId: string;
   assigneeDisplayName: string;

@@ -10,6 +10,7 @@ import {
 } from '../repositories/taskRepository';
 import { SessionUser, Task } from '../domain/types';
 import { createTaskSeries } from '../repositories/taskSeriesRepository';
+import { findTaskInstructionPhoto, saveTaskInstructionPhoto } from '../repositories/taskInstructionPhotoRepository';
 import { TASK_REPEAT_INTERVAL_MS } from '../domain/taskRepeat';
 import { findStoreTabletById } from '../repositories/userRepository';
 import { createTaskSchema, reviewTaskPhotoSchema, updateTaskStatusSchema, uploadTaskPhotoSchema } from '../http/validation';
@@ -33,6 +34,9 @@ export const createManagedTask = async (
   if (assignees.length === 0 || assignees.some((assignee) => !assignee)) {
     return null;
   }
+  const instructionPhotoId = payload.instructionPhotoDataUrl
+    ? await saveTaskInstructionPhoto(payload.instructionPhotoDataUrl)
+    : null;
   const series = payload.repeat !== 'none' && payload.deadlineAt
     ? await createTaskSeries({
       title: payload.title,
@@ -42,6 +46,7 @@ export const createManagedTask = async (
       requiresPhotoConfirmation: payload.requiresPhotoConfirmation ?? false,
       repeat: payload.repeat,
       nextDeadlineAt: new Date(Date.parse(payload.deadlineAt) + TASK_REPEAT_INTERVAL_MS[payload.repeat]).toISOString(),
+      instructionPhotoId,
     })
     : null;
   const groupId = assignees.length > 1 ? `group_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
@@ -51,6 +56,7 @@ export const createManagedTask = async (
     tasks.push(await createTask({
       groupId,
       seriesId: series?.id ?? null,
+      instructionPhotoId,
       title: payload.title,
       assigneeId: assignee.id,
       assigneeDisplayName: assignee.fullName,
@@ -157,6 +163,16 @@ export const readTaskPhotoConfirmation = async (
   const photo = await readTaskPhoto(photoFile.fileName);
   if (!photo) return { status: 'not_found' };
   return { status: 'found', photo, mimeType: photoFile.mimeType };
+};
+
+export const readTaskInstructionPhoto = async (
+  user: SessionUser,
+  taskId: string,
+): Promise<{ status: 'found'; photo: Buffer; mimeType: string } | { status: 'not_found' | 'forbidden' }> => {
+  const found = await findTaskInstructionPhoto(taskId);
+  if (!found) return { status: 'not_found' };
+  if (user.role !== 'manager' && found.assigneeId !== user.id) return { status: 'forbidden' };
+  return { status: 'found', photo: found.data, mimeType: found.mimeType };
 };
 
 export const cleanupExpiredTaskPhotos = async () => {

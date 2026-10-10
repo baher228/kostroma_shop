@@ -4629,3 +4629,29 @@ input[type='datetime-local'] {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.task-repeat-field {
+  min-width: 170px;
+  flex: 0 0 auto;
+}
+
+.task-badge-repeat {
+  border-color: #c9d6ee;
+  background: #eaf0fb;
+  color: #2c4f8a;
+}
+
+.task-stop-repeat {
+  border: 0;
+  background: none;
+  color: #6b7a72;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.task-stop-repeat:hover:not(:disabled) {
+  color: #c62828;
+}

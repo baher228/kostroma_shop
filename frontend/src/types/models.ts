@@ -85,6 +85,7 @@ export type TaskPhotoReviewStatus = 'none' | 'pending' | 'approved' | 'declined'
 export type Task = {
   id: string;
   groupId?: string | null;
+  seriesId?: string | null;
   title: string;
   assigneeId: string;
   assigneeDisplayName: string;

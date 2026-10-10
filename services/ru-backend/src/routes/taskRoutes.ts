@@ -10,6 +10,7 @@ import {
   removeTask,
   reviewTaskPhotoConfirmation,
   uploadTaskPhotoConfirmation,
+  readTaskInstructionPhoto,
 } from '../services/taskService';
 import { notifyTaskAssigneeOfNewTask } from '../services/notificationService';
 import { getActiveTaskSeries, stopManagedTaskSeries } from '../services/taskSeriesService';
@@ -164,6 +165,32 @@ export const registerTaskRoutes = (app: Express) => {
         return;
       }
       res.status(500).json({ message: 'Failed to load task photo.' });
+    }
+  });
+
+  app.get('/api/tasks/:id/instruction-photo', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const params = idParamSchema.parse(req.params);
+      const result = await readTaskInstructionPhoto((req as AuthorizedRequest).user, params.id);
+      switch (result.status) {
+        case 'not_found':
+          res.status(404).json({ message: 'Instruction photo not found.' });
+          return;
+        case 'forbidden':
+          res.status(403).json({ message: 'Not enough permissions.' });
+          return;
+        case 'found':
+          res.setHeader('Content-Type', result.mimeType);
+          res.setHeader('Cache-Control', 'private, max-age=86400');
+          res.send(result.photo);
+          return;
+      }
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to load instruction photo.' });
     }
   });
 

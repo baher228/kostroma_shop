@@ -11,6 +11,7 @@ type TaskSeriesDbRow = {
   requires_photo_confirmation: boolean;
   repeat: TaskRepeat;
   next_deadline_at: Date | string;
+  instruction_photo_id: string | null;
   active: boolean;
   created_at: Date | string;
 };
@@ -26,13 +27,14 @@ const mapSeries = (row: TaskSeriesDbRow): TaskSeries => ({
   requiresPhotoConfirmation: row.requires_photo_confirmation,
   repeat: row.repeat,
   nextDeadlineAt: toIso(row.next_deadline_at),
+  instructionPhotoId: row.instruction_photo_id ?? null,
   active: row.active,
   createdAt: toIso(row.created_at),
 });
 
 const selectFields = `
   id, title, assignee_ids, created_by_id, created_by_display_name,
-  requires_photo_confirmation, repeat, next_deadline_at, active, created_at
+  requires_photo_confirmation, repeat, next_deadline_at, instruction_photo_id, active, created_at
 `;
 
 export const createTaskSeries = async (input: {
@@ -43,14 +45,15 @@ export const createTaskSeries = async (input: {
   requiresPhotoConfirmation: boolean;
   repeat: TaskRepeat;
   nextDeadlineAt: string;
+  instructionPhotoId: string | null;
 }): Promise<TaskSeries> => {
   const id = `series_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const result = await personalDb.query<TaskSeriesDbRow>(
     `
       INSERT INTO task_series (
         id, title, assignee_ids, created_by_id, created_by_display_name,
-        requires_photo_confirmation, repeat, next_deadline_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        requires_photo_confirmation, repeat, next_deadline_at, instruction_photo_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING ${selectFields};
     `,
     [
@@ -62,6 +65,7 @@ export const createTaskSeries = async (input: {
       input.requiresPhotoConfirmation,
       input.repeat,
       input.nextDeadlineAt,
+      input.instructionPhotoId,
     ],
   );
   return mapSeries(result.rows[0]);

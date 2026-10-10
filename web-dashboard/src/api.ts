@@ -327,7 +327,7 @@ export const api = {
     listStoreTablets: async (token: string) => (await ruRequest<{ storeTablets: StoreTablet[] }>('/api/store-tablets', { token })).storeTablets,
     create: async (
       token: string,
-      payload: { title: string; assigneeIds: string[]; deadlineAt: string | null; requiresPhotoConfirmation: boolean; repeat: TaskRepeat | 'none' },
+      payload: { title: string; assigneeIds: string[]; deadlineAt: string | null; requiresPhotoConfirmation: boolean; repeat: TaskRepeat | 'none'; instructionPhotoDataUrl?: string },
     ) => {
       const response = await ruRequest<{ task: Task; tasks?: Task[] }>('/api/tasks', { method: 'POST', token, body: payload });
       return response.tasks ?? [response.task];
@@ -339,6 +339,8 @@ export const api = {
       (await ruRequest<{ task: Task }>(`/api/tasks/${taskId}/status`, { method: 'PATCH', token, body: { status } })).task,
     reviewPhoto: async (token: string, taskId: string, decision: 'approve' | 'decline') =>
       (await ruRequest<{ task: Task }>(`/api/tasks/${taskId}/photo/review`, { method: 'PATCH', token, body: { decision } })).task,
+    instructionPhotoBlob: async (token: string, taskId: string) =>
+      makeImageBlobRequest(RU_API_BASE_URL, `/api/tasks/${taskId}/instruction-photo`, token),
     photoBlob: async (token: string, taskId: string) =>
       makeImageBlobRequest(RU_API_BASE_URL, `/api/tasks/${taskId}/photo`, token),
     delete: async (token: string, taskId: string) => {

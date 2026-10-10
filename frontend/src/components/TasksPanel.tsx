@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +14,7 @@ import {
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { tasksApi } from "../api/tasks";
+import { ruApiUrl } from "../api/http";
 import { Session, StoreTablet, Task, TaskStatus } from "../types/models";
 import {
   groupTasksByUrgency,
@@ -132,6 +135,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [requiresPhotoConfirmation, setRequiresPhotoConfirmation] = useState(false);
+  const [instructionTask, setInstructionTask] = useState<Task | null>(null);
   const [pendingTaskIds, setPendingTaskIds] = useState<Record<string, boolean>>({});
   const [cameraTaskId, setCameraTaskId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -593,6 +597,16 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
                         )}
                       </View>
                       {meta.length > 0 && <Text style={styles.taskMeta}>{meta.join("  ·  ")}</Text>}
+                      {!!task.instructionPhotoUrl && (
+                        <Pressable style={styles.instructionButton} onPress={() => setInstructionTask(task)}>
+                          <Image
+                            source={{ uri: ruApiUrl(task.instructionPhotoUrl), headers: { Authorization: `Bearer ${session.token}` } }}
+                            style={styles.instructionThumb}
+                            resizeMode="cover"
+                          />
+                          <Text style={styles.instructionButtonText}>Фото-инструкция · открыть</Text>
+                        </Pressable>
+                      )}
                       {cameraTaskId === task.id && (
                         <View style={styles.photoCameraBox}>
                           <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
@@ -652,6 +666,18 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
           ))}
         </ScrollView>
       )}
+      <Modal visible={!!instructionTask} transparent animationType="fade" onRequestClose={() => setInstructionTask(null)}>
+        <Pressable style={styles.instructionModal} onPress={() => setInstructionTask(null)}>
+          {!!instructionTask?.instructionPhotoUrl && (
+            <Image
+              source={{ uri: ruApiUrl(instructionTask.instructionPhotoUrl), headers: { Authorization: `Bearer ${session.token}` } }}
+              style={styles.instructionModalImage}
+              resizeMode="contain"
+            />
+          )}
+          <Text style={styles.instructionModalClose}>Закрыть</Text>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -1025,6 +1051,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: 6,
+  },
+  instructionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#c9d6ee",
+    borderRadius: 10,
+    backgroundColor: "#eef3fc",
+    padding: 6,
+    paddingRight: 12,
+  },
+  instructionThumb: {
+    width: 64,
+    height: 48,
+    borderRadius: 6,
+    backgroundColor: "#dfe7f5",
+  },
+  instructionButtonText: {
+    color: "#2c4f8a",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  instructionModal: {
+    flex: 1,
+    backgroundColor: "rgba(10, 20, 15, 0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  instructionModalImage: {
+    width: "100%",
+    height: "85%",
+  },
+  instructionModalClose: {
+    marginTop: 14,
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
   },
   photoBadge: {
     borderRadius: 6,

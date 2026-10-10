@@ -77,5 +77,8 @@ jobs:
       - name: Build RU backend Docker image
         run: docker build -f services/ru-backend/Dockerfile -t analitika-ru-ci .
 
+      - name: Build MinIO Docker image from pinned upstream releases
+        run: docker build -f ops/minio/Dockerfile -t analitika-minio-ci .
+
       - name: Build Dubai backend Docker image
         run: docker build -f services/dubai-backend/Dockerfile -t analitika-dubai-ci .

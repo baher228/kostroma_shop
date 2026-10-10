@@ -2,6 +2,18 @@
 
 ## Configuration and deployment
 
+Production RU Compose includes MinIO with the `qc` profile and a persistent
+`minio_data` volume. Deployment waits for MinIO and creates `S3_BUCKET_AUDIO`
+idempotently before replacing the backend. MinIO has no published host ports;
+the RU backend connects through `http://minio:9000` on the Compose network.
+Its root credentials come from the existing `S3_ACCESS_KEY` / `S3_SECRET_KEY`
+deployment secrets. The initializer does not change bucket policies or remove
+existing objects. Keep those credentials stable across deployments.
+
+`ops/minio/Dockerfile` builds MinIO `RELEASE.2025-10-15T17-29-55Z` and mc
+`RELEASE.2025-08-13T08-35-41Z` from the pinned official Go modules. This avoids
+the withdrawn Docker Hub/Quay images. CI verifies the same image build.
+
 The deployment source is GitHub Environment `production-backend`, secret
 `ENV_FILE` (the complete backend `.env` file). Nonempty individual Environment
 secrets override matching values in that file: `QC_ENABLED`, `QC_WORKER_ENABLED`,

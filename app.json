@@ -24,6 +24,8 @@
     },
     "android": {
       "package": "com.gringobochka.analitika",
+      "versionCode": 3,
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM", "android.permission.USE_EXACT_ALARM"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#166534"
@@ -47,7 +49,14 @@
     },
     "plugins": [
       "expo-updates",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/deadline_alarm.wav"
+          ]
+        }
+      ],
       [
         "expo-camera",
         {

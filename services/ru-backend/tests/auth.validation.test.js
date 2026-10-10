@@ -80,6 +80,8 @@ test('personal workflow schemas validate expected fields', () => {
   assert.equal(updateTaskStatusSchema.parse({ status: 'done' }).status, 'done');
   assert.equal(pushTokenSchema.parse({ pushToken: 'ExpoPushToken[abc_123-xyz]' }).pushToken, 'ExpoPushToken[abc_123-xyz]');
   assert.throws(() => pushTokenSchema.parse({ pushToken: 'not-a-push-token' }));
+  assert.equal(pushTokenSchema.parse({ pushToken: 'ExpoPushToken[abc]' }).alarmSound, false);
+  assert.equal(pushTokenSchema.parse({ pushToken: 'ExpoPushToken[abc]', alarmSound: true }).alarmSound, true);
   assert.equal(createUserSchema.parse({
     username: 'worker.user',
     firstName: 'Ivan',

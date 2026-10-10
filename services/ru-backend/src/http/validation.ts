@@ -119,6 +119,7 @@ export const reviewTaskPhotoSchema = z.object({
 
 export const pushTokenSchema = z.object({
   pushToken: z.string().trim().regex(/^(?:Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/),
+  alarmSound: z.boolean().optional().default(false),
 });
 
 export const createUserSchema = z.object({

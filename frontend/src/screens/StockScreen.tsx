@@ -857,9 +857,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           <View style={styles.headerRow}>
             {table?.dates.map((date) => (
               <View key={date} style={styles.workerDateSlot}>
-                {isMilkTable && isTuesday(date) && (
-                  <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerHeaderCell, styles.workerTuesdaySeparatorColumn]} />
-                )}
                 <View
                   style={[
                     styles.headerCell,
@@ -868,6 +865,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     styles.workerHeaderCell,
                     columnToneHeader(date),
                     secondWeekBoundaryStyle(date),
+                    isMilkTable && isTuesday(date) && styles.workerTuesdayBoundary,
                   ]}
                 >
                   <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dateWeekdayText, styles.workerDateWeekdayText]}>
@@ -902,9 +900,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
                   return (
                     <View key={date} style={styles.workerDateSlot}>
-                      {isMilkTable && isTuesday(date) && (
-                        <View style={[styles.tuesdaySeparator, styles.workerTuesdaySeparator, styles.workerCell, styles.workerTuesdaySeparatorColumn]} />
-                      )}
                       <Pressable
                         style={[
                           styles.cell,
@@ -914,11 +909,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                           styles.valueCell,
                           columnToneValue(date),
                           secondWeekBoundaryStyle(date),
+                          isMilkTable && isTuesday(date) && styles.workerTuesdayBoundary,
                           pending && styles.pendingCell,
                         ]}
                         onPress={() => openEditCell(row, date)}
                       >
-                        <Text style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
+                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
                       </Pressable>
                     </View>
                   );
@@ -1980,11 +1976,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#7f8d81',
   },
-  workerTuesdaySeparator: {
-    flexShrink: 0,
-  },
-  workerTuesdaySeparatorColumn: {
-    width: 16,
+  workerTuesdayBoundary: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#526557',
   },
   headerCell: {
     justifyContent: 'center',
@@ -2095,6 +2089,7 @@ const styles = StyleSheet.create({
   },
   workerCell: {
     minHeight: 52,
+    height: 52,
   },
   workerEmptyRow: {
     flex: 1,

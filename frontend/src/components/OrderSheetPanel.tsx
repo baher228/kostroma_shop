@@ -96,6 +96,8 @@ const nextOrderDateForCategory = (category: BusinessCategory): string => {
   return today;
 };
 
+const orderLabelDate = (dateKey: string): string => shiftOneDay(dateKey, 1);
+
 const formatWeekdayLabel = (iso: string): string =>
   parseDateKey(iso).toLocaleDateString('ru-RU', { weekday: 'long' });
 
@@ -381,9 +383,9 @@ export const OrderSheetPanel = ({ session }: OrderSheetPanelProps) => {
 
       {sheet && (
         <View style={styles.tableWrap}>
-          <Text style={styles.weekdayBadge}>{formatWeekdayLabel(sheet.date)}</Text>
+          <Text style={styles.weekdayBadge}>{formatWeekdayLabel(orderLabelDate(sheet.date))}</Text>
           <Text style={styles.sheetDate}>
-            {`\u0417\u0430\u043a\u0430\u0437 \u043d\u0430 ${formatDateLabel(sheet.date)} — \u043c\u0430\u0433\u0430\u0437\u0438\u043d\u043e\u0432: ${sheet.shops.length}`}
+            {`\u0417\u0430\u043a\u0430\u0437 \u043d\u0430 ${formatDateLabel(orderLabelDate(sheet.date))} — \u043c\u0430\u0433\u0430\u0437\u0438\u043d\u043e\u0432: ${sheet.shops.length}`}
           </Text>
           {renderTable()}
         </View>

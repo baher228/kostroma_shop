@@ -1,11 +1,11 @@
 import { request } from './http';
 
 export const notificationsApi = {
-  registerPushToken: (token: string, pushToken: string) =>
+  registerPushToken: (token: string, pushToken: string, alarmSound: boolean) =>
     request('/api/notifications/push-token', {
       method: 'PUT',
       token,
-      body: { pushToken },
+      body: { pushToken, alarmSound },
     }),
   removePushToken: (token: string, pushToken: string) =>
     request('/api/notifications/push-token', {

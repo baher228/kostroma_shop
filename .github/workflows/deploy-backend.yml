@@ -17,6 +17,7 @@ on:
     paths:
       - '.github/workflows/deploy-backend.yml'
       - 'scripts/write-production-env.mjs'
+      - 'scripts/rotate-ru-db-password.sh'
       - 'docker-compose.ru.yml'
       - 'docker-compose.dubai.yml'
       - 'ops/minio/**'
@@ -44,6 +45,7 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       APP_PATH: ${{ secrets.APP_PATH }}
       ENV_FILE: ${{ secrets.ENV_FILE }}
+      DEPLOY_PERSONAL_POSTGRES_PASSWORD: ${{ secrets.PERSONAL_POSTGRES_PASSWORD }}
       DEPLOY_CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
       DEPLOY_QC_ENABLED: ${{ secrets.QC_ENABLED }}
       DEPLOY_QC_WORKER_ENABLED: ${{ secrets.QC_WORKER_ENABLED }}
@@ -114,7 +116,7 @@ jobs:
         if: env.REGION == 'all' || env.REGION == 'ru'
         run: |
           PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/ru-backend/Dockerfile -t analitika-backend-ru . && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/preflight.js && DOCKER_BUILDKIT=0 timeout 900 docker build -f ops/minio/Dockerfile -t analitika-minio:RELEASE.2025-10-15T17-29-55Z . && timeout 180 docker compose -f docker-compose.ru.yml --profile qc up -d --no-build --wait minio && timeout 60 docker compose -f docker-compose.ru.yml --profile qc run --rm --no-deps minio-init && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/storagePreflight.js && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-build backend-ru"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/ru-backend/Dockerfile -t analitika-backend-ru . && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/preflight.js && DOCKER_BUILDKIT=0 timeout 900 docker build -f ops/minio/Dockerfile -t analitika-minio:RELEASE.2025-10-15T17-29-55Z . && timeout 180 docker compose -f docker-compose.ru.yml --profile qc up -d --no-build --wait minio && timeout 60 docker compose -f docker-compose.ru.yml --profile qc run --rm --no-deps minio-init && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/storagePreflight.js && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-deps --wait postgres-ru && timeout 30 bash scripts/rotate-ru-db-password.sh && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-build backend-ru"
 
       - name: Smoke test RU backend
         if: (env.REGION == 'all' || env.REGION == 'ru') && vars.RU_HEALTH_URL != ''

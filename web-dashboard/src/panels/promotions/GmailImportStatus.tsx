@@ -156,7 +156,7 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
         <div><dt>Последний успешный импорт</dt><dd>{dateTime(health.lastImportAt)}</dd></div>
       </dl>}
       <Feedback error={error || health?.lastError || ''} notice={notice} />
-      {imports.length > 0 ? <ul className="gmail-import-list">{imports.map((item) => (
+      {imports.length > 0 ? <ul className="gmail-import-list" tabIndex={0} aria-label="История импорта из Gmail">{imports.map((item) => (
         <li key={item.id}>
           <div><strong>{item.filename}</strong><span className={`gmail-import-status ${item.status}`}>{statuses[item.status]}</span></div>
           <small>{dateTime(item.receivedAt)} · {item.sender} · Попыток: {item.attemptCount}</small>

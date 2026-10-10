@@ -96,12 +96,17 @@ export const idParamSchema = z.object({
   id: z.string().trim().min(1).max(100),
 });
 
-export const createTaskSchema = z.object({
-  title: z.string().trim().min(2).max(240),
-  assigneeId: z.string().trim().min(1).max(100),
-  deadlineAt: dateTimeString,
-  requiresPhotoConfirmation: z.boolean().optional().default(false),
-});
+export const createTaskSchema = z
+  .object({
+    title: z.string().trim().min(2).max(240),
+    assigneeId: z.string().trim().min(1).max(100).optional(),
+    assigneeIds: z.array(z.string().trim().min(1).max(100)).min(1).max(200).optional(),
+    deadlineAt: dateTimeString,
+    requiresPhotoConfirmation: z.boolean().optional().default(false),
+  })
+  .refine((payload) => Boolean(payload.assigneeId || payload.assigneeIds?.length), {
+    message: 'Choose at least one store tablet.',
+  });
 
 export const updateTaskStatusSchema = z.object({
   status: z.enum(['open', 'done']),

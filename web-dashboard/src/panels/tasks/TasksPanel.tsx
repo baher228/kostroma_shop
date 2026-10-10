@@ -76,7 +76,6 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const minute = index % 2 ? '30' : '00';
   return `${hour}:${minute}`;
 });
-const ALL_STORE_TABLETS_ID = '__all_store_tablets__';
 
 const toDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -241,9 +240,6 @@ const tabletShopLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) =
 const tabletSearchText = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
   `${tablet.fullName} ${tablet.username} ${tabletShopLabel(tablet, shopsById)}`.trim().toLowerCase();
 
-const tabletLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) =>
-  `${tablet.fullName} - ${tabletShopLabel(tablet, shopsById)}`;
-
 const taskShopLabel = (
   task: Task,
   tabletsById: Record<string, StoreTablet>,
@@ -254,7 +250,40 @@ const taskShopLabel = (
   return shop?.name ?? task.assigneeDisplayName;
 };
 
-const TabletPicker = ({
+type TaskCard = {
+  key: string;
+  title: string;
+  status: Task['status'];
+  deadlineAt: string | null;
+  completedAt: string | null;
+  requiresPhotoConfirmation: boolean;
+  members: Task[];
+};
+
+const latestIso = (values: (string | null)[]) =>
+  values.reduce<string | null>((latest, value) => (value && (!latest || value > latest) ? value : latest), null);
+
+const toTaskCards = (tasks: Task[]): TaskCard[] => {
+  const byKey = new Map<string, Task[]>();
+  tasks.forEach((task) => {
+    const key = task.groupId || task.id;
+    byKey.set(key, [...(byKey.get(key) ?? []), task]);
+  });
+  return [...byKey.entries()].map(([key, members]) => {
+    const allDone = members.every((member) => member.status === 'done');
+    return {
+      key,
+      title: members[0].title,
+      status: allDone ? 'done' : 'open',
+      deadlineAt: members[0].deadlineAt,
+      completedAt: allDone ? latestIso(members.map((member) => member.completedAt)) : null,
+      requiresPhotoConfirmation: members.some((member) => member.requiresPhotoConfirmation),
+      members,
+    };
+  });
+};
+
+const ShopMultiPicker = ({
   tablets,
   shopsById,
   value,
@@ -264,37 +293,38 @@ const TabletPicker = ({
 }: {
   tablets: StoreTablet[];
   shopsById: Record<string, Shop>;
-  value: string;
-  onChange: (value: string) => void;
+  value: string[];
+  onChange: (value: string[]) => void;
   invalid: boolean;
   describedBy?: string;
 }) => {
-  const selectedTablet = tablets.find((tablet) => tablet.id === value) ?? null;
-  const selectedAll = value === ALL_STORE_TABLETS_ID;
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selected = new Set(value);
   const normalizedQuery = query.trim().toLowerCase();
-  const allStoresMatches = !normalizedQuery || 'все магазины все планшеты всем'.includes(normalizedQuery);
-  const filteredTablets = normalizedQuery
-    ? tablets.filter((tablet) => tabletSearchText(tablet, shopsById).includes(normalizedQuery))
-    : tablets;
-  const displayValue = open && query ? query : selectedAll ? 'Все магазины' : selectedTablet ? tabletLabel(selectedTablet, shopsById) : '';
+  const filteredTablets = tablets.filter((tablet) => !normalizedQuery || tabletSearchText(tablet, shopsById).includes(normalizedQuery));
+  const allFilteredSelected = filteredTablets.length > 0 && filteredTablets.every((tablet) => selected.has(tablet.id));
+  const someFilteredSelected = filteredTablets.some((tablet) => selected.has(tablet.id));
+  const selectedTablets = tablets.filter((tablet) => selected.has(tablet.id));
+  const summary = selectedTablets.length === 0
+    ? 'Выберите магазины'
+    : selectedTablets.length === tablets.length
+      ? `Все магазины (${tablets.length})`
+      : selectedTablets.length <= 2
+        ? selectedTablets.map((tablet) => tabletShopLabel(tablet, shopsById)).join(', ')
+        : `${tabletShopLabel(selectedTablets[0], shopsById)} и ещё ${selectedTablets.length - 1}`;
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!pickerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-        setQuery('');
-      }
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setOpen(false);
-      setQuery('');
-      inputRef.current?.blur();
+      triggerRef.current?.focus();
     };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -304,90 +334,83 @@ const TabletPicker = ({
     };
   }, [open]);
 
-  const chooseTablet = (tablet: StoreTablet) => {
-    onChange(tablet.id);
-    setQuery('');
-    setOpen(false);
-    inputRef.current?.focus();
+  const toggle = (tabletId: string) => {
+    onChange(selected.has(tabletId) ? value.filter((id) => id !== tabletId) : [...value, tabletId]);
   };
 
-  const chooseAll = () => {
-    onChange(ALL_STORE_TABLETS_ID);
-    setQuery('');
-    setOpen(false);
-    inputRef.current?.focus();
+  const toggleAllFiltered = () => {
+    const filteredIds = new Set(filteredTablets.map((tablet) => tablet.id));
+    onChange(allFilteredSelected
+      ? value.filter((id) => !filteredIds.has(id))
+      : [...value, ...filteredTablets.map((tablet) => tablet.id).filter((id) => !selected.has(id))]);
   };
 
   return (
-    <div className="tablet-picker" ref={pickerRef}>
-      <input
-        ref={inputRef}
-        required
-        aria-autocomplete="list"
+    <div className="shop-multi-picker" ref={pickerRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`shop-multi-trigger${selectedTablets.length ? '' : ' empty'}`}
+        aria-label="Магазины"
         aria-describedby={describedBy}
         aria-expanded={open}
-        aria-invalid={invalid}
-        aria-label="Планшет магазина"
-        autoComplete="off"
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        placeholder="Начните вводить имя, магазин или логин"
-        role="combobox"
-        value={displayValue}
-      />
-      <button
-        type="button"
-        className="tablet-picker-toggle"
-        aria-label="Открыть список планшетов"
-        onClick={() => {
-          setQuery('');
-          setOpen((current) => !current);
-          inputRef.current?.focus();
-        }}
+        aria-invalid={invalid && selectedTablets.length === 0}
+        onClick={() => setOpen((current) => !current)}
       >
-        ▾
+        <span>{summary}</span>
+        {selectedTablets.length > 0 && <b>{selectedTablets.length}</b>}
+        <span className="deadline-picker-icon" aria-hidden="true">▾</span>
       </button>
       {open && (
-        <div className="tablet-picker-menu" role="listbox" aria-label="Планшеты магазинов">
-          {allStoresMatches && (
-            <button
-              type="button"
-              className={`tablet-picker-all${selectedAll ? ' selected' : ''}`}
-              onClick={chooseAll}
-              role="option"
-              aria-selected={selectedAll}
-            >
-              <strong>Все магазины</strong>
-              <span>{tablets.length} планшетов получат задачу</span>
-            </button>
-          )}
-          {filteredTablets.length ? filteredTablets.map((tablet) => (
-            <button
-              key={tablet.id}
-              type="button"
-              className={tablet.id === value ? 'selected' : ''}
-              onClick={() => chooseTablet(tablet)}
-              role="option"
-              aria-selected={tablet.id === value}
-            >
-              <strong>{tablet.fullName}</strong>
-              <span>{tabletShopLabel(tablet, shopsById)}</span>
-              <small>@{tablet.username}</small>
-            </button>
-          )) : (
-            <p>Ничего не найдено</p>
-          )}
-        </div>
+        <section className="shop-multi-menu" role="dialog" aria-label="Выбор магазинов">
+          <input
+            autoFocus
+            type="search"
+            aria-label="Поиск магазина"
+            placeholder="Поиск"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <div className="shop-multi-options">
+            {filteredTablets.length > 0 && (
+              <label className="shop-multi-option shop-multi-all">
+                <input
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  ref={(input) => {
+                    if (input) input.indeterminate = someFilteredSelected && !allFilteredSelected;
+                  }}
+                  onChange={toggleAllFiltered}
+                />
+                <span>{normalizedQuery ? '(Выделить найденные)' : '(Выделить все)'}</span>
+              </label>
+            )}
+            {filteredTablets.length ? filteredTablets.map((tablet) => (
+              <label key={tablet.id} className="shop-multi-option">
+                <input type="checkbox" checked={selected.has(tablet.id)} onChange={() => toggle(tablet.id)} />
+                <span>
+                  <strong>{tabletShopLabel(tablet, shopsById)}</strong>
+                  <small>{tablet.fullName} · @{tablet.username}</small>
+                </span>
+              </label>
+            )) : <p>Ничего не найдено</p>}
+          </div>
+          <footer>
+            <span>Выбрано: {selectedTablets.length}</span>
+            <button type="button" className="ghost" disabled={value.length === 0} onClick={() => onChange([])}>Очистить</button>
+            <button type="button" className="secondary" onClick={() => {
+              setOpen(false);
+              triggerRef.current?.focus();
+            }}>Готово</button>
+          </footer>
+        </section>
       )}
     </div>
   );
 };
 
 export const TasksPanel = ({ session }: { session: Session }) => {
-  const emptyForm = { title: '', assigneeId: '', deadlineAt: '', requiresPhotoConfirmation: false };
+  const emptyForm = { title: '', assigneeIds: [] as string[], deadlineAt: '', requiresPhotoConfirmation: false };
   const [tasks, setTasks] = useState<Task[]>([]);
   const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -398,8 +421,9 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [now, setNow] = useState(() => Date.now());
-  const openCount = tasks.filter((task) => task.status === 'open').length;
-  const overdueCount = tasks.filter((task) => task.overdue).length;
+  const taskCards = toTaskCards(tasks);
+  const openCount = taskCards.filter((card) => card.status === 'open').length;
+  const overdueCount = taskCards.filter((card) => card.members.some((member) => member.overdue)).length;
   const shopsById = Object.fromEntries(shops.map((shop) => [shop.id, shop]));
   const tabletsById = Object.fromEntries(storeTablets.map((tablet) => [tablet.id, tablet]));
 
@@ -420,7 +444,6 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       setTasks(nextTasks);
       setStoreTablets(nextStoreTablets);
       setShops(nextShops);
-      setForm((current) => current.assigneeId || !nextStoreTablets[0] ? current : { ...current, assigneeId: nextStoreTablets[0].id });
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -436,30 +459,22 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     event.preventDefault();
     setError('');
     setNotice('');
-    if (!form.assigneeId) {
-      setError('Выберите планшет магазина.');
-      return;
-    }
-    const assigneeIds = form.assigneeId === ALL_STORE_TABLETS_ID
-      ? storeTablets.map((tablet) => tablet.id)
-      : [form.assigneeId];
+    const assigneeIds = form.assigneeIds.filter((id) => tabletsById[id]);
     if (assigneeIds.length === 0) {
-      setError('Нет планшетов магазинов для назначения задачи.');
+      setError('Выберите хотя бы один магазин.');
       return;
     }
     try {
       setSaving(true);
-      const payload = {
+      const createdTasks = await api.tasks.create(session.token, {
         title: form.title.trim(),
+        assigneeIds,
         deadlineAt: form.deadlineAt ? new Date(form.deadlineAt).toISOString() : null,
         requiresPhotoConfirmation: form.requiresPhotoConfirmation,
-      };
-      const createdTasks = await Promise.all(
-        assigneeIds.map((assigneeId) => api.tasks.create(session.token, { ...payload, assigneeId })),
-      );
+      });
       setTasks((current) => [...createdTasks, ...current]);
-      setForm({ ...emptyForm, assigneeId: form.assigneeId });
-      setNotice(form.assigneeId === ALL_STORE_TABLETS_ID ? `Задача назначена всем магазинам: ${createdTasks.length}.` : 'Задача назначена.');
+      setForm({ ...emptyForm, assigneeIds });
+      setNotice(createdTasks.length > 1 ? `Задача назначена магазинам: ${createdTasks.length}.` : 'Задача назначена.');
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -492,6 +507,17 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     }
   };
 
+  const renderActions = (task: Task, compact: boolean) => task.photoReviewStatus === 'pending' ? (
+    <>
+      <button className="secondary" onClick={() => void reviewPhoto(task, 'approve')} disabled={pendingId === task.id}>Approve</button>
+      <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
+    </>
+  ) : (
+    <button className={task.status === 'open' ? 'task-done-button' : 'secondary'} onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
+      {task.status === 'open' ? 'Выполнена' : compact ? 'Открыть' : 'Открыть снова'}
+    </button>
+  );
+
   return (
     <section className="page-section tasks-page">
       <header className="page-header tasks-page-header">
@@ -517,17 +543,17 @@ export const TasksPanel = ({ session }: { session: Session }) => {
             <span>Задача</span>
             <input required minLength={2} maxLength={240} aria-invalid={Boolean(error)} aria-describedby={error ? 'tasks-feedback' : undefined} placeholder="Например, проверить выкладку у витрины" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
           </label>
-          <label className="task-field">
-            <span>Планшет магазина</span>
-            <TabletPicker
+          <div className="task-field" role="group" aria-label="Магазины">
+            <span>Магазины</span>
+            <ShopMultiPicker
               tablets={storeTablets}
               shopsById={shopsById}
-              value={form.assigneeId}
-              onChange={(assigneeId) => setForm({ ...form, assigneeId })}
+              value={form.assigneeIds}
+              onChange={(assigneeIds) => setForm({ ...form, assigneeIds })}
               invalid={Boolean(error)}
               describedBy={error ? 'tasks-feedback' : undefined}
             />
-          </label>
+          </div>
           <div className="task-deadline-row">
             <label className="task-field task-deadline-field">
               <span>Дедлайн <small>необязательно</small></span>
@@ -543,8 +569,8 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           </div>
         </div>
         <footer className="task-composer-footer">
-          <p id="task-form-hint">{storeTablets.length === 0 && !loading ? 'Сначала создайте планшет магазина, чтобы назначить задачу.' : 'Можно выбрать один планшет или все магазины сразу.'}</p>
-          <button aria-describedby="task-form-hint" disabled={saving || storeTablets.length === 0}>{saving ? 'Назначаем...' : form.assigneeId === ALL_STORE_TABLETS_ID ? 'Назначить всем' : 'Назначить задачу'}</button>
+          <p id="task-form-hint">{storeTablets.length === 0 && !loading ? 'Сначала создайте планшет магазина, чтобы назначить задачу.' : 'Отметьте один или несколько магазинов — задача будет одна, у каждого магазина свой статус.'}</p>
+          <button aria-describedby="task-form-hint" disabled={saving || storeTablets.length === 0}>{saving ? 'Назначаем...' : form.assigneeIds.length > 1 ? `Назначить ${form.assigneeIds.length} магазинам` : 'Назначить задачу'}</button>
         </footer>
       </form>
       {loading ? <p className="tasks-loading">Загружаем задачи...</p> : tasks.length === 0 ? (
@@ -554,44 +580,58 @@ export const TasksPanel = ({ session }: { session: Session }) => {
         </section>
       ) : (
         <div className="task-timeline">
-          {groupTasksByUrgency(tasks, now).map((group) => (
+          {groupTasksByUrgency(taskCards, now).map((group) => (
             <section key={group.key} className={`task-group task-group-${group.key}`} aria-labelledby={`task-group-${group.key}`}>
               <h3 id={`task-group-${group.key}`}><i className="task-group-dot" aria-hidden="true" />{group.label}<span>{group.tasks.length}</span></h3>
               <ul className="task-list">
-                {group.tasks.map((task) => {
-                  const time = taskTimeParts(task.deadlineAt, now);
-                  const due = taskDueLabel(task, now);
+                {group.tasks.map((card) => {
+                  const time = taskTimeParts(card.deadlineAt, now);
+                  const due = taskDueLabel(card, now);
+                  const single = card.members.length === 1 ? card.members[0] : null;
+                  const doneCount = card.members.filter((member) => member.status === 'done').length;
                   return (
-                    <li key={task.id} className={`task-row task-row-${group.key}`} aria-busy={pendingId === task.id}>
-                      <div className="task-time" aria-label={task.deadlineAt ? `Дедлайн ${formatDateTime(task.deadlineAt)}` : 'Без дедлайна'}>
+                    <li key={card.key} className={`task-row task-row-${group.key}`} aria-busy={card.members.some((member) => pendingId === member.id)}>
+                      <div className="task-time" aria-label={card.deadlineAt ? `Дедлайн ${formatDateTime(card.deadlineAt)}` : 'Без дедлайна'}>
                         <strong>{time.time}</strong>
                         <small>{time.day}</small>
                       </div>
                       <div className="task-row-body">
                         <div className="task-row-title">
-                          {task.requiresPhotoConfirmation && <span className="task-badge">Фото</span>}
-                          <strong>{task.title}</strong>
+                          {card.requiresPhotoConfirmation && <span className="task-badge">Фото</span>}
+                          <strong>{card.title}</strong>
                         </div>
-                        <div className="task-row-meta">
-                          <span className="task-shop">{taskShopLabel(task, tabletsById, shopsById)}</span>
-                          {task.completedAt && <span>Выполнена {formatDateTime(task.completedAt)}</span>}
-                          {task.photoConfirmationUrl && <TaskPhotoPreview token={session.token} task={task} />}
-                        </div>
+                        {single ? (
+                          <div className="task-row-meta">
+                            <span className="task-shop">{taskShopLabel(single, tabletsById, shopsById)}</span>
+                            {single.completedAt && <span>Выполнена {formatDateTime(single.completedAt)}</span>}
+                            {single.photoConfirmationUrl && <TaskPhotoPreview token={session.token} task={single} />}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="task-row-meta">
+                              <span className="task-shop">Магазинов: {card.members.length}</span>
+                              <span>Выполнено {doneCount} из {card.members.length}</span>
+                            </div>
+                            <ul className="task-shop-list">
+                              {[...card.members]
+                                .sort((a, b) => taskShopLabel(a, tabletsById, shopsById).localeCompare(taskShopLabel(b, tabletsById, shopsById), 'ru'))
+                                .map((member) => (
+                                  <li key={member.id} className={`task-shop-line${member.status === 'done' ? ' done' : ''}`} aria-busy={pendingId === member.id}>
+                                    <span className="task-shop">{taskShopLabel(member, tabletsById, shopsById)}</span>
+                                    <span className="task-shop-status">
+                                      {member.status === 'done' && member.completedAt ? `Выполнена ${formatDateTime(member.completedAt)}` : statusLabel(member)}
+                                    </span>
+                                    {member.photoConfirmationUrl && <TaskPhotoPreview token={session.token} task={member} />}
+                                    <span className="actions">{renderActions(member, true)}</span>
+                                  </li>
+                                ))}
+                            </ul>
+                          </>
+                        )}
                       </div>
                       <div className="task-row-side">
                         {due && <span className={`task-due task-due-${group.key}`}>{due}</span>}
-                        <div className="actions">
-                          {task.photoReviewStatus === 'pending' ? (
-                            <>
-                              <button className="secondary" onClick={() => void reviewPhoto(task, 'approve')} disabled={pendingId === task.id}>Approve</button>
-                              <button className="danger" onClick={() => void reviewPhoto(task, 'decline')} disabled={pendingId === task.id}>Decline</button>
-                            </>
-                          ) : (
-                            <button className={task.status === 'open' ? 'task-done-button' : 'secondary'} onClick={() => void updateStatus(task)} disabled={pendingId === task.id || (task.requiresPhotoConfirmation && task.status === 'open')}>
-                              {task.status === 'open' ? 'Выполнена' : 'Открыть снова'}
-                            </button>
-                          )}
-                        </div>
+                        {single && <div className="actions">{renderActions(single, false)}</div>}
                       </div>
                     </li>
                   );

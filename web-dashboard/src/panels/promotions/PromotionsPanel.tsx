@@ -1,16 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, Modal, PageHeader, Table } from '../../components/ui';
+import { useDocumentPreview } from '../../components/DocumentPreviewModal';
 import { messageOf } from '../../shared/format';
 import type {
   PromotionDocument,
   PromotionDocumentType,
+  PromotionOutputs,
   PromotionRowPayload,
   PromotionRowStatus,
   PromotionTableRow,
   Session,
 } from '../../types';
 import { comparePromotionRowsByDate } from './promotionSorting';
+import { BatchPriceTagsModal } from './BatchPriceTagsModal';
+import { GmailImportStatus } from './GmailImportStatus';
+import { priceTagReady } from './batchSelection';
 
 type SortKey =
   | 'rowNumber'
@@ -130,6 +135,7 @@ const sortValue = (row: PromotionTableRow, key: SortKey): string | number | null
 
 export const PromotionsPanel = ({ session }: { session: Session }) => {
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<PromotionTableRow | null>(null);
   const [editingRow, setEditingRow] = useState<PromotionTableRow | null>(null);
   const [addingOpen, setAddingOpen] = useState(false);
@@ -140,22 +146,48 @@ export const PromotionsPanel = ({ session }: { session: Session }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PromotionRowStatus | ''>('');
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'rowNumber', direction: 'default' });
+  const rowRequest = useRef(0);
+  const mounted = useRef(true);
+  const rowLoading = useRef(false);
+  const sessionToken = useRef(session.token);
+  sessionToken.current = session.token;
 
-  const loadRows = async () => {
-    setLoadingRows(true);
-    setRowsError('');
+  const loadRows = useCallback(async (silent = false) => {
+    if (sessionToken.current !== session.token || !mounted.current) return;
+    const request = ++rowRequest.current;
+    rowLoading.current = true;
+    if (!silent) { setLoadingRows(true); setRowsError(''); }
     try {
-      setRows(await api.promotions.rows(session.token));
+      const nextRows = await api.promotions.rows(session.token);
+      if (mounted.current && request === rowRequest.current && sessionToken.current === session.token) {
+        setRows(nextRows);
+        setRowsError('');
+      }
     } catch (err) {
-      setRowsError(messageOf(err));
+      if (mounted.current && request === rowRequest.current && !silent) setRowsError(messageOf(err));
     } finally {
-      setLoadingRows(false);
+      if (mounted.current && request === rowRequest.current) {
+        rowLoading.current = false;
+        setLoadingRows(false);
+      }
     }
-  };
+  }, [session.token]);
 
   useEffect(() => {
+    mounted.current = true;
     void loadRows();
-  }, [session.token]);
+    const onFocus = () => { if (document.visibilityState !== 'hidden' && !rowLoading.current) void loadRows(true); };
+    const timer = window.setInterval(onFocus, 60_000);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      mounted.current = false;
+      rowRequest.current += 1;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [loadRows]);
 
   const visibleRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -202,6 +234,7 @@ export const PromotionsPanel = ({ session }: { session: Session }) => {
       <PageHeader title="Акции" subtitle="Основная таблица акций и документы для загрузки." />
       <div className="promotions-toolbar">
         <button className="promotions-documents-button" onClick={() => setDocumentsOpen(true)}>Документы</button>
+        <button className="secondary" disabled={loadingRows} onClick={() => setBatchOpen(true)}>Печать ценников</button>
         <input className="search-field" placeholder="Поиск по таблице" value={search} onChange={(event) => setSearch(event.target.value)} />
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PromotionRowStatus | '')}>
           <option value="">Все статусы</option>
@@ -272,6 +305,7 @@ export const PromotionsPanel = ({ session }: { session: Session }) => {
           onInvoiceImported={loadRows}
         />
       )}
+      {batchOpen && <BatchPriceTagsModal session={session} rows={rows} onClose={() => setBatchOpen(false)} />}
     </section>
   );
 };
@@ -361,8 +395,15 @@ const PromotionProductCard = ({
 }) => {
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [downloadingPriceTag, setDownloadingPriceTag] = useState(false);
-  const [generatingPoster, setGeneratingPoster] = useState(false);
+  const [outputs, setOutputs] = useState<PromotionOutputs | null>(null);
+  const preview = useDocumentPreview(session.token);
+  useEffect(() => {
+    let active = true;
+    void api.promotions.outputs(session.token, row.rowNumber).then((result) => {
+      if (active) setOutputs(result);
+    }).catch(() => { /* PDF generation remains available when status cannot be checked. */ });
+    return () => { active = false; };
+  }, [session.token, row.rowNumber]);
   const invoiceDocumentId = row.invoiceDocumentId ?? (
     row.sourceDocumentFileName?.toLowerCase().endsWith('.pdf') ? row.sourceDocumentId : null
   );
@@ -373,16 +414,19 @@ const PromotionProductCard = ({
 
   const openInvoice = async () => {
     if (!invoiceDocumentId) return;
-    setError('');
-    try {
+    await preview.open(invoiceDocumentFileName || 'Накладная.pdf', async () => {
       const result = await api.promotions.downloadDocument(session.token, {
         documentId: invoiceDocumentId,
         fileName: invoiceDocumentFileName ?? undefined,
       });
-      saveBlob(result.blob, result.fileName);
-    } catch (err) {
-      setError(messageOf(err));
-    }
+      return { type: 'pdf', ...result };
+    });
+  };
+
+  const openPlan = async () => {
+    if (!row.planDocumentId) return;
+    await preview.open(row.planDocumentFileName || 'План акций', () => api.promotions.previewDocument(session.token, row.planDocumentId!),
+      () => api.promotions.downloadDocument(session.token, { documentId: row.planDocumentId!, fileName: row.planDocumentFileName || undefined }));
   };
 
   const remove = async () => {
@@ -399,32 +443,21 @@ const PromotionProductCard = ({
   };
 
   const downloadPriceTag = async () => {
-    setDownloadingPriceTag(true);
-    setError('');
-    try {
+    await preview.open('Ценник.pdf', async () => {
       const result = await api.promotions.downloadPriceTagPdf(session.token, row.rowNumber);
-      saveBlob(result.blob, result.fileName);
-    } catch (err) {
-      setError(messageOf(err));
-    } finally {
-      setDownloadingPriceTag(false);
-    }
+      return { type: 'pdf', ...result };
+    });
   };
 
   const generatePoster = async () => {
-    setGeneratingPoster(true);
-    setError('');
-    try {
+    await preview.open('Постер.pdf', async () => {
       const result = await api.promotions.downloadGeneratedPosterPdf(session.token, row.rowNumber);
-      saveBlob(result.blob, result.fileName);
-    } catch (err) {
-      setError(messageOf(err));
-    } finally {
-      setGeneratingPoster(false);
-    }
+      return { type: 'pdf', ...result };
+    });
   };
 
   return (
+    <>
     <Modal title="Карточка товара" onClose={onClose}>
       <div className="promotion-product-card">
         <div className="promotion-card-top-actions">
@@ -448,19 +481,28 @@ const PromotionProductCard = ({
           <div className="promotion-card-wide"><dt>Накладная</dt><dd>{invoiceDocumentFileName || 'Не привязана'}</dd></div>
           <div className="promotion-card-wide"><dt>План акций</dt><dd>{row.planDocumentFileName || 'Не привязан'}</dd></div>
         </dl>
+        <h4>Документы</h4>
         <div className="promotion-card-actions">
           <button className="secondary" disabled={!hasInvoice} onClick={() => void openInvoice()}>
-            Посмотреть накладную
+            Просмотреть накладную
           </button>
-          <button disabled={downloadingPriceTag || row.promoPrice === null || row.regularPrice === null} onClick={() => void downloadPriceTag()}>
-            {downloadingPriceTag ? 'Делаем ценник...' : 'Сделать ценник'}
+          <button className="secondary" disabled={!row.planDocumentId} onClick={() => void openPlan()}>Просмотреть план</button>
+        </div>
+        <h4>Результаты</h4>
+        <p className="batch-hint">Ценник: {priceTagReady(row) ? 'Готов' : 'Нужны старая и новая цены'}. Постер: {outputs?.poster.available
+          ? 'Готов' : outputs?.poster.error || (outputs ? 'Такой постер ещё не сделали.' : 'Проверяем наличие...')}</p>
+        <div className="promotion-card-actions">
+          <button disabled={!priceTagReady(row)} onClick={() => void downloadPriceTag()}>
+            Просмотреть ценник
           </button>
-          <button disabled={generatingPoster || row.promoPrice === null || row.regularPrice === null} onClick={() => void generatePoster()}>
-            {generatingPoster ? 'Генерируем...' : 'Сгенерировать постер'}
+          <button disabled={!priceTagReady(row) || Boolean(outputs && !outputs.poster.available && !outputs.poster.error)} onClick={() => void generatePoster()}>
+            Просмотреть постер
           </button>
         </div>
       </div>
     </Modal>
+    {preview.modal}
+    </>
   );
 };
 
@@ -579,16 +621,24 @@ const DocumentsModal = ({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const fileInput = useRef<HTMLInputElement | null>(null);
+  const preview = useDocumentPreview(session.token);
+  const documentRequest = useRef(0);
+  const mounted = useRef(true);
+  const sessionToken = useRef(session.token);
+  sessionToken.current = session.token;
 
   const invoices = useMemo(() => documents.filter((document) => document.documentType === 'invoice'), [documents]);
   const plans = useMemo(() => documents.filter((document) => document.documentType === 'two_month_plan'), [documents]);
   const priceLists = useMemo(() => documents.filter((document) => document.documentType === 'retail_price_list'), [documents]);
 
   const load = async () => {
+    if (!mounted.current || sessionToken.current !== session.token) return;
+    const request = ++documentRequest.current;
     setLoading(true);
     setError('');
     try {
       const nextDocuments = await api.promotions.documents(session.token);
+      if (!mounted.current || request !== documentRequest.current || sessionToken.current !== session.token) return;
       setDocuments(nextDocuments);
       setInvoiceId((current) => nextDocuments.some((document) => document.id === current && document.documentType === 'invoice')
         ? current
@@ -600,14 +650,16 @@ const DocumentsModal = ({
         ? current
         : nextDocuments.find((document) => document.documentType === 'retail_price_list')?.id || '');
     } catch (err) {
-      setError(messageOf(err));
+      if (mounted.current && request === documentRequest.current) setError(messageOf(err));
     } finally {
-      setLoading(false);
+      if (mounted.current && request === documentRequest.current) setLoading(false);
     }
   };
 
   useEffect(() => {
+    mounted.current = true;
     void load();
+    return () => { mounted.current = false; documentRequest.current += 1; };
   }, [session.token]);
 
   const selectedOption = uploadOptions.find((option) => option.value === documentType)!;
@@ -633,6 +685,7 @@ const DocumentsModal = ({
     setNotice('');
     try {
       const document = await api.promotions.uploadDocument(session.token, documentType, file);
+      if (!mounted.current || sessionToken.current !== session.token) return;
       if (document.documentType === 'invoice') setInvoiceId(document.id);
       if (document.documentType === 'two_month_plan') setPlanId(document.id);
       if (document.documentType === 'retail_price_list') setPriceListId(document.id);
@@ -669,6 +722,25 @@ const DocumentsModal = ({
     }
   };
 
+  const previewById = (documentId: string) => {
+    const target = documents.find((document) => document.id === documentId);
+    if (!target) return;
+    const download = () => api.promotions.downloadDocument(session.token, { documentId, fileName: target.fileName });
+    void preview.open(target.fileName, async () => {
+      if (target.contentType === 'application/pdf' || target.fileName.toLowerCase().endsWith('.pdf')) {
+        const result = await download();
+        return { type: 'pdf', ...result };
+      }
+      return api.promotions.previewDocument(session.token, documentId);
+    }, download);
+  };
+
+  const previewCurrentCsv = () => {
+    void preview.open('Итоговая таблица.csv', () => api.promotions.previewFinalTable(session.token), async () => ({
+      blob: await api.promotions.downloadFinalTableCsv(session.token), fileName: 'itogovaya_tablica.csv',
+    }));
+  };
+
   const deleteById = async (documentId: string) => {
     if (!documentId) {
       setError('Выберите документ для удаления.');
@@ -685,6 +757,7 @@ const DocumentsModal = ({
     setNotice('');
     try {
       const result = await api.promotions.deleteDocument(session.token, documentId);
+      if (!mounted.current || sessionToken.current !== session.token) return;
       setNotice(result.deletedRows > 0
         ? `Документ удален. Удалено строк акций: ${result.deletedRows}.`
         : 'Документ удален.');
@@ -711,9 +784,11 @@ const DocumentsModal = ({
   };
 
   return (
+    <>
     <Modal title="Документы акций" onClose={onClose}>
       <div className="documents-modal">
         <Feedback error={error} notice={notice} />
+        <GmailImportStatus session={session} onImported={async () => { await load(); await onInvoiceImported(); }} />
 
         <section className="documents-panel">
           <h4>Прикрепить документ</h4>
@@ -779,7 +854,7 @@ const DocumentsModal = ({
         </section>
 
         <section className="documents-panel">
-          <h4>Скачать документы</h4>
+          <h4>Просмотр и скачивание документов</h4>
           {loading ? <p className="documents-loading">Загружаем список документов...</p> : (
             <div className="documents-download-grid">
               <DownloadRow
@@ -788,6 +863,7 @@ const DocumentsModal = ({
                 documents={invoices}
                 empty="Накладных пока нет"
                 onChange={setInvoiceId}
+                onPreview={() => previewById(invoiceId)}
                 onDownload={() => void downloadById(invoiceId)}
                 onDelete={() => void deleteById(invoiceId)}
                 deleting={deletingDocumentId === invoiceId}
@@ -798,6 +874,7 @@ const DocumentsModal = ({
                 documents={plans}
                 empty="Планов пока нет"
                 onChange={setPlanId}
+                onPreview={() => previewById(planId)}
                 onDownload={() => void downloadById(planId)}
                 onDelete={() => void deleteById(planId)}
                 deleting={deletingDocumentId === planId}
@@ -808,6 +885,7 @@ const DocumentsModal = ({
                 documents={priceLists}
                 empty="Прайсов пока нет"
                 onChange={setPriceListId}
+                onPreview={() => previewById(priceListId)}
                 onDownload={() => void downloadById(priceListId)}
                 onDelete={() => void deleteById(priceListId)}
                 deleting={deletingDocumentId === priceListId}
@@ -818,6 +896,7 @@ const DocumentsModal = ({
                 documents={[]}
                 empty="Всегда актуальная версия"
                 onChange={() => undefined}
+                onPreview={previewCurrentCsv}
                 onDownload={() => void downloadCurrentCsv()}
               />
             </div>
@@ -825,6 +904,8 @@ const DocumentsModal = ({
         </section>
       </div>
     </Modal>
+    {preview.modal}
+    </>
   );
 };
 
@@ -834,6 +915,7 @@ const DownloadRow = ({
   documents,
   empty,
   onChange,
+  onPreview,
   onDownload,
   onDelete,
   deleting = false,
@@ -843,6 +925,7 @@ const DownloadRow = ({
   documents: PromotionDocument[];
   empty: string;
   onChange: (value: string) => void;
+  onPreview: () => void;
   onDownload: () => void;
   onDelete?: () => void;
   deleting?: boolean;
@@ -860,7 +943,8 @@ const DownloadRow = ({
         <input value={empty} readOnly />
       )}
     </label>
-    <button className="secondary documents-download-button" onClick={onDownload}>Скачать</button>
+    <button className="secondary documents-preview-button" disabled={Boolean(onDelete && !value)} onClick={onPreview}>Просмотреть</button>
+    <button className="secondary documents-download-button" disabled={Boolean(onDelete && !value)} onClick={onDownload}>Скачать</button>
     {onDelete && (
       <button className="danger documents-delete-button" disabled={!value || deleting} onClick={onDelete}>
         {deleting ? 'Удаляем...' : 'Удалить'}

@@ -167,6 +167,50 @@ export type PromotionRowPayload = {
   regularPrice: number | null;
 };
 
+export type PromotionTablePreview = {
+  type: 'table';
+  sheets: Array<{ name: string; rows: string[][] }>;
+  truncated: boolean;
+};
+
+export type GmailHealth = {
+  enabled: boolean;
+  authenticated: boolean;
+  running: boolean;
+  lastPollAt: string | null;
+  lastSuccessfulPollAt: string | null;
+  lastImportAt: string | null;
+  lastError: string | null;
+};
+
+export type GmailImport = {
+  id: string;
+  filename: string;
+  sender: string;
+  subject: string;
+  receivedAt: string | null;
+  status: 'processing' | 'success' | 'failed' | 'skipped';
+  error: string | null;
+  retryable: boolean;
+  attemptCount: number;
+  promotionDocumentId: string | null;
+  processedAt: string | null;
+};
+
+export type PromotionOutputs = {
+  priceTag: { available: boolean };
+  poster: { available: boolean; templateFileName?: string; matchScore?: number; error?: string };
+};
+
+export type PromotionBatchScope = 'current' | 'future' | 'current_and_future' | 'selected';
+export type PromotionBatchRequest = {
+  scope: PromotionBatchScope;
+  rowNumbers?: number[];
+  from?: string | null;
+  to?: string | null;
+  layout?: 'a4_2x2';
+};
+
 export type ProductPayload = {
   name: string;
   businessCategory: BusinessCategory;

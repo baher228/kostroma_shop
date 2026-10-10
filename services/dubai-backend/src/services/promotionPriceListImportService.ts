@@ -40,7 +40,7 @@ const cellNumber = (cell: ExcelJS.Cell) => {
 
 const looksLikeHeader = (text: string) => /наименование|стоимость|рознич/i.test(text);
 
-export const importPromotionPriceList = async (input: {
+export const parsePromotionPriceList = async (input: {
   buffer: Buffer;
   sourceDocumentId: string;
   sourceFileName: string;
@@ -97,7 +97,12 @@ export const importPromotionPriceList = async (input: {
     });
   });
 
-  return {
-    imported: await upsertPromotionPriceListItems(items),
-  };
+  if (!items.length) throw new Error('В прайсе не найдено розничных цен. Проверьте колонки чистого наименования и розничной цены.');
+  return items;
 };
+
+export const importPromotionPriceList = async (input: {
+  buffer: Buffer;
+  sourceDocumentId: string;
+  sourceFileName: string;
+}) => ({ imported: await upsertPromotionPriceListItems(await parsePromotionPriceList(input)) });

@@ -121,7 +121,7 @@ export const deletePromotionDocumentById = async (documentId: string): Promise<D
       await client.query('COMMIT');
       return { document: mapDocument(row), deletedRows };
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     }
   });

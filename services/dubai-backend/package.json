@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test tests/run-tests.js",
-    "db:migrate": "ts-node src/db/migrate.ts"
+    "db:migrate": "ts-node src/db/migrate.ts",
+    "gmail:auth": "ts-node src/scripts/gmailAuth.ts"
   },
   "keywords": [
     "stock",
@@ -24,11 +25,13 @@
     "@aws-sdk/s3-request-presigner": "^3.1072.0",
     "@napi-rs/canvas": "^0.1.80",
     "ag-psd": "^31.0.2",
+    "analitika": "file:../..",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
+    "googleapis": "^160.0.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",

@@ -17,6 +17,12 @@ import {
   posterPdfContentDisposition,
 } from '../services/googleDrivePosterService';
 import { createPromotionPriceTagPdf, promotionPriceTagContentDisposition } from '../services/promotionPriceTagPdfService';
+import {
+  createPromotionPriceTagBatch,
+  PromotionPriceTagBatchEmptyError,
+  promotionPriceTagBatchContentDisposition,
+} from '../services/promotionPriceTagBatchService';
+import { getPromotionOutputs } from '../services/promotionOutputsService';
 
 const statuses = new Set<PromotionRowStatus>(['past', 'current', 'future']);
 
@@ -64,8 +70,44 @@ const parsePayload = (body: unknown): PromotionRowInput => {
 };
 
 export const registerPromotionRowsRoutes = (app: Express) => {
+  // This POST produces a document without mutating promotion data; the app's
+  // existing Ops authentication applies just as it does to single downloads.
+  app.post('/api/promotions/price-tags/batch.pdf', async (req: Request, res: Response) => {
+    try {
+      const result = await createPromotionPriceTagBatch(req.body);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Content-Disposition', promotionPriceTagBatchContentDisposition());
+      res.setHeader('X-Price-Tags-Count', result.rowNumbers.length);
+      res.setHeader('X-Price-Tags-Skipped-Count', result.skippedRowNumbers.length);
+      res.setHeader('X-Price-Tags-Skipped-Row-Numbers', result.skippedRowNumbers.join(','));
+      res.setHeader('X-Price-Tags-Page-Count', result.pageCount);
+      res.send(result.pdf);
+    } catch (error) {
+      res.status(400).json({
+        message: error instanceof Error ? error.message : 'Не удалось сформировать ценники.',
+        ...(error instanceof PromotionPriceTagBatchEmptyError ? { skippedRowNumbers: error.skippedRowNumbers } : {}),
+      });
+    }
+  });
+
   app.get('/api/promotions/rows', async (_req: Request, res: Response) => {
     res.json({ rows: await listPromotionRows() });
+  });
+
+  app.get('/api/promotions/rows/by-number/:rowNumber/outputs', async (req: Request, res: Response) => {
+    try {
+      const row = await getPromotionRowByNumber(parseRowNumber(req.params.rowNumber));
+      if (!row) {
+        res.status(404).json({ message: 'Строка с таким номером не найдена.' });
+        return;
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(await getPromotionOutputs(row));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Не удалось проверить ценник и постер.' });
+    }
   });
 
   app.get('/api/promotions/rows/by-number/:rowNumber', async (req: Request, res: Response) => {

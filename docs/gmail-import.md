@@ -1,0 +1,137 @@
+# Автоматический импорт акционных документов из Gmail
+
+Pipeline работает на Dubai backend поверх существующих импортёров акций:
+
+```text
+Gmail readonly OAuth → recursive MIME attachments → sender/file/content validation
+  → классификация всех кандидатов → прайс → план → накладная
+  → единый importPromotionDocument (тот же service, что у Web upload)
+  → R2 оригинал + PostgreSQL документ/интервалы/строки + gmail_imports success
+  → Dashboard preview → ценник / постер → печать / скачивание
+```
+
+Google Drive постеры продолжают использовать отдельный service account и `drive.readonly`. Gmail OAuth не меняет Drive credentials и не имеет прав отправки, удаления, установки labels или изменения прочитанности писем.
+
+## Локальная OAuth настройка
+
+1. В Google Cloud создайте OAuth client типа **Desktop app**, включите Gmail API и настройте consent screen. В режиме Testing добавьте Gmail аккаунт в test users.
+2. Сохраните предоставленный OAuth JSON в `services/dubai-backend/secrets/gmail-oauth-client.json`. JSON должен содержать объект `installed`.
+3. Запустите в корне новой копии проекта:
+
+```powershell
+npm --prefix services/dubai-backend ci
+npm --prefix services/dubai-backend run gmail:auth
+```
+
+Команда поднимает callback на `127.0.0.1` со свободным портом, использует state и PKCE, открывает Google OAuth и запрашивает только `https://www.googleapis.com/auth/gmail.readonly` с offline access. Полученные четыре настройки записываются в локальный `services/dubai-backend/secrets/gmail-token.env`; refresh token и client secret не печатаются в терминал. Перенесите настройки в backend `.env` или секреты production окружения. В production OAuth JSON и интерактивный вход не нужны.
+
+Опционально можно задать `GMAIL_OAUTH_CREDENTIALS_FILE` и `GMAIL_AUTH_CALLBACK_PORT` для bootstrap-команды. Если браузер не открылся, используйте выведенную ссылку. Callback ждёт до пяти минут. Credentials, token-файлы, `.env` и каталог `secrets/` игнорируются Git.
+
+Google поддерживает [loopback callback для desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app). При внешнем consent screen со статусом Testing refresh token с Gmail scope обычно [истекает через 7 дней](https://developers.google.com/identity/protocols/oauth2). Для постоянной интеграции проверьте статус приложения и требования Google consent/verification.
+
+## ENV
+
+Все значения есть в `.env.example` и передаются в `docker-compose.dubai.yml`:
+
+```dotenv
+GMAIL_ENABLED=false
+GMAIL_CLIENT_ID=
+GMAIL_CLIENT_SECRET=
+GMAIL_REFRESH_TOKEN=
+GMAIL_USER=me
+GMAIL_QUERY=has:attachment newer_than:30d
+GMAIL_ALLOWED_SENDERS=
+GMAIL_ALLOWED_EXTENSIONS=.pdf,.xlsx,.xls,.csv
+GMAIL_POLL_INTERVAL_MS=60000
+GMAIL_MAX_MESSAGES_PER_POLL=100
+GMAIL_MAX_RETRIES=3
+GMAIL_MAX_ATTACHMENT_BYTES=26214400
+GMAIL_GLOBAL_DEDUPE_BY_HASH=false
+```
+
+`GMAIL_ALLOWED_SENDERS` — список email через запятую, например `allowed@example.com,second@example.com`. Если список пуст, разрешён любой корректный адрес; для production заполните список. From фильтр добавляется к Gmail search, затем фактический From ещё раз проверяется после `messages.get`. Тема письма может быть пустой и не используется как обязательный фильтр.
+
+`GMAIL_MAX_RETRIES` ограничивает суммарное число попыток каждого вложения, включая первую. Временные Gmail запросы используют этот же предел с коротким exponential backoff. Размер ограничивается максимумом 25 МБ для Gmail и Web upload; ENV может уменьшить Gmail лимит.
+
+Для Docker после помещения ENV в секреты/окружение:
+
+```powershell
+docker compose -f docker-compose.dubai.yml up --build -d backend-dubai
+```
+
+## Миграции и сохранение состояния
+
+`027_gmail_imports.sql` создаёт историю `gmail_imports`, уникальность `(message_id, attachment_key)`, связь на source promotion document и журнал незавершённых R2 objects. `028_gmail_poll_cursor.sql` хранит pagination cursor; лимит 100 сообщений не оставляет старые письма навсегда за первой страницей. Cursor переживает рестарт, сбрасывается при изменении query/whitelist, при исчерпании результатов и при просроченном page token.
+
+Backend выполняет миграции на старте; их также можно применить отдельно:
+
+```powershell
+npm --prefix services/dubai-backend run db:migrate
+```
+
+PostgreSQL session advisory lock допускает один poll одновременно даже при нескольких backend экземплярах. Потеря lock connection останавливает poll; attempt-count fencing защищает recovered claims от старого worker. R2 original, document, изменения прайса/интервалов/таблицы и успешный Gmail record формируют один import unit; DB часть коммитится одной транзакцией с savepoints для существующих repositories.
+
+При ошибке DB изменения откатываются, R2 object удаляется. Если ответ COMMIT потерян, service проверяет созданный source document и возвращает успешный результат при подтверждённом commit. При недоступности DB/R2 cleanup откладывается в persistent object journal. Cleanup выполняется при старте backend и перед Gmail poll; активные транзакции пропускаются через `FOR UPDATE SKIP LOCKED`. Незавершённые ручные upload objects учитываются после 24 часов, чтобы не затронуть текущий upload.
+
+По умолчанию одинаковый файл в другом письме является отдельным вложением. `GMAIL_GLOBAL_DEDUPE_BY_HASH=true` запрещает повторный импорт уже успешно обработанного SHA-256. Удаление promotion document не сбрасывает успешный Gmail статус; тот же attachment не появится снова при следующем poll.
+
+## Форматы и статусы
+
+PDF сначала проверяется на `%PDF-`, затем реальный текст проходит существующий invoice parser: период акции, блок рекомендованных розничных цен и хотя бы один товар. Неподходящий PDF получает `invoice_structure_not_recognized`; image-only PDF получает `no_text_layer`. OCR не выполняется.
+
+XLSX открывается ExcelJS, прайс определяется по конкретным колонкам существующего parser, план — по колонкам товара/цены/дат. Workbook с признаками сразу двух типов получает `ambiguous_workbook`. CSV должен быть корректным UTF-8 текстом с распознаваемой структурой плана. Legacy binary XLS не поддерживается ExcelJS и пропускается с `legacy_xls_needs_xlsx_conversion`; сохраните файл как XLSX. Signature images, пустые и слишком большие attachments пропускаются.
+
+| Статус | Значение |
+| --- | --- |
+| `processing` | Вложение закреплено за текущей попыткой. После прерывания может восстановиться. |
+| `success` | Оригинал и акции сохранены, `promotionDocumentId` связан с источником. |
+| `skipped` | Неподходящий формат, структура, пустой файл или включённый hash dedupe. |
+| `failed` | Ошибка импорта. `retryable=true` только пока есть оставшиеся временные попытки. |
+
+Retry применяется к 408/429/5xx, сетевым временным ошибкам, transient R2/PostgreSQL и отсутствующему прайсу для накладной. Ошибки структуры/формата не повторяются. После исчерпания лимита исправленный документ можно загрузить вручную или получить новым письмом.
+
+## API и Dashboard
+
+Все promotion API требуют Ops auth. Ручной poll и удаление документов доступны только manager:
+
+| Endpoint | Результат |
+| --- | --- |
+| `GET /api/health` | Cached `gmail` health; без Gmail или DB запроса. |
+| `GET /api/promotions/gmail/imports?limit=50&offset=0&status=failed` | `{ imports, health }`, limit 1–100, статус необязателен. |
+| `POST /api/promotions/gmail/poll` | Manager запускает poll; `{ result, health }`, 409 если занят, 503 если отключён/ошибка. |
+| `POST /api/promotions/documents` | Существующий multipart upload через общий service, прежний ответ 201 `{ document, import }`. |
+| `GET /api/promotions/documents/:documentId/preview` | Inline invoice PDF или ограниченный JSON spreadsheet preview. |
+| `GET /api/promotions/documents/download?id=...` | Скачивание оригинала. |
+| `GET /api/promotions/documents/final-table/preview` | Preview актуальной итоговой CSV таблицы. |
+| `GET /api/promotions/rows/by-number/:rowNumber/price-tag.pdf` | Существующий ценник PDF. |
+| `GET /api/promotions/rows/by-number/:rowNumber/poster-generated.pdf` | Существующий Google Drive PSD → PDF poster. |
+| `POST /api/promotions/price-tags/batch.pdf` | Один многостраничный A4 PDF; см. [promotion-printing.md](promotion-printing.md). |
+
+В «Акции → Документы» блок «Почта» показывает состояние подключения, время проверок/импортов и последние вложения. «Проверить почту» — дополнительный manager trigger; polling выполняется автоматически после запуска backend, затем через completion → timeout, без overlapping calls.
+
+«Просмотреть» открывает документ внутри Dashboard. PDF preview предлагает «Печать» и «Скачать»; XLSX/CSV показывается таблицей максимум первых 3 sheets, 100 rows и 30 columns. Оригинал можно скачать отдельно. Blob URLs освобождаются при закрытии, новом preview и unmount.
+
+## Проверка и диагностика
+
+```powershell
+npm --prefix services/dubai-backend run typecheck
+npm --prefix services/dubai-backend test
+npm --prefix services/dubai-backend run build
+```
+
+Для проверки через API используйте действующий Ops token в `$opsToken`, выставленный пользователем в локальной сессии:
+
+```powershell
+$headers = @{ Authorization = "Bearer $opsToken" }
+Invoke-RestMethod http://localhost:4000/api/health
+Invoke-RestMethod http://localhost:4000/api/promotions/gmail/poll -Method Post -Headers $headers
+Invoke-RestMethod 'http://localhost:4000/api/promotions/gmail/imports?limit=10' -Headers $headers
+```
+
+У контейнера порт по умолчанию 4001 вместо 4000. Automated Gmail tests полностью mock, без реального Google account/network. Отдельный opt-in `tests/promotion-pipeline.postgres-smoke.js` проверяет настоящее disposable PostgreSQL, существующие parsers, provenance, дедупликацию, rollback, compensation и A4 generator; реальный Gmail/R2 там заменён локальными mocks.
+
+Реальный smoke: отправьте письмо от whitelist sender с пустой темой и стандартной PDF накладной, дождитесь poll, убедитесь в `success`, исходном документе и новой строке акции. Повторный poll и рестарт не должны создавать ещё один документ. Откройте накладную/ценник/постер в preview, скачайте/распечатайте; затем сформируйте общий A4 PDF в toolbar «Печать ценников».
+
+`invalid_grant` / 401: backend продолжает обслуживать другие routes, health выставляет `authenticated=false`; повторите `gmail:auth` и замените refresh token. Возможные причины: отозванный grant, истёкший Testing token, смена параметров аккаунта/приложения. При временных ошибках смотрите `attemptCount`, `retryable` и последние imports; при `no_text_layer` нужен документ с текстовым слоем. При отсутствии прайса загрузите его и дождитесь следующей оставшейся попытки.
+
+Logs, health и Gmail history содержат только безопасные diagnostics, без client secret, refresh/access token и email body.

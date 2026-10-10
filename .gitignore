@@ -37,6 +37,9 @@ vite-dev.*.log
 .env
 .env*.local
 services/dubai-backend/secrets/
+**/gmail-oauth-client*.json
+**/credentials*.json
+**/token.json
 
 # typescript
 *.tsbuildinfo

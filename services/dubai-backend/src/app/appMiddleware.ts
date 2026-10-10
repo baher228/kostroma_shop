@@ -13,7 +13,11 @@ export const applyAppMiddleware = (app: Express) => {
       // origin. Without explicitly exposing this header the browser hides the
       // original file name from JavaScript, even though it is present on the
       // wire.
-      exposedHeaders: ['Content-Disposition', 'Content-Length'],
+      exposedHeaders: [
+        'Content-Disposition', 'Content-Length',
+        'X-Price-Tags-Count', 'X-Price-Tags-Skipped-Count',
+        'X-Price-Tags-Skipped-Row-Numbers', 'X-Price-Tags-Page-Count',
+      ],
     }),
   );
   app.use(json({ limit: '200kb' }));

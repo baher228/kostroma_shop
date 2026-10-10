@@ -31,9 +31,10 @@ export const extractGmailAttachments = (payload: GmailMimePart | null | undefine
     const inlineData = typeof part.body?.data === 'string' ? part.body.data : null;
     if (filename && (attachmentId || inlineData !== null || part.body?.size === 0)) {
       attachments.push({
-        // Part identity includes MIME position, so two distinct inline parts
-        // containing identical bytes remain distinct unless global hash dedupe is on.
-        attachmentKey: attachmentId ? `attachment:${attachmentId}` : `inline:${part.partId || path.join('.')}:${createHash('sha256').update(filename).digest('hex')}`,
+        // Gmail partId is immutable; attachmentId is only a download handle and
+        // can rotate between reads. Fall back to the MIME tree position when a
+        // partId is absent, preserving distinct parts even with identical bytes.
+        attachmentKey: `part:${part.partId?.trim() ? `id:${part.partId.trim()}` : `path:${path.join('.')}`}:${createHash('sha256').update(filename).digest('hex')}`,
         attachmentId, filename, mimeType: part.mimeType?.trim().toLowerCase() || 'application/octet-stream',
         size: typeof part.body?.size === 'number' ? part.body.size : null,
         inlineData, contentDisposition: headerValue(part.headers, 'Content-Disposition'),

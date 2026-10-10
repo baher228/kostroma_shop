@@ -112,12 +112,24 @@ The Android build workflow publishes both manifests and both versioned APKs toge
 
 ## Default Login
 
+These accounts are for the local development environment only.
+
 ```text
 Username: admin
 Password: admin
+Role: manager
 
 Username: manager
 Password: manager123
+Role: manager
+
+Username: worker
+Password: worker123
+Role: worker
+
+Username: tablet
+Password: tablet123
+Role: store_tablet
 ```
 
 ## Local Ports
@@ -142,6 +154,12 @@ Both backend services use the same lightweight structure:
 - `services/` - application/business rules used by routes
 
 The Russia backend also has `observability/` for audit-related helpers.
+
+The integrated Audio AI Quality Control design, API, migration, provider flow,
+configuration, tests, and production checklist are documented in
+[`services/ru-backend/QUALITY_CONTROL_IMPLEMENTATION.md`](services/ru-backend/QUALITY_CONTROL_IMPLEMENTATION.md).
+The current release configuration, retention rules and live test steps are in
+[`services/ru-backend/AI_QC_PRODUCTION.md`](services/ru-backend/AI_QC_PRODUCTION.md).
 
 ## CI/CD
 
@@ -212,6 +230,89 @@ EAS Update is enabled in both apps through `expo-updates`, `runtimeVersion.polic
 - Dashboard APK downloads are `preview` builds, so automatic OTA updates publish to each project's `preview` branch and keep its `preview` channel pointed at that branch.
 - `production` builds receive OTA updates from the `production` channel when the workflow is run manually with `channel=production`.
 - Native/runtime changes still require a new EAS build; JS/asset-only changes can ship through `Update Expo app`.
+
+## Audio QC: sherpa-onnx VAD
+
+The tablet app supports two Audio QC modes:
+
+- `manual` records M4A through `expo-audio` and remains the fallback/debug mode.
+- `vad_auto` captures 16 kHz mono PCM in an Android foreground service, uses the sherpa-onnx Silero model to detect speech, and saves finalized segments as WAV.
+
+VAD only decides speech/non-speech. The native state machine provides hysteresis, pre-roll, silence timeout, minimum/maximum segment duration, and writes the local WAV. The JS handoff then stores an ordinary `AudioQcRecording` with `recordingMode=vad_auto`; the existing queue still calls the same ML session, audio upload, and process endpoints.
+
+### Native artifacts and APK rebuild
+
+The tracked local Expo module is in `modules/audio-qc-vad`. The first preview intentionally uses the universal sherpa-onnx AAR with `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64`. The AAR is about 46.6 MiB and the model about 0.6 MiB before APK packaging.
+
+The root `.npmrc` sets `install-links=true`, so npm installs the local `audio-qc-vad` dependency as an ordinary directory instead of a symlink or Windows junction. Keep this setting for local installs and CI. Edit the tracked module in `modules/audio-qc-vad`; after changing its TypeScript entry point, run `npm ci` to refresh the installed copy. Expo Android autolinking uses the tracked module's `android` directory.
+
+Verify or restore the pinned artifacts before building:
+
+```bash
+npm run audio-qc:prepare-native
+```
+
+The script pins sherpa-onnx `1.13.4` and verifies SHA-256 for both the AAR and `silero_vad.onnx`. It downloads only a missing or invalid build-time artifact; the app never downloads a model at runtime.
+
+This is a native-runtime change. An OTA update cannot add the module, JNI libraries, model, service, or Android permissions. Build a new preview APK:
+
+```bash
+npx eas-cli login
+npx eas-cli build -p android --profile preview
+```
+
+For local native inspection, generate the ignored Android project and build with JDK 17 plus a configured Android SDK:
+
+```bash
+npm run audio-qc:prepare-native
+npx expo prebuild --clean --platform android
+cd android
+./gradlew :audio-qc-vad:testDebugUnitTest :app:assembleDebug
+```
+
+`expo prebuild --clean` recreates the ignored `android/` directory. Make permanent native changes in the tracked local module, not in generated files.
+
+To update sherpa-onnx or the Silero model, change the version/URL and SHA-256 in `scripts/prepare-audio-qc-vad.mjs`, run the preparation command, inspect the universal ABI contents, run native tests, and produce a new APK. Do not ship such a change through OTA.
+
+### RU policy migration and enablement
+
+Apply RU migrations (including `008_audio_qc_vad_auto.sql`) with the normal backend environment configured:
+
+```bash
+npm run backend:ru:db:migrate
+```
+
+The migration permits `manual` and `vad_auto` in policies and heartbeats. Only a manager can update a shop policy. The manager UI exposes the mode, pre-roll, silence timeout, maximum segment duration, and immediate-upload setting. The equivalent API request is:
+
+```bash
+curl -X PUT "https://YOUR_RU_API/api/audio-qc/shops/SHOP_ID/policy" \
+  -H "Authorization: Bearer MANAGER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true,"mode":"vad_auto","maxSegmentDurationSec":300,"silenceToStopSec":3,"preRollSec":5,"uploadImmediately":true}'
+```
+
+On a `store_tablet` session, the app starts VAD while the app is active. For this MVP it deliberately stops the foreground service when the app enters the background and rereads policy/restarts on return. The Android foreground notification and system microphone indicator remain visible while the service runs.
+
+### Acceptance checks
+
+Manual regression:
+
+1. Set the shop policy to `manual`, record and stop from the tablet controls.
+2. Confirm an `.m4a` item appears in Audio QC and advances through the queue.
+3. Confirm the RU backend receives POST /api/quality-control/sessions, then /audio and /process, and the app polls /status until completion.
+
+VAD preview:
+
+1. Install the newly built APK, sign in as `store_tablet`, and enable `vad_auto` for its shop.
+2. Confirm the UI shows `VAD active`, model loaded, and `idle`/waiting for speech.
+3. Watch native diagnostics with `adb logcat -s AudioQcVad ReactNativeJS`. Look for `Silero model loaded`, probability/decision lines, state transitions, segment finalization, and JS queue handoff.
+4. Keep the room quiet: no segment should be created. A single clap/short noise must not pass the 700 ms start hysteresis; any resulting segment under 5 seconds is deleted.
+5. Speak continuously, then stay silent for 3 seconds. Confirm a WAV appears with `recordingMode=vad_auto`, VAD metadata, duration, size, and speech ratio.
+6. Confirm the heartbeat reports `currentMode=vad_auto`; `isRecording` is true only while a segment is being written.
+7. Disable the network and verify the existing retry state is retained. Restore it and confirm the same Quality Control requests complete.
+8. Verify continuous speech is force-finalized at `maxSegmentDurationSec` and app reload recovers any pending native-to-JS handoff.
+
+Current MVP limitations: Android only, no on-device STT/diarization, WAV files are larger than AAC, policy polling can take up to 45 seconds, and VAD pauses in background. ABI splits, compressed native encoding, device-specific VAD calibration, longer lifecycle soak tests, and richer `vadActive` heartbeat telemetry are candidates for the next sprint.
 
 ### Example `ENV_FILE` Secret
 
@@ -378,3 +479,11 @@ EXPO_WORKER_EAS_PROJECT_ID=<worker-project-uuid> npx eas-cli build -p android --
 ```
 
 Both `preview` profiles use the HTTPS production APIs at `https://affera.co.uk/ru` and `https://affera.co.uk/dxb` as applicable. Cleartext access remains enabled only for local emulator/LAN development.
+
+## Unified local contour
+
+The local Quality Control stack is part of the main Analitika Compose project. It starts the RU and Dubai PostgreSQL databases, both backends, and the existing MinIO data volume.
+
+Run npm run stack:up, then npm run android:reverse, then npm run dashboard:dev.
+
+For the physical Android tablet, keep EXPO_PUBLIC_RU_API_URL=http://127.0.0.1:4000 and EXPO_PUBLIC_DXB_API_URL=http://127.0.0.1:4001 in the gitignored root .env; android:reverse forwards API and Metro ports over USB. Quality Control metadata is stored by the RU backend in analitika_personal; audio remains in the private ml-audio MinIO bucket. The standalone Python ML API, Celery, Redis, and ML PostgreSQL are not part of the runtime.

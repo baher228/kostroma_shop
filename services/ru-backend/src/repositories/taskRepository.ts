@@ -245,3 +245,41 @@ export const deleteTask = async (id: string): Promise<boolean> => {
   const result = await personalDb.query('DELETE FROM tasks WHERE id = $1;', [id]);
   return (result.rowCount ?? 0) > 0;
 };
+
+export type TaskDeadlineReminderKind = 'hour_before' | 'deadline';
+
+const REMINDER_SEND_WINDOW = "INTERVAL '10 minutes'";
+
+const reminderClaimConditions: Record<TaskDeadlineReminderKind, { column: string; condition: string }> = {
+  hour_before: {
+    column: 'reminder_hour_before_sent_at',
+    condition: `
+      created_at <= deadline_at - INTERVAL '1 hour'
+      AND NOW() >= deadline_at - INTERVAL '1 hour'
+      AND NOW() < deadline_at - INTERVAL '1 hour' + ${REMINDER_SEND_WINDOW}
+    `,
+  },
+  deadline: {
+    column: 'reminder_deadline_sent_at',
+    condition: `
+      NOW() >= deadline_at
+      AND NOW() < deadline_at + ${REMINDER_SEND_WINDOW}
+    `,
+  },
+};
+
+export const claimTaskDeadlineReminders = async (kind: TaskDeadlineReminderKind): Promise<Task[]> => {
+  const { column, condition } = reminderClaimConditions[kind];
+  const result = await personalDb.query<TaskDbRow>(
+    `
+      UPDATE tasks
+      SET ${column} = NOW()
+      WHERE status = 'open'
+        AND deadline_at IS NOT NULL
+        AND ${column} IS NULL
+        AND ${condition}
+      RETURNING ${selectFields};
+    `,
+  );
+  return result.rows.map(mapTask);
+};

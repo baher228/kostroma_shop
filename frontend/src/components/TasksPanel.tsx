@@ -13,6 +13,12 @@ import {
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { tasksApi } from "../api/tasks";
 import { Session, StoreTablet, Task, TaskStatus } from "../types/models";
+import {
+  groupTasksByUrgency,
+  TaskGroupKey,
+  taskDueLabel,
+  taskTimeParts,
+} from "../../../shared/task-timeline";
 
 type TasksPanelProps = {
   session: Session;
@@ -64,9 +70,6 @@ const toDateKey = (date: Date) => {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-
-const statusLabel = (status: TaskStatus) =>
-  status === "open" ? "Открыта" : "Выполнена";
 
 const reviewLabel = (task: Task) => {
   if (!task.requiresPhotoConfirmation) return "";
@@ -131,6 +134,12 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
   const [requiresPhotoConfirmation, setRequiresPhotoConfirmation] = useState(false);
   const [pendingTaskIds, setPendingTaskIds] = useState<Record<string, boolean>>({});
   const [cameraTaskId, setCameraTaskId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const canManage = session.user.role === "manager";
 
@@ -291,35 +300,6 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
     } finally {
       setTaskPending(task.id, false);
     }
-  };
-
-  const removeTask = (task: Task) => {
-    if (!canManage) {
-      return;
-    }
-    Alert.alert(
-      "Удалить задачу?",
-      "Задача будет удалена без возможности восстановления.",
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Удалить",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setTaskPending(task.id, true);
-              await tasksApi.remove(session.token, task.id);
-              setTasks((current) => current.filter((item) => item.id !== task.id));
-              setError("");
-            } catch (removeError) {
-              setError(errorMessage(removeError));
-            } finally {
-              setTaskPending(task.id, false);
-            }
-          },
-        },
-      ],
-    );
   };
 
   const renderCreateControls = () => (
@@ -577,88 +557,99 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
         <Text style={styles.emptyText}>Список задач пуст.</Text>
       ) : (
         <ScrollView style={styles.tasksList} contentContainerStyle={styles.tasksListContent}>
-          {tasks.map((task) => {
-            const pending = pendingTaskIds[task.id];
-            return (
-              <View key={task.id} style={[styles.taskCard, pending && styles.taskCardPending]}>
-                <Text style={styles.taskTitle}>{task.title}</Text>
-                <Text style={styles.taskMeta}>
-                  {canManage
-                    ? `Планшет: ${task.assigneeDisplayName}`
-                    : `Поставил: ${task.createdByDisplayName}`}{" "}
-                  · {statusLabel(task.status)}
-                </Text>
-                <Text style={styles.taskDate}>Создана: {formatDate(task.createdAt)}</Text>
-                {!!task.deadlineAt && (
-                  <Text style={styles.taskDate}>Дедлайн: {formatDate(task.deadlineAt)}</Text>
-                )}
-                {!!task.completedAt && (
-                  <Text style={styles.taskDate}>Выполнена: {formatDate(task.completedAt)}</Text>
-                )}
-                {task.overdue && <Text style={styles.error}>Просрочена</Text>}
-                {!!reviewLabel(task) && (
-                  <Text style={styles.taskMeta}>{reviewLabel(task)}</Text>
-                )}
-                {cameraTaskId === task.id && (
-                  <View style={styles.photoCameraBox}>
-                    <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
-                    <View style={styles.photoCameraActions}>
-                      <Pressable
-                        style={[styles.actionButton, styles.statusButton]}
-                        onPress={() => void captureTaskPhoto(task)}
-                        disabled={pending}
-                      >
-                        <Text style={styles.actionButtonText}>{pending ? "Отправляем..." : "Снять и отправить"}</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.actionButton, styles.cancelButton]}
-                        onPress={() => setCameraTaskId(null)}
-                        disabled={pending}
-                      >
-                        <Text style={styles.cancelButtonText}>Отмена</Text>
-                      </Pressable>
+          {groupTasksByUrgency(tasks, now).map((group) => (
+            <View key={group.key} style={styles.taskGroup}>
+              <View style={styles.groupHeader}>
+                <View style={[styles.groupDot, groupDotStyles[group.key]]} />
+                <Text style={[styles.groupTitle, group.key === "overdue" && styles.groupTitleOverdue]}>{group.label}</Text>
+                <Text style={[styles.groupCount, group.key === "overdue" && styles.groupCountOverdue]}>{group.tasks.length}</Text>
+              </View>
+              {group.tasks.map((task) => {
+                const pending = pendingTaskIds[task.id];
+                const time = taskTimeParts(task.deadlineAt, now);
+                const due = taskDueLabel(task, now);
+                const meta = [
+                  reviewLabel(task),
+                  task.completedAt ? `Выполнена ${formatDate(task.completedAt)}` : "",
+                ].filter(Boolean);
+                return (
+                  <View key={task.id} style={[styles.taskCard, group.key === "overdue" && styles.taskCardOverdue, group.key === "soon" && styles.taskCardSoon, pending && styles.taskCardPending]}>
+                    <View style={[styles.timeBlock, timeBlockStyles[group.key]]}>
+                      <Text style={[styles.timeText, timeTextStyles[group.key]]}>{time.time}</Text>
+                      <Text style={[styles.timeDay, timeTextStyles[group.key]]}>{time.day}</Text>
+                    </View>
+                    <View style={styles.taskBody}>
+                      <View style={styles.taskHeaderRow}>
+                        <View style={styles.taskTitleRow}>
+                          {task.requiresPhotoConfirmation && <Text style={styles.photoBadge}>Фото</Text>}
+                          <Text style={[styles.taskTitle, group.key === "done" && styles.taskTitleDone]}>
+                            {task.title}
+                          </Text>
+                        </View>
+                        {!!due && (
+                          <Text style={[styles.dueText, dueChipStyles[group.key]]}>
+                            {due}
+                          </Text>
+                        )}
+                      </View>
+                      {meta.length > 0 && <Text style={styles.taskMeta}>{meta.join("  ·  ")}</Text>}
+                      {cameraTaskId === task.id && (
+                        <View style={styles.photoCameraBox}>
+                          <CameraView ref={cameraRef} style={styles.photoCamera} facing="back" />
+                          <View style={styles.photoCameraActions}>
+                            <Pressable
+                              style={[styles.actionButton, styles.statusButton]}
+                              onPress={() => void captureTaskPhoto(task)}
+                              disabled={pending}
+                            >
+                              <Text style={styles.actionButtonText}>{pending ? "Отправляем..." : "Снять и отправить"}</Text>
+                            </Pressable>
+                            <Pressable
+                              style={[styles.actionButton, styles.cancelButton]}
+                              onPress={() => setCameraTaskId(null)}
+                              disabled={pending}
+                            >
+                              <Text style={styles.cancelButtonText}>Отмена</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
+                      <View style={styles.taskActions}>
+                        {canManage ? (
+                          <>
+                            <Pressable
+                              style={[styles.actionButton, styles.statusButton]}
+                              onPress={() => setStatus(task, task.status === "open" ? "done" : "open")}
+                            >
+                              <Text style={styles.actionButtonText}>
+                                {task.status === "open"
+                                  ? "Отметить выполненной"
+                                  : "Открыть снова"}
+                              </Text>
+                            </Pressable>
+                          </>
+                        ) : task.status === "open" ? (
+                          <Pressable
+                            style={[styles.actionButton, styles.statusButton]}
+                            onPress={() => void completeTask(task)}
+                            disabled={pending}
+                          >
+                            <Text style={styles.actionButtonText}>
+                              {task.requiresPhotoConfirmation && task.photoReviewStatus !== "approved" ? "Сделать фото" : "Выполнено"}
+                            </Text>
+                          </Pressable>
+                        ) : task.photoReviewStatus === "pending" ? (
+                          <Text style={styles.doneText}>На проверке</Text>
+                        ) : (
+                          <Text style={styles.doneText}>Завершено</Text>
+                        )}
+                      </View>
                     </View>
                   </View>
-                )}
-                <View style={styles.taskActions}>
-                  {canManage ? (
-                    <>
-                      <Pressable
-                        style={[styles.actionButton, styles.statusButton]}
-                        onPress={() => setStatus(task, task.status === "open" ? "done" : "open")}
-                      >
-                        <Text style={styles.actionButtonText}>
-                          {task.status === "open"
-                            ? "Отметить выполненной"
-                            : "Открыть снова"}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.actionButton, styles.deleteButton]}
-                        onPress={() => removeTask(task)}
-                      >
-                        <Text style={styles.actionButtonText}>Удалить</Text>
-                      </Pressable>
-                    </>
-                  ) : task.status === "open" ? (
-                    <Pressable
-                      style={[styles.actionButton, styles.statusButton]}
-                      onPress={() => void completeTask(task)}
-                      disabled={pending}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {task.requiresPhotoConfirmation && task.photoReviewStatus !== "approved" ? "Сделать фото" : "Выполнено"}
-                      </Text>
-                    </Pressable>
-                  ) : task.photoReviewStatus === "pending" ? (
-                    <Text style={styles.doneText}>На проверке</Text>
-                  ) : (
-                    <Text style={styles.doneText}>Завершено</Text>
-                  )}
-                </View>
-              </View>
-            );
-          })}
+                );
+              })}
+            </View>
+          ))}
         </ScrollView>
       )}
     </View>
@@ -692,15 +683,17 @@ const styles = StyleSheet.create({
     color: "#1f2f26",
   },
   refreshButton: {
-    borderRadius: 12,
-    backgroundColor: "#dbe4dc",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bccabf',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   refreshButtonText: {
-    color: "#294033",
+    color: '#2f4437',
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   createBox: {
     gap: 8,
@@ -924,10 +917,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   error: {
-    color: "#af4234",
-    fontWeight: "700",
+    color: "#ffffff",
+    backgroundColor: "#ff2d20",
+    borderRadius: 10,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontWeight: "800",
     fontSize: 13,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   loadingBox: {
     paddingVertical: 12,
@@ -942,16 +940,132 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tasksListContent: {
-    gap: 8,
+    gap: 16,
     paddingBottom: 4,
   },
-  taskCard: {
+  taskGroup: {
+    gap: 8,
+  },
+  groupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 2,
+  },
+  groupDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#9aabb8",
+  },
+  groupTitle: {
+    color: "#1d2f24",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  groupCount: {
+    minWidth: 22,
     borderRadius: 11,
+    backgroundColor: "#e6ece7",
+    color: "#5f7266",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 20,
+    paddingHorizontal: 7,
+    textAlign: "center",
+    overflow: "hidden",
+  },
+  taskCard: {
+    flexDirection: "row",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#cfdbd1",
     backgroundColor: "#ffffff",
-    padding: 10,
-    gap: 4,
+    overflow: "hidden",
+    minHeight: 76,
+  },
+  timeBlock: {
+    width: 88,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    backgroundColor: "#e5ebf0",
+  },
+  timeText: {
+    color: "#1f2a23",
+    fontSize: 25,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+    fontVariant: ["tabular-nums"],
+  },
+  timeDay: {
+    color: "#1f2a23",
+    fontSize: 11,
+    fontWeight: "800",
+    opacity: 0.9,
+    marginTop: 3,
+  },
+  taskBody: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 5,
+    justifyContent: "center",
+  },
+  taskHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  taskTitleRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  photoBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#c8d9cd",
+    backgroundColor: "#e8f2eb",
+    color: "#245d43",
+    fontSize: 11,
+    fontWeight: "800",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: "hidden",
+  },
+  taskTitleDone: {
+    color: "#6b7a71",
+    textDecorationLine: "line-through",
+  },
+  dueText: {
+    borderRadius: 10,
+    backgroundColor: "#eef2f6",
+    color: "#33465a",
+    fontSize: 11,
+    fontWeight: "800",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    overflow: "hidden",
+  },
+  taskCardOverdue: {
+    borderColor: "#ff8a80",
+    backgroundColor: "#fff5f4",
+  },
+  taskCardSoon: {
+    borderColor: "#ffd24d",
+    backgroundColor: "#fff8db",
+  },
+  groupTitleOverdue: {
+    color: "#d91e18",
+  },
+  groupCountOverdue: {
+    backgroundColor: "#ff2d20",
+    color: "#ffffff",
   },
   taskCardPending: {
     opacity: 0.7,
@@ -959,17 +1073,12 @@ const styles = StyleSheet.create({
   taskTitle: {
     color: "#1d2f24",
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   taskMeta: {
-    color: "#4c6153",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  taskDate: {
     color: "#64786b",
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   taskActions: {
     flexDirection: "row",
@@ -979,14 +1088,11 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     borderRadius: 9,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
   statusButton: {
     backgroundColor: "#2f6f4f",
-  },
-  deleteButton: {
-    backgroundColor: "#9f4038",
   },
   cancelButton: {
     backgroundColor: "#edf3ee",
@@ -1025,4 +1131,36 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: "#ffffff",
   },
+});
+
+const timeBlockStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { backgroundColor: "#ff2d20" },
+  soon: { backgroundColor: "#ffc61a" },
+  later: { backgroundColor: "#e3e9ef" },
+  noDeadline: { backgroundColor: "#eef3ee" },
+  done: { backgroundColor: "#dceee3" },
+});
+
+const timeTextStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { color: "#ffffff" },
+  soon: { color: "#2b2100" },
+  later: { color: "#1f2a23" },
+  noDeadline: { color: "#5b6b62" },
+  done: { color: "#245236" },
+});
+
+const groupDotStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { backgroundColor: "#ff2d20" },
+  soon: { backgroundColor: "#ffb800" },
+  later: { backgroundColor: "#9aabb8" },
+  noDeadline: { backgroundColor: "#b7c2bb" },
+  done: { backgroundColor: "#4f9a6c" },
+});
+
+const dueChipStyles = StyleSheet.create<Record<TaskGroupKey, object>>({
+  overdue: { backgroundColor: "#ff2d20", color: "#ffffff" },
+  soon: { backgroundColor: "#ffc61a", color: "#2b2100" },
+  later: { backgroundColor: "#e3e9ef", color: "#2c3e50" },
+  noDeadline: {},
+  done: {},
 });

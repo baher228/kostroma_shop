@@ -83,7 +83,7 @@ export const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: st
   return String(Math.max(0, start + delivery - end));
 };
 
-const computeDashboardSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
+export const computeDashboardSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
   if (!hasValue(startRaw) && !hasValue(deliveryRaw) && !hasValue(endRaw)) {
     return '';
   }

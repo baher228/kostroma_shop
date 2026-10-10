@@ -12,10 +12,11 @@ import {
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, startOfWeek } from '../../dateUtils';
+import { addDays, formatDateLabel, formatDateShort, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, parseDateKey, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
+  computeDashboardSold,
   computeSold,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
@@ -31,7 +32,7 @@ import {
 import { intOrZero, messageOf, normalizeText, numberOrZero } from '../../shared/format';
 import type { Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
 import type { BusinessCategory } from '../../types';
-import { managerProductName } from '../../../../shared/product-display';
+import { isBreadSectionBreakProduct, managerProductName } from '../../../../shared/product-display';
 import { sortProductsLikeImage } from '../../productOrdering';
 
 type LoadedWeekRange = {
@@ -56,6 +57,8 @@ const bufferedWeekStartsFor = (weekStart: string): string[] => [
   weekStart,
   addDays(weekStart, WEEK_DAYS),
 ];
+
+const isTuesday = (date: string): boolean => parseDateKey(date).getDay() === 2;
 
 const visibleStockRangeForWindowStart = (weekStart: string): LoadedWeekRange => ({
   from: addDays(weekStart, -WEEK_DAYS),
@@ -122,6 +125,9 @@ const dailyOrderDateForStockDate = (date: string, businessCategory: BusinessCate
   businessCategory === 'Деликатесы' && !isDelicaciesOrderDate(date)
     ? nearestDelicaciesOrderDate(date)
     : date;
+
+const orderHeaderDateForStockDate = (date: string, businessCategory: BusinessCategory): string =>
+  addDays(dailyOrderDateForStockDate(date, businessCategory), 1);
 
 const dailyFormulaOrderRangeForWindowStart = (weekStart: string, businessCategory: BusinessCategory): LoadedWeekRange => {
   const stockRange = dailyFormulaStockRangeForWindowStart(weekStart);
@@ -263,6 +269,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
+  const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
 
   const dashboardWeeks: DashboardWeeks = useMemo(
     () => (table ? deriveDashboardWeeks(activeViewDates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
@@ -392,6 +399,19 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     setEditingValue(row.values[date] ?? '');
   };
 
+  const saveStockCellAndEditNext = async () => {
+    if (!editingCell) return;
+    const currentCell = editingCell;
+    const currentIndex = orderedRows.findIndex((row) => row.productId === currentCell.productId);
+    const nextRow = currentIndex >= 0 ? orderedRows[currentIndex + 1] : undefined;
+    await saveStockCell(currentCell.productId, currentCell.date, editingValue);
+    if (nextRow) {
+      openEditCell(nextRow, currentCell.date);
+    } else {
+      setEditingCell(null);
+    }
+  };
+
   const createProduct = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -442,11 +462,18 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             return subtitle ? `${column.title} (${subtitle})` : column.title;
           });
         })
-        : loadedDates.flatMap((date) => [
-          `Остаток (${formatDateLabel(date)})`,
-          `Заказ (${formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))})`,
-          `Продано (${formatDateLabel(date)})`,
-        ])),
+        : loadedDates.flatMap((date) => {
+          const stockDateLabel = usesEveningStockHeaders ? formatDateShort(date) : formatDateLabel(date);
+          const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
+          const orderDateLabel = usesEveningStockHeaders
+            ? formatDateShort(orderHeaderDateForStockDate(date, activeBusinessCategory))
+            : formatDateLabel(orderDate);
+          return [
+            `${usesEveningStockHeaders ? 'Остаток вечер' : 'Остаток'} (${stockDateLabel})`,
+            `${usesEveningStockHeaders ? 'Заказ на' : 'Заказ'} (${orderDateLabel})`,
+            `Продано (${stockDateLabel})`,
+          ];
+        })),
     ];
     const rows = orderedRows.map((row) => {
       return [
@@ -514,34 +541,52 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         <table className="manager-stock-table manager-dashboard-table">
           <colgroup>
             <col className="manager-name-col-width" />
-            {dashboardWeekStarts.flatMap((weekStart) => DASHBOARD_COLUMNS.map((column) => (
-              <col key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind}-width`} />
-            )))}
+            {dashboardWeekStarts.map((weekStart) => (
+              <React.Fragment key={weekStart}>
+                <col className="dashboard-tuesday-separator-width" />
+                {DASHBOARD_COLUMNS.map((column) => (
+                  <col key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind}-width`} />
+                ))}
+              </React.Fragment>
+            ))}
           </colgroup>
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header">Товар</th>
               {dashboardWeekStarts.flatMap((weekStart) => {
                 const weeks = dashboardWeeksForStart(weekStart);
-                return DASHBOARD_COLUMNS.map((column, index) => (
+                return [
                   <th
-                    key={`${weekStart}:${column.key}`}
-                    className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}
-                    data-week-start={index === 0 ? weekStart : undefined}
-                  >
-                    <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
-                    {dashboardHeaderSubtitle(weeks, column) && <small>{dashboardHeaderSubtitle(weeks, column)}</small>}
-                  </th>
-                ));
+                    key={`${weekStart}:tuesday-separator`}
+                    aria-hidden="true"
+                    className="dashboard-tuesday-separator"
+                    data-week-start={weekStart}
+                  />,
+                  ...DASHBOARD_COLUMNS.map((column) => (
+                    <th
+                      key={`${weekStart}:${column.key}`}
+                      className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}
+                    >
+                      <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
+                      {dashboardHeaderSubtitle(weeks, column) && <small>{dashboardHeaderSubtitle(weeks, column)}</small>}
+                    </th>
+                  )),
+                ];
               })}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={dashboardWeekStarts.length * DASHBOARD_COLUMNS.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={dashboardWeekStarts.length * (DASHBOARD_COLUMNS.length + 1) + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => {
               return (
-                <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
+                <tr
+                  key={row.productId}
+                  className={[
+                    startsNewSubcategory(rows, index) ? 'subcategory-start-row' : '',
+                    isBreadSectionBreakProduct(row) ? 'bread-section-end-row' : '',
+                  ].filter(Boolean).join(' ') || undefined}
+                >
                   <td className="manager-name-col">
                     <strong>{managerProductName(row.name)}</strong>
                     <small>{productReferenceLabel(row)}</small>
@@ -549,7 +594,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   {dashboardWeekStarts.flatMap((weekStart) => {
                     const weeks = dashboardWeeksForStart(weekStart);
                     const values = rowValuesFor(row, weeks);
-                    return DASHBOARD_COLUMNS.map((column) => {
+                    return [
+                      <td key={`${weekStart}:tuesday-separator`} aria-hidden="true" className="dashboard-tuesday-separator" />,
+                      ...DASHBOARD_COLUMNS.map((column) => {
                     const value = values[column.key] ?? '';
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
                       const manualOrderKey = column.key;
@@ -582,7 +629,8 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                         </span>
                       </td>
                     );
-                    });
+                    }),
+                    ];
                   })}
                 </tr>
               );
@@ -601,6 +649,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   };
 
   const soldFor = (row: Product, date: string): string => {
+    if (activeBusinessCategory === 'Хлеб') {
+      const previousDate = addDays(date, -1);
+      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previousDate), row.unitsInPack ?? 1);
+      return computeDashboardSold(row.values[previousDate], deliveryUnits, row.values[date]);
+    }
     if (activeBusinessCategory === 'Деликатесы') {
       const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, date), row.unitsInPack ?? 1);
       return computeSold(row.values[addDays(date, -1)], deliveryUnits, row.values[date]);
@@ -631,12 +684,18 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
               <th className="manager-name-col dashboard-name-header">Товар</th>
               {loadedDates.map((date) => (
                 <React.Fragment key={date}>
-                  <th data-week-start={date === windowStart ? windowStart : undefined}>{formatDateLabel(date)}<small>Остаток</small></th>
-                  <th>
-                    {formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
-                    <small>Заказ</small>
+                  <th data-week-start={date === windowStart ? windowStart : undefined}>
+                    {usesEveningStockHeaders ? 'Остаток вечер' : formatDateLabel(date)}
+                    <small>{usesEveningStockHeaders ? formatDateShort(date) : 'Остаток'}</small>
                   </th>
-                  <th>{formatDateLabel(date)}<small>Продано</small></th>
+                  <th>
+                    {usesEveningStockHeaders ? 'Заказ на' : formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
+                    <small>{usesEveningStockHeaders ? formatDateShort(orderHeaderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
+                  </th>
+                  <th>
+                    {usesEveningStockHeaders ? 'Продано' : formatDateLabel(date)}
+                    <small>{usesEveningStockHeaders ? formatDateShort(date) : 'Продано'}</small>
+                  </th>
                 </React.Fragment>
               ))}
             </tr>
@@ -645,7 +704,13 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             {rows.length === 0 ? (
               <tr><td colSpan={loadedDates.length * 3 + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => (
-              <tr key={row.productId} className={startsNewSubcategory(rows, index) ? 'subcategory-start-row' : undefined}>
+              <tr
+                key={row.productId}
+                className={[
+                  startsNewSubcategory(rows, index) ? 'subcategory-start-row' : '',
+                  isBreadSectionBreakProduct(row) ? 'bread-section-end-row' : '',
+                ].filter(Boolean).join(' ') || undefined}
+              >
                 <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
                 {loadedDates.map((date) => {
                   const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
@@ -693,11 +758,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       <Feedback error={error} />
 
       <div className="manager-controls">
-        <div className="manager-button-row">
+        <div className="category-tabs">
           {BUSINESS_CATEGORIES.map((category) => (
             <button
               key={category}
-              className={activeBusinessCategory === category ? '' : 'secondary'}
+              className={activeBusinessCategory === category ? 'active' : ''}
               onClick={() => {
                 setActiveBusinessCategory(category);
                 setForm({ ...productToForm(), businessCategory: category, category: subcategories[category]?.[0] ?? DEFAULT_PRODUCT_CATEGORY });
@@ -774,7 +839,17 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             void saveStockCell(editingCell.productId, editingCell.date, editingValue).then(() => setEditingCell(null));
           }}>
             <p className="modal-meta">{editingCell.productName} · {formatDateLabel(editingCell.date)}</p>
-            <input autoFocus placeholder="0-15" value={editingValue} onChange={(event) => setEditingValue(sanitizeStock(event.target.value))} />
+            <input
+              autoFocus
+              placeholder="0-15"
+              value={editingValue}
+              onChange={(event) => setEditingValue(sanitizeStock(event.target.value))}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.repeat) return;
+                event.preventDefault();
+                void saveStockCellAndEditNext();
+              }}
+            />
             <div className="modal-actions">
               <button type="button" className="secondary" onClick={() => setEditingCell(null)}>Отмена</button>
               <button type="submit">Сохранить</button>

@@ -23,13 +23,24 @@
     },
     "android": {
       "package": "com.gringobochka.analitika",
+      "versionCode": 3,
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM", "android.permission.USE_EXACT_ALARM"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#166534"
       },
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "name": "Analitika Tablet",
@@ -37,7 +48,14 @@
     },
     "plugins": [
       "expo-updates",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/deadline_alarm.wav"
+          ]
+        }
+      ],
       [
         "expo-camera",
         {
@@ -46,7 +64,8 @@
           "recordAudioAndroid": false
         }
       ],
-      "./withCleartextTraffic"
+      "./withCleartextTraffic",
+      "expo-audio"
     ],
     "extra": {
       "eas": {

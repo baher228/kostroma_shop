@@ -1,12 +1,14 @@
 import express from 'express';
 import { applyAppMiddleware } from './appMiddleware';
 import { registerAuthRoutes } from '../routes/authRoutes';
+import { registerAudioQcRoutes } from '../routes/audioQcRoutes';
 import { registerCheckInRoutes } from '../routes/checkInRoutes';
 import { registerFobRoutes } from '../routes/fobRoutes';
 import { registerNotificationRoutes } from '../routes/notificationRoutes';
 import { registerSupportRoutes } from '../routes/supportRoutes';
 import { registerTaskRoutes } from '../routes/taskRoutes';
 import { registerUserRoutes } from '../routes/userRoutes';
+import { registerQualityControlRoutes } from '../routes/qualityControlRoutes';
 
 export const createRussiaApp = () => {
   const app = express();
@@ -18,6 +20,8 @@ export const createRussiaApp = () => {
   });
 
   registerAuthRoutes(app);
+  registerAudioQcRoutes(app);
+  registerQualityControlRoutes(app);
   registerUserRoutes(app);
   registerCheckInRoutes(app);
   registerFobRoutes(app);
@@ -25,7 +29,8 @@ export const createRussiaApp = () => {
   registerTaskRoutes(app);
   registerSupportRoutes(app);
 
-  app.use((_req, res) => {
+  app.use((req, res) => {
+    console.warn(`RU route not found: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ message: 'Route not found in Russia service.' });
   });
 

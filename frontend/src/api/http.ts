@@ -15,6 +15,8 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   token?: string;
   body?: unknown;
+  formData?: FormData;
+  timeoutMs?: number;
 };
 
 type CachedOpsToken = {
@@ -25,9 +27,9 @@ type CachedOpsToken = {
 const REQUEST_TIMEOUT_MS = 15_000;
 const opsTokenCache = new Map<string, CachedOpsToken>();
 
-const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Response> => {
+const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(url, { ...init, signal: controller.signal });
@@ -92,11 +94,11 @@ const makeRequest = async <T>(
     method: options.method ?? 'GET',
     headers: {
       Accept: 'application/json',
-      'Content-Type': 'application/json',
+      ...(options.formData ? {} : { 'Content-Type': 'application/json' }),
       ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
     },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+    body: options.formData ?? (options.body ? JSON.stringify(options.body) : undefined),
+  }, options.timeoutMs);
 
   const text = await response.text();
   const parsed = text

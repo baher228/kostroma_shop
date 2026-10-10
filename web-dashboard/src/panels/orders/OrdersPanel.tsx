@@ -27,6 +27,11 @@ const nextOrderDateForCategory = (category: BusinessCategory): string => {
   return today;
 };
 
+const orderLabelDate = (date: string): string => addDays(date, 1);
+
+// Курица is ordered as repeated «Номенклатура | магазин» column pairs, without machine totals.
+const usesPairedShopLayout = (category: BusinessCategory): boolean => category === 'Курица';
+
 const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
   index > 0 && rows[index - 1]?.category !== rows[index]?.category;
 
@@ -168,6 +173,28 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
 
     const targetGroups = groupShopsByMachine(targetSheet);
     const targetRows = getVisibleRows(targetSheet);
+    const sheetName = `Заказ ${orderLabelDate(targetSheet.date)}`;
+    if (usesPairedShopLayout(activeBusinessCategory)) {
+      const targetShops = targetGroups.flatMap((group) => group.shops);
+      const pairedRows: XlsxCell[][] = [
+        targetShops.flatMap((shop) => [
+          { value: 'Номенклатура', style: 1 },
+          { value: shop.name, style: 1 },
+        ]),
+        ...targetRows.map((row) =>
+          targetShops.flatMap((shop) => {
+            const value = rowValue(row, shop.id);
+            return [
+              { value: row.productName },
+              { value: value || '', style: 3, type: value ? 'number' as const : 'string' as const },
+            ];
+          }),
+        ),
+      ];
+      const nameColumns = targetShops.map((_, index) => index * 2 + 1);
+      saveXlsx(makeXlsxBlob(sheetName, pairedRows, [], { nameColumns }), targetSheet.date);
+      return;
+    }
     const rows: XlsxCell[][] = [
       [
         { value: '', style: 1 },
@@ -219,16 +246,22 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       ]),
     ]);
 
-    const blob = makeXlsxBlob(`Заказ ${targetSheet.date}`, rows, merges);
+    saveXlsx(makeXlsxBlob(sheetName, rows, merges), targetSheet.date);
+  };
+
+  const saveXlsx = (blob: Blob, sheetDate: string) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(`zakaz_${targetSheet.date}`)}.xlsx`;
+    link.download = `${safeFileName(`zakaz_${orderLabelDate(sheetDate)}`)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   };
+
+  const pairedShopLayout = usesPairedShopLayout(activeBusinessCategory);
+  const pairedShops = machineGroups.flatMap((group) => group.shops);
 
   return (
     <section className="page-section">
@@ -238,11 +271,11 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
         action={<RefreshButton onClick={() => load()} />}
       />
       <Feedback error={error} />
-      <div className="toolbar hero-toolbar">
+      <div className="category-tabs">
         {BUSINESS_CATEGORIES.map((category) => (
           <button
             key={category}
-            className={activeBusinessCategory === category ? '' : 'secondary'}
+            className={activeBusinessCategory === category ? 'active' : ''}
             onClick={() => {
               setActiveBusinessCategory(category);
             }}
@@ -250,6 +283,8 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
             {category}
           </button>
         ))}
+      </div>
+      <div className="toolbar hero-toolbar">
         <button className="secondary date-step" onClick={() => shiftDate(-1)} aria-label="Предыдущая дата заказа">‹</button>
         <input type="date" value={inputDate} onChange={(event) => setInputDate(event.target.value)} />
         <button className="secondary date-step" onClick={() => shiftDate(1)} aria-label="Следующая дата заказа">›</button>
@@ -265,8 +300,8 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
       {loading && !sheet ? <p>Загружаем заказ...</p> : sheet && (
         <div className="order-sheet-wrap">
           <div className="order-sheet-meta">
-            <span className="weekday-badge">{formatWeekdayLabel(sheet.date)}</span>
-            <strong>Заказ на {formatDateLabel(sheet.date)}</strong>
+            <span className="weekday-badge">{formatWeekdayLabel(orderLabelDate(sheet.date))}</span>
+            <strong>Заказ на {formatDateLabel(orderLabelDate(sheet.date))}</strong>
             <span>Магазинов: {sheet.shops.length}</span>
           </div>
           <div
@@ -283,6 +318,31 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
             className="order-sheet-scroll"
             onScroll={(event) => syncHorizontalScroll(event.currentTarget, topScrollRef.current)}
           >
+            {pairedShopLayout ? (
+              <table className="order-sheet-table paired-order-table">
+                <thead>
+                  <tr>
+                    {pairedShops.flatMap((shop) => [
+                      <th key={`${shop.id}:name`} className="pair-name-col">Номенклатура</th>,
+                      <th key={shop.id} className="shop-col">{shop.name}</th>,
+                    ])}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row, index) => (
+                    <tr key={row.productId} className={startsNewSubcategory(visibleRows, index) ? 'subcategory-start-row' : undefined}>
+                      {pairedShops.flatMap((shop) => {
+                        const value = rowValue(row, shop.id);
+                        return [
+                          <td key={`${row.productId}:${shop.id}:name`} className="pair-name-col product-name">{row.productName}</td>,
+                          <td key={`${row.productId}:${shop.id}`} className="number-cell">{value || ''}</td>,
+                        ];
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
             <table className="order-sheet-table">
               <thead>
                 <tr className="machine-row">
@@ -337,6 +397,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                 </tr>
               </tfoot>
             </table>
+            )}
           </div>
         </div>
       )}

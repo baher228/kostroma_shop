@@ -15,6 +15,8 @@ const {
   updateUserSchema,
   createSupportThreadSchema,
   createSupportMessageSchema,
+  audioQcRecordingSchema,
+  audioQcRecordingsQuerySchema,
 } = require('../dist/http/validation');
 
 const sessionUser = {
@@ -78,6 +80,8 @@ test('personal workflow schemas validate expected fields', () => {
   assert.equal(updateTaskStatusSchema.parse({ status: 'done' }).status, 'done');
   assert.equal(pushTokenSchema.parse({ pushToken: 'ExpoPushToken[abc_123-xyz]' }).pushToken, 'ExpoPushToken[abc_123-xyz]');
   assert.throws(() => pushTokenSchema.parse({ pushToken: 'not-a-push-token' }));
+  assert.equal(pushTokenSchema.parse({ pushToken: 'ExpoPushToken[abc]' }).alarmSound, false);
+  assert.equal(pushTokenSchema.parse({ pushToken: 'ExpoPushToken[abc]', alarmSound: true }).alarmSound, true);
   assert.equal(createUserSchema.parse({
     username: 'worker.user',
     firstName: 'Ivan',
@@ -101,6 +105,37 @@ test('personal workflow schemas validate expected fields', () => {
   assert.equal(createSupportMessageSchema.parse({ body: ' Need manager help ' }).body, 'Need manager help');
   assert.equal(checkInStatsQuerySchema.parse({ from: '2026-05-01', to: '2026-05-31' }).from, '2026-05-01');
   assert.throws(() => checkInStatsQuerySchema.parse({ from: '2026-02-31', to: '2026-05-31' }));
+});
+
+test('audio QC recording schemas normalize history payloads', () => {
+  const recording = audioQcRecordingSchema.parse({
+    localRecordingId: 'aqc_test_1',
+    shopId: 'shop_main',
+    deviceId: 'device_1',
+    startedAt: '2026-08-07T10:00:00.000Z',
+    appVersion: '1.0.0',
+    timezone: 'Europe/Moscow',
+    recordingMode: 'vad_auto',
+    status: 'processing_started',
+  });
+  assert.equal(recording.shopId, 'shop_main');
+  assert.equal(recording.mlSessionId, null);
+  assert.equal(recording.lastError, null);
+  const recordingsQuery = audioQcRecordingsQuerySchema.parse({
+    shopId: 'shop_main',
+    from: '2026-08-01T00:00:00+03:00',
+    to: '2026-08-08T00:00:00+03:00',
+    limit: '25',
+    offset: '50',
+  });
+  assert.deepEqual(
+    { limit: recordingsQuery.limit, offset: recordingsQuery.offset },
+    { limit: 25, offset: 50 },
+  );
+  assert.throws(() => audioQcRecordingsQuerySchema.parse({
+    from: '2026-08-08T00:00:00+03:00',
+    to: '2026-08-01T00:00:00+03:00',
+  }));
 });
 
 test('Russia app does not expose stock/order/shop routes', async (t) => {

@@ -21,6 +21,7 @@ RUN npm ci --omit=dev
 
 COPY --from=build /workspace/services/ru-backend/dist ./dist
 COPY --from=build /workspace/services/ru-backend/migrations ./migrations
+COPY services/ru-backend/certs ./certs
 COPY --from=build /workspace/services/shared ../shared
 
 EXPOSE 4000

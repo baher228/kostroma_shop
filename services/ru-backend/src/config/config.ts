@@ -34,7 +34,7 @@ export const config = {
     : requireDatabaseSetting({
         value: process.env.PERSONAL_POSTGRES_HOST || process.env.POSTGRES_HOST,
         label: 'PERSONAL_POSTGRES_HOST',
-        fallback: '127.0.0.1',
+        fallback: isProduction ? undefined : '127.0.0.1',
         isProduction,
       }),
   personalDbPort: parsePort(process.env.PERSONAL_POSTGRES_PORT ?? process.env.POSTGRES_PORT ?? '5432'),
@@ -43,7 +43,7 @@ export const config = {
     : requireDatabaseSetting({
         value: process.env.PERSONAL_POSTGRES_USER || process.env.POSTGRES_USER,
         label: 'PERSONAL_POSTGRES_USER',
-        fallback: 'analitika',
+        fallback: isProduction ? undefined : 'analitika',
         isProduction,
       }),
   personalDbPassword: personalDatabaseUrl
@@ -59,7 +59,7 @@ export const config = {
     : requireDatabaseSetting({
         value: process.env.PERSONAL_POSTGRES_DB || process.env.POSTGRES_DB,
         label: 'PERSONAL_POSTGRES_DB',
-        fallback: 'analitika_personal',
+        fallback: isProduction ? undefined : 'analitika_personal',
         isProduction,
       }),
   personalDbSsl: parseBoolean(process.env.PERSONAL_POSTGRES_SSL ?? process.env.POSTGRES_SSL, false),

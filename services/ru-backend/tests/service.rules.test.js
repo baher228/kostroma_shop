@@ -227,7 +227,10 @@ test('task notification sounds on the tasks channel and removes invalid devices'
     const { notifyTaskAssigneeOfNewTask } = loadWithMock('../dist/services/notificationService', {
       '../dist/repositories/notificationRepository': {
         savePushToken: async () => undefined,
-        listPushTokens: async () => ['ExpoPushToken[first]', 'ExpoPushToken[stale]'],
+        listPushTokens: async () => [
+          { token: 'ExpoPushToken[first]', alarmSound: true },
+          { token: 'ExpoPushToken[stale]', alarmSound: false },
+        ],
         deletePushToken: async (_userId, token) => removedTokens.push(token),
       },
     });
@@ -333,4 +336,77 @@ test('manual check-in preserves the worker shop in attendance records', async ()
 
   assert.equal(recordedInput.shopId, worker.shopId);
   assert.equal(recordedInput.shopName, worker.shopName);
+});
+
+test('deadline reminders use the loud deadline channel for claimed tasks only', async () => {
+  const originalFetch = global.fetch;
+  const requests = [];
+  global.fetch = async (_url, init) => {
+    requests.push(JSON.parse(init.body));
+    return { ok: true, json: async () => ({ data: [{ status: 'ok' }] }) };
+  };
+  const claimedKinds = [];
+  const reminderTask = (id, title) => ({
+    id,
+    title,
+    assigneeId: tablet.id,
+    assigneeDisplayName: tablet.fullName,
+    createdById: manager.id,
+    createdByDisplayName: manager.fullName,
+    status: 'open',
+    createdAt: '2026-05-17T07:00:00.000Z',
+    completedAt: null,
+    deadlineAt: '2026-05-17T12:00:00.000Z',
+    requiresPhotoConfirmation: false,
+    photoConfirmationUrl: null,
+    photoConfirmedAt: null,
+    photoReviewStatus: 'none',
+    photoReviewedAt: null,
+    photoDeletesAt: null,
+    overdue: false,
+  });
+
+  try {
+    const { sendTaskDeadlineReminders } = loadWithMock('../dist/services/notificationService', {
+      '../dist/repositories/notificationRepository': {
+        savePushToken: async () => undefined,
+        listPushTokens: async () => [
+          { token: 'ExpoPushToken[old_apk]', alarmSound: false },
+          { token: 'ExpoPushToken[alarm_apk]', alarmSound: true },
+        ],
+        deletePushToken: async () => undefined,
+      },
+      '../dist/repositories/taskRepository': {
+        claimTaskDeadlineReminders: async (kind) => {
+          claimedKinds.push(kind);
+          return kind === 'hour_before' ? [reminderTask('task_soon', 'Check fridge')] : [reminderTask('task_due', 'Clean shelf')];
+        },
+      },
+    });
+
+    await sendTaskDeadlineReminders();
+    assert.deepEqual(claimedKinds, ['hour_before', 'deadline']);
+    assert.equal(requests.length, 2);
+    const [soon, soonAlarm] = requests[0];
+    const [due, dueAlarm] = requests[1];
+    assert.equal(soon.title, 'Через 1 час срок задачи');
+    assert.equal(soon.body, 'Check fridge');
+    assert.deepEqual(soon.data, { type: 'task_deadline', kind: 'hour_before', taskId: 'task_soon' });
+    assert.equal(due.title, 'Срок задачи истёк');
+    assert.deepEqual(due.data, { type: 'task_deadline', kind: 'deadline', taskId: 'task_due' });
+    for (const message of [soon, due]) {
+      assert.equal(message.to, 'ExpoPushToken[old_apk]');
+      assert.equal(message.channelId, 'task-deadlines');
+      assert.equal(message.sound, 'default');
+      assert.equal(message.priority, 'high');
+    }
+    for (const message of [soonAlarm, dueAlarm]) {
+      assert.equal(message.to, 'ExpoPushToken[alarm_apk]');
+      assert.equal(message.channelId, 'task-deadline-alarm');
+      assert.equal(message.sound, 'deadline_alarm.wav');
+      assert.equal(message.priority, 'high');
+    }
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

@@ -119,6 +119,7 @@ export const reviewTaskPhotoSchema = z.object({
 
 export const pushTokenSchema = z.object({
   pushToken: z.string().trim().regex(/^(?:Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/),
+  alarmSound: z.boolean().optional().default(false),
 });
 
 export const createUserSchema = z.object({
@@ -256,6 +257,74 @@ export const checkInStatsQuerySchema = z.object({
 
 export const fobScanSchema = z.object({
   payload: z.string().trim().min(8).max(500),
+});
+
+export const shopIdParamSchema = z.object({
+  shopId: z.string().trim().min(1).max(100),
+});
+
+export const audioQcPolicySchema = z.object({
+  enabled: z.boolean(),
+  mode: z.enum(['manual', 'vad_auto']),
+  maxSegmentDurationSec: z.number().int().min(30).max(1800).default(300),
+  silenceToStopSec: z.number().int().min(1).max(30).default(3),
+  preRollSec: z.number().int().min(0).max(30).default(5),
+  uploadImmediately: z.boolean().default(true),
+}).strict();
+
+export const audioQcHeartbeatSchema = z.object({
+  deviceId: z.string().trim().min(3).max(160),
+  shopId: z.string().trim().min(1).max(100).optional(),
+  appVersion: z.string().trim().max(80).optional().nullable(),
+  currentMode: z.enum(['manual', 'vad_auto']).optional().nullable(),
+  queueSize: z.number().int().min(0).max(10000),
+  isRecording: z.boolean(),
+  lastError: z.string().trim().max(1000).optional().nullable(),
+  lastUploadAt: z.string().datetime().optional().nullable(),
+}).strict();
+
+export const audioQcRecordingStatusSchema = z.enum([
+  'recording',
+  'recorded',
+  'waiting_network',
+  'creating_ml_session',
+  'uploading_audio',
+  'audio_uploaded',
+  'starting_processing',
+  'processing_started',
+  'completed',
+  'failed_retryable',
+  'failed_permanent',
+]);
+
+export const audioQcRecordingSchema = z.object({
+  localRecordingId: z.string().trim().min(3).max(200),
+  mlSessionId: z.string().trim().min(1).max(200).nullable().default(null),
+  jobId: z.string().trim().min(1).max(200).nullable().default(null),
+  shopId: z.string().trim().min(1).max(100),
+  sellerId: z.string().trim().min(1).max(160).nullable().default(null),
+  shiftId: z.string().trim().min(1).max(160).nullable().default(null),
+  deviceId: z.string().trim().min(3).max(160),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime().nullable().default(null),
+  appVersion: z.string().trim().min(1).max(80),
+  timezone: z.string().trim().min(1).max(100),
+  recordingMode: z.enum(['manual', 'vad_auto']),
+  durationSec: z.number().int().min(0).max(86_400).nullable().default(null),
+  fileSizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().default(null),
+  status: audioQcRecordingStatusSchema,
+  lastError: z.string().trim().max(2000).nullable().default(null),
+}).strict();
+
+export const audioQcRecordingsQuerySchema = z.object({
+  shopId: z.string().trim().min(1).max(100).optional(),
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+}).strict().refine((input) => !input.from || !input.to || Date.parse(input.from) <= Date.parse(input.to), {
+  message: 'from must not follow to.',
+  path: ['to'],
 });
 
 export const orderSheetQuerySchema = z.object({

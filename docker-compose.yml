@@ -1,6 +1,27 @@
 name: analitika
 
 services:
+  minio:
+    image: analitika-minio:RELEASE.2025-10-15T17-29-55Z
+    build:
+      context: .
+      dockerfile: ops/minio/Dockerfile
+    container_name: analitika-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?Set S3_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   postgres-ru:
     image: postgres:16-alpine
     container_name: analitika-postgres-ru
@@ -46,6 +67,8 @@ services:
     depends_on:
       postgres-ru:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     environment:
       SERVICE_REGION: ru
       PORT: 4000
@@ -59,6 +82,38 @@ services:
       PERSONAL_POSTGRES_DB: analitika_personal
       PERSONAL_POSTGRES_SSL: "false"
       TASK_PHOTO_DIR: /tmp/analitika-task-photos
+      QC_ENABLED: ${QC_ENABLED:-false}
+      QC_WORKER_ENABLED: ${QC_WORKER_ENABLED:-true}
+      QC_POLL_INTERVAL_MS: ${QC_POLL_INTERVAL_MS:-2000}
+      QC_MAX_ATTEMPTS: ${QC_MAX_ATTEMPTS:-3}
+      QC_RETRY_BASE_MS: ${QC_RETRY_BASE_MS:-5000}
+      QC_JOB_LEASE_MS: ${QC_JOB_LEASE_MS:-900000}
+      QC_MAX_UPLOAD_BYTES: ${QC_MAX_UPLOAD_BYTES:-52428800}
+      QC_RETENTION_STANDARD_HOURS: ${QC_RETENTION_STANDARD_HOURS:-72}
+      QC_RETENTION_BAD_HOURS: ${QC_RETENTION_BAD_HOURS:-168}
+      QC_RETENTION_INTERESTING_HOURS: ${QC_RETENTION_INTERESTING_HOURS:-168}
+      QC_RETENTION_CLEANUP_INTERVAL_MS: ${QC_RETENTION_CLEANUP_INTERVAL_MS:-3600000}
+      QC_RETENTION_CLEANUP_BATCH_SIZE: ${QC_RETENTION_CLEANUP_BATCH_SIZE:-25}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_BUCKET_AUDIO: ${S3_BUCKET_AUDIO:-ml-audio}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      NEXARA_API_KEY: ${NEXARA_API_KEY:-}
+      NEXARA_BASE_URL: ${NEXARA_BASE_URL:-https://api.nexara.ru/v1}
+      NEXARA_MODEL: ${NEXARA_MODEL:-whisper-1}
+      NEXARA_TIMEOUT_MS: ${NEXARA_TIMEOUT_MS:-600000}
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_BASE_URL: ${GIGACHAT_BASE_URL:-https://api.giga.chat/v1}
+      GIGACHAT_AUTH_URL: ${GIGACHAT_AUTH_URL:-https://ngw.devices.sberbank.ru:9443/api/v2/oauth}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-3-Pro}
+      GIGACHAT_TIMEOUT_MS: ${GIGACHAT_TIMEOUT_MS:-120000}
+      GIGACHAT_CA_BUNDLE_PATH: ${GIGACHAT_CA_BUNDLE_PATH:-/workspace/services/ru-backend/certs/russian_trusted_ca_bundle.crt}
+      GIGACHAT_MAX_TRANSCRIPT_CHARS: ${GIGACHAT_MAX_TRANSCRIPT_CHARS:-100000}
+      GIGACHAT_MAX_TOKENS: ${GIGACHAT_MAX_TOKENS:-4096}
+      QC_QUALITY_GOOD_THRESHOLD: ${QC_QUALITY_GOOD_THRESHOLD:-80}
+      QC_QUALITY_NEUTRAL_THRESHOLD: ${QC_QUALITY_NEUTRAL_THRESHOLD:-60}
     ports:
       - "4000:4000"
 
@@ -91,5 +146,7 @@ services:
       - ./services/dubai-backend/secrets:/workspace/services/dubai-backend/secrets:ro
 
 volumes:
+  minio_data:
+    name: analitika_minio_data
   postgres_ru_data:
   postgres_dubai_data:

@@ -95,7 +95,7 @@ jobs:
         run: |
           PORT="${SSH_PORT:-22}"
           SSH_OPTS=(-p "$PORT" -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
-          ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "nginx -t && systemctl reload nginx"
+          ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "sudo -n /usr/sbin/nginx -t && sudo -n /usr/bin/systemctl reload nginx"
 
       - name: Smoke test dashboard
         if: ${{ vars.DASHBOARD_URL != '' }}

@@ -131,3 +131,58 @@ test('check-in stats calculate hours, late and missing days', async () => {
   assert.equal(stats.workers.find((worker) => worker.workerId === 'worker_b').lateDays, 1);
   assert.equal(stats.daily[0].checkIns, 2);
 });
+
+test('check-in stats cap shifts without check-out at the end of their day', async () => {
+  const personalDbPath = require.resolve('../dist/db/personalDb');
+  const event = (id, workerId, status, eventAt) => ({ id, worker_id: workerId, worker_display_name: workerId, status, event_at: eventAt });
+
+  require.cache[personalDbPath] = {
+    id: personalDbPath,
+    filename: personalDbPath,
+    loaded: true,
+    exports: {
+      personalDb: {
+        query: async (sql) => {
+          if (sql.includes('FROM users u')) {
+            return {
+              rows: [
+                { worker_id: 'worker_a', worker_display_name: 'Worker A', status: 'out', last_changed_at: '2026-05-19T17:00:00.000Z' },
+                { worker_id: 'worker_b', worker_display_name: 'Worker B', status: 'in', last_changed_at: '2026-05-20T08:00:00.000Z' },
+              ],
+            };
+          }
+          if (sql.includes('FROM worker_checkin_events')) {
+            return {
+              rows: [
+                event('event_1', 'worker_a', 'in', '2026-05-17T09:00:00.000Z'),
+                event('event_2', 'worker_a', 'in', '2026-05-19T09:00:00.000Z'),
+                event('event_3', 'worker_a', 'out', '2026-05-19T17:00:00.000Z'),
+                event('event_4', 'worker_b', 'in', '2026-05-20T08:00:00.000Z'),
+              ],
+            };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+      },
+    },
+  };
+
+  delete require.cache[require.resolve('../dist/repositories/checkInRepository')];
+  const { getCheckInStats } = require('../dist/repositories/checkInRepository');
+
+  const stats = await getCheckInStats('2026-05-17', '2026-05-23', undefined, new Date('2026-05-20T12:00:00.000Z'));
+  const workerA = stats.workers.find((worker) => worker.workerId === 'worker_a');
+  const workerB = stats.workers.find((worker) => worker.workerId === 'worker_b');
+
+  assert.equal(workerA.workedMinutes, 15 * 60 + 8 * 60);
+  assert.equal(workerA.missingCheckOuts, 1);
+  assert.equal(workerA.days[0].missingCheckOut, true);
+  assert.equal(workerA.days[0].workedMinutes, 15 * 60);
+  assert.equal(workerA.days[2].workedMinutes, 8 * 60);
+  assert.equal(workerA.days[2].lastOutAt, '2026-05-19T17:00:00.000Z');
+  assert.equal(workerB.workedMinutes, 4 * 60);
+  assert.equal(workerB.missingCheckOuts, 0);
+  assert.equal(stats.missingCheckOuts, 1);
+  assert.equal(stats.daily[0].workedMinutes, 15 * 60);
+  assert.equal(workerA.days.length, 7);
+});

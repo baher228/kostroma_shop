@@ -16,6 +16,243 @@ export type Session = {
   user: SessionUser;
 };
 
+export type AudioQcRecordingMode = 'manual' | 'vad_auto';
+
+export type AudioQcRecordingStatus =
+  | 'recording'
+  | 'recorded'
+  | 'waiting_network'
+  | 'creating_ml_session'
+  | 'uploading_audio'
+  | 'audio_uploaded'
+  | 'starting_processing'
+  | 'processing_started'
+  | 'completed'
+  | 'failed_retryable'
+  | 'failed_permanent';
+
+export type AudioQcDeviceHeartbeat = {
+  deviceId: string;
+  shopId: string;
+  userId: string | null;
+  appVersion: string | null;
+  currentMode: AudioQcRecordingMode | null;
+  queueSize: number;
+  isRecording: boolean;
+  lastError: string | null;
+  lastUploadAt: string | null;
+  lastSeenAt: string;
+  online: boolean;
+};
+
+export type AudioQcPolicy = {
+  enabled: boolean;
+  mode: AudioQcRecordingMode;
+  shopId: string;
+  targetRole: 'store_tablet';
+  maxSegmentDurationSec: number;
+  silenceToStopSec: number;
+  preRollSec: number;
+  uploadImmediately: boolean;
+  updatedAt: string;
+};
+
+export type AudioQcPolicyWithHeartbeat = AudioQcPolicy & {
+  heartbeat: AudioQcDeviceHeartbeat | null;
+};
+
+export type QualityClass = 'good' | 'neutral' | 'bad';
+
+export type QcSessionStatus =
+  | 'created'
+  | 'queued'
+  | 'transcribing'
+  | 'analysis_queued'
+  | 'analyzing'
+  | 'completed'
+  | 'transcription_failed'
+  | 'analysis_failed';
+
+export type AudioQcLatestAnalysis = {
+  id: string;
+  version: number;
+  overallScore: number;
+  qualityClass: QualityClass;
+  analyzedAt: string;
+};
+
+export type AudioQcRecordingQc = {
+  sessionId: string;
+  status: QcSessionStatus;
+  latestAnalysis: AudioQcLatestAnalysis | null;
+};
+
+export type AudioQcRecording = {
+  localRecordingId: string;
+  mlSessionId: string | null;
+  jobId: string | null;
+  shopId: string;
+  sellerId: string | null;
+  shiftId: string | null;
+  deviceId: string;
+  startedAt: string;
+  endedAt: string | null;
+  appVersion: string;
+  timezone: string;
+  recordingMode: AudioQcRecordingMode;
+  durationSec: number | null;
+  fileSizeBytes: number | null;
+  status: AudioQcRecordingStatus;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  qc: AudioQcRecordingQc | null;
+};
+
+export type AudioQcRecordingsPage = {
+  recordings: AudioQcRecording[];
+  total: number;
+};
+
+export type QcSession = {
+  id: string;
+  shopId: string;
+  sellerId: string | null;
+  shiftId: string | null;
+  createdBy: string;
+  externalSessionId: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  status: QcSessionStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QcJob = {
+  id: string;
+  sessionId: string;
+  stage: 'transcription' | 'analysis';
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  attempt: number;
+  transcriptId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+};
+
+export type QcStatus = {
+  sessionId: string;
+  status: QcSessionStatus;
+  jobs: QcJob[];
+  latestJob: QcJob | null;
+};
+
+export type QcTranscriptSegment = {
+  start: number | null;
+  end: number | null;
+  speaker: string;
+  text: string;
+  confidence?: number;
+};
+
+export type QcTranscript = {
+  id: string;
+  transcript: {
+    sessionId: string;
+    language: string | null;
+    duration: number | null;
+    segments: QcTranscriptSegment[];
+  };
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type QcCriterion = {
+  score: number;
+  maxScore: 10;
+  status: 'good' | 'neutral' | 'needs_improvement' | 'not_applicable';
+  comment: string;
+};
+
+export type QcFinding = {
+  type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+  evidence: string | null | Array<{ segmentIndex: number; quote: string }>;
+};
+
+export type QcStructuredResult = {
+  schemaVersion: '1.0' | '1.1';
+  summary: { short: string; customerIntent: string; outcome: string };
+  quality: {
+    overallScore: number;
+    criteria: Record<'greeting' | 'politeness' | 'needsDiscovery' | 'productKnowledge' | 'objectionHandling' | 'closing' | 'scriptCompliance', QcCriterion>;
+  };
+  customer: {
+    sentiment: 'positive' | 'neutral' | 'negative' | 'unknown';
+    satisfaction: 'satisfied' | 'neutral' | 'dissatisfied' | 'unknown';
+  };
+  dialog: {
+    hasConflict: boolean; hasComplaint: boolean; hasObjection: boolean; saleIntentDetected: boolean;
+    upsellDetected?: boolean; crossSellDetected?: boolean; purchaseCompleted?: boolean;
+  };
+  strengths: string[];
+  problems: QcFinding[];
+  violations: QcFinding[];
+  recommendations: string[];
+};
+
+export type QcAudioInfo = {
+  available: boolean;
+  mimeType: string;
+  size: number;
+  duration: number | null;
+  retentionClass: 'standard' | 'bad' | 'interesting' | 'pinned';
+  retentionReason: string;
+  expiresAt: string | null;
+  pinnedAt: string | null;
+  deletedAt: string | null;
+};
+
+export type QcAnalysis = {
+  id: string;
+  sessionId: string;
+  transcriptId: string;
+  provider: string;
+  model: string | null;
+  promptVersion: string;
+  scorecardVersion: string;
+  schemaVersion: string;
+  overallScore: number;
+  qualityClass: QualityClass;
+  version: number;
+  customerSentiment: QcStructuredResult['customer']['sentiment'];
+  customerSatisfaction: QcStructuredResult['customer']['satisfaction'];
+  structuredResult: QcStructuredResult;
+  metadata: Record<string, unknown>;
+  analyzedAt: string;
+};
+
+export type QcOverview = {
+  totalDialogs: number;
+  processedDialogs: number;
+  averageScore: number | string | null;
+  good: number;
+  neutral: number;
+  bad: number;
+  conflicts: number;
+  complaints: number;
+  violations: number;
+  criticalViolations: number;
+  goodPercentage: number;
+  neutralPercentage: number;
+  badPercentage: number;
+};
+
+export type QcTrendPoint = Omit<QcOverview, 'goodPercentage' | 'neutralPercentage' | 'badPercentage'> & {
+  date: string;
+};
+
 export type Shop = {
   id: string;
   name: string;
@@ -249,12 +486,24 @@ export type WorkerCheckInEvent = {
   scannedByTabletDisplayName: string | null;
 };
 
+export type WorkerCheckInDay = {
+  date: string;
+  present: boolean;
+  firstInAt: string | null;
+  lastOutAt: string | null;
+  workedMinutes: number;
+  late: boolean;
+  missingCheckOut: boolean;
+};
+
 export type WorkerCheckInSummary = WorkerCheckInStatus & {
   totalCheckIns: number;
   daysPresent: number;
   workedMinutes: number;
   lateDays: number;
   missingDays: number;
+  missingCheckOuts: number;
+  days: WorkerCheckInDay[];
 };
 
 export type DailyCheckInSummary = {
@@ -275,6 +524,7 @@ export type CheckInStats = {
   workedMinutes: number;
   lateCount: number;
   missingCount: number;
+  missingCheckOuts: number;
   workers: WorkerCheckInSummary[];
   daily: DailyCheckInSummary[];
   events: WorkerCheckInEvent[];

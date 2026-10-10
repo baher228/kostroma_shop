@@ -13,6 +13,7 @@ import { ordersApi } from '../api/orders';
 import { stockApi } from '../api/stock';
 import { BUSINESS_CATEGORIES, DEFAULT_BUSINESS_CATEGORY } from '../constants/dashboard';
 import { BusinessCategory, Session, SellerOrder, StockTable } from '../types/models';
+import { BusinessCategoryTabs } from './BusinessCategoryTabs';
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Ошибка сервера.';
@@ -72,6 +73,11 @@ const nextDelicaciesDeliveryDate = (from = new Date()): string => {
 const formatDateShort = (iso: string): string => {
   const [, month, day] = iso.split('-');
   return `${day}.${month}`;
+};
+
+const formatDateFull = (iso: string): string => {
+  const [year, month, day] = iso.split('-');
+  return `${day}.${month}.${year}`;
 };
 
 const formatTargetWeekday = (iso: string): string =>
@@ -316,28 +322,15 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
     <View style={styles.panel}>
       {!!error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={styles.businessTabs}>
-        {BUSINESS_CATEGORIES.map((category) => {
-          const active = activeBusinessCategory === category;
-          return (
-            <Pressable
-              key={category}
-              style={[styles.businessTabButton, active && styles.businessTabButtonActive]}
-              onPress={() => setActiveBusinessCategory(category)}
-            >
-              <Text style={[styles.businessTabText, active && styles.businessTabTextActive]}>{category}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <BusinessCategoryTabs active={activeBusinessCategory} onSelect={setActiveBusinessCategory} />
 
       {!canManage && (
         <View style={[styles.block, styles.workerOrderBlock]}>
           <Text style={styles.orderTitle}>{orderTargetLabel}</Text>
           <Text style={styles.blockMeta}>
-            {stockDate ? `Текущий остаток для расчета: ${stockDate}` : 'Нет дат для расчета остатков'}
+            {stockDate ? `Текущий остаток для расчета: ${formatDateFull(stockDate)}` : 'Нет дат для расчета остатков'}
           </Text>
-          <ScrollView style={[styles.orderList, styles.orderListExpanded]}>
+          <ScrollView style={styles.orderListExpanded}>
             {(table?.rows ?? []).map((row) => {
               const currentStock = stockDate ? parseStock(row.values[stockDate]) : null;
               const pending = !!savingByProduct[row.productId];
@@ -473,31 +466,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 10,
   },
-  businessTabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  businessTabButton: {
-    borderWidth: 1,
-    borderColor: '#bccabf',
-    borderRadius: 10,
-    backgroundColor: '#f3f6f4',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  businessTabButtonActive: {
-    backgroundColor: '#1f4f37',
-    borderColor: '#1f4f37',
-  },
-  businessTabText: {
-    color: '#2f4437',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  businessTabTextActive: {
-    color: '#ffffff',
-  },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
@@ -525,7 +493,6 @@ const styles = StyleSheet.create({
     lineHeight: 40,
     fontWeight: '900',
     color: '#213428',
-    textTransform: 'capitalize',
   },
   blockMeta: {
     fontSize: 16,
@@ -537,7 +504,6 @@ const styles = StyleSheet.create({
   },
   orderListExpanded: {
     flex: 1,
-    maxHeight: undefined,
   },
   historyList: {
     flex: 1,

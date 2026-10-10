@@ -1,5 +1,54 @@
 export type Role = 'manager' | 'worker' | 'store_tablet';
 
+export type AudioQcRecordingMode = 'manual' | 'vad_auto';
+
+export type AudioQcRecordingStatus =
+  | 'recording'
+  | 'recorded'
+  | 'waiting_network'
+  | 'creating_ml_session'
+  | 'uploading_audio'
+  | 'audio_uploaded'
+  | 'starting_processing'
+  | 'processing_started'
+  | 'completed'
+  | 'failed_retryable'
+  | 'failed_permanent';
+
+export type AudioQcRecordingQcSummary = {
+  sessionId: string;
+  status: 'created' | 'queued' | 'transcribing' | 'analysis_queued' | 'analyzing' | 'completed' | 'transcription_failed' | 'analysis_failed';
+  latestAnalysis: {
+    id: string;
+    version: number;
+    overallScore: number;
+    qualityClass: 'good' | 'neutral' | 'bad';
+    analyzedAt: string;
+  } | null;
+};
+
+export type AudioQcRecordingSummary = {
+  localRecordingId: string;
+  mlSessionId: string | null;
+  jobId: string | null;
+  shopId: string;
+  sellerId: string | null;
+  shiftId: string | null;
+  deviceId: string;
+  startedAt: string;
+  endedAt: string | null;
+  appVersion: string;
+  timezone: string;
+  recordingMode: AudioQcRecordingMode;
+  durationSec: number | null;
+  fileSizeBytes: number | null;
+  status: AudioQcRecordingStatus;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  qc: AudioQcRecordingQcSummary | null;
+};
+
 export type ColumnKey =
   | 'packCount'
   | 'stockTue'
@@ -37,6 +86,36 @@ export type SessionUser = {
   role: Role;
   shopId: string | null;
   shopName: string | null;
+};
+
+export type AudioQcPolicy = {
+  enabled: boolean;
+  mode: AudioQcRecordingMode;
+  shopId: string;
+  targetRole: 'store_tablet';
+  maxSegmentDurationSec: number;
+  silenceToStopSec: number;
+  preRollSec: number;
+  uploadImmediately: boolean;
+  updatedAt: string;
+};
+
+export type AudioQcDeviceHeartbeat = {
+  deviceId: string;
+  shopId: string;
+  userId: string | null;
+  appVersion: string | null;
+  currentMode: AudioQcRecordingMode | null;
+  queueSize: number;
+  isRecording: boolean;
+  lastError: string | null;
+  lastUploadAt: string | null;
+  lastSeenAt: string;
+  online: boolean;
+};
+
+export type AudioQcPolicyWithHeartbeat = AudioQcPolicy & {
+  heartbeat: AudioQcDeviceHeartbeat | null;
 };
 
 export type OpsScope =
@@ -187,12 +266,24 @@ export type FobChallenge = {
   refreshAfterSeconds: number;
 };
 
+export type WorkerCheckInDay = {
+  date: string;
+  present: boolean;
+  firstInAt: string | null;
+  lastOutAt: string | null;
+  workedMinutes: number;
+  late: boolean;
+  missingCheckOut: boolean;
+};
+
 export type WorkerCheckInSummary = WorkerCheckInStatus & {
   totalCheckIns: number;
   daysPresent: number;
   workedMinutes: number;
   lateDays: number;
   missingDays: number;
+  missingCheckOuts: number;
+  days: WorkerCheckInDay[];
 };
 
 export type DailyCheckInSummary = {
@@ -213,6 +304,7 @@ export type CheckInStats = {
   workedMinutes: number;
   lateCount: number;
   missingCount: number;
+  missingCheckOuts: number;
   workers: WorkerCheckInSummary[];
   daily: DailyCheckInSummary[];
   events: WorkerCheckInEvent[];

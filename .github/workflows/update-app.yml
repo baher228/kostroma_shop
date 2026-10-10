@@ -81,6 +81,10 @@ jobs:
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
+      - name: Check Expo app config safety
+        if: steps.expo-config.outputs.ready == 'true'
+        run: node scripts/check-app-config-clean.mjs
+
       - name: Setup Node.js
         if: steps.expo-config.outputs.ready == 'true'
         uses: actions/setup-node@v4

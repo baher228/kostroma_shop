@@ -4333,9 +4333,18 @@ input[type='datetime-local'] {
 .gmail-import-list {
   display: grid;
   gap: 10px;
+  max-height: min(360px, 45vh);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
   list-style: none;
-  padding: 0;
+  padding: 0 8px 0 0;
   margin: 0;
+}
+
+.gmail-import-list:focus-visible {
+  outline: 2px solid #245d43;
+  outline-offset: 4px;
 }
 
 .gmail-import-list li {

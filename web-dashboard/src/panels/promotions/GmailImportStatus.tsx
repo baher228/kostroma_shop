@@ -160,6 +160,8 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
         <div><dt>Последний успешный импорт</dt><dd>{dateTime(health.lastImportAt)}</dd></div>
       </dl>}
       <Feedback error={error || health?.lastError || ''} notice={notice} />
+      <details className="gmail-history">
+      <summary>История импорта{imports.length > 0 ? ` · ${imports.length}` : ''}</summary>
       {imports.length > 0 ? <ul className="gmail-import-list" tabIndex={0} aria-label="История импорта из Gmail">{imports.map((item) => (
         <li key={item.id}>
           <div><strong>{item.filename}</strong><span className={`gmail-import-status ${item.status}`}>{statuses[item.status]}</span></div>
@@ -167,6 +169,7 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
           {item.error && <p>{importReasons[item.error] || item.error}{item.retryable && item.status === 'failed' ? ' Повторная попытка при следующей проверке.' : ''}</p>}
         </li>
       ))}</ul> : health && <p className="batch-hint">Импортов из почты пока нет.</p>}
+      </details>
       {deliverySettings&&<GmailDeliveryPanel key={session.token} session={session} health={health} settings={deliverySettings} deliveries={deliveries} onChanged={load}/>}
     </section>
   );

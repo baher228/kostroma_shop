@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 export const PageHeader = ({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) => (
   <header className="page-header">
@@ -18,12 +18,19 @@ export const Metric = ({ label, value, hint }: { label: string; value: React.Rea
   </article>
 );
 
-export const Feedback = ({ error, notice, id }: { error?: string; notice?: string; id?: string }) => (
-  <>
+export const Feedback = ({ error, notice, id }: { error?: string; notice?: string; id?: string }) => {
+  const [visibleNotice, setVisibleNotice] = useState(notice);
+  useEffect(() => {
+    setVisibleNotice(notice);
+    if (!notice) return;
+    const timer = window.setTimeout(() => setVisibleNotice(undefined), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  return <>
     {error && <p className="error" id={id} role="alert">{error}</p>}
-    {notice && <p className="notice" role="status">{notice}</p>}
-  </>
-);
+    {visibleNotice && <p className="notice" role="status">{visibleNotice}</p>}
+  </>;
+};
 
 export const RefreshButton = ({ onClick }: { onClick: () => void }) => (
   <button className="secondary" onClick={() => void onClick()}>Обновить</button>

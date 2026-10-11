@@ -35,11 +35,13 @@ export const GmailDeliveryPanel=({session,health,settings,deliveries,onChanged}:
       <p className="batch-hint">Принимаются только точные адреса из списка и письма, подлинность которых подтвердил Gmail. Пустой список приостанавливает импорт.</p>
       <label className="gmail-auto-send"><input type="checkbox" checked={autoSend} disabled={!manager||Boolean(busy)} onChange={e=>setAutoSend(e.target.checked)}/>Автоматически отправлять пакет после импорта накладной</label>
       <p className="batch-hint">Отправитель — подключённый Gmail. ZIP содержит ценники A4, доступные постеры и список товаров без постеров. Для большого пакета письмо содержит защищённую ссылку на 7 дней.</p>
-      {health?.connected&&!health.canSend&&<p className="notice">Для отправки подключите Gmail повторно и разрешите отправку писем. Чтение почты доступно после настройки разрешённых отправителей.</p>}
+      <p className="batch-hint">Лимит — 5 писем каждому получателю за 24 часа. После достижения лимита пакет остаётся в очереди.</p>
+      {health?.connected&&!health.canSend&&<p className="batch-hint">Для отправки подключите Gmail повторно и разрешите отправку писем. Чтение почты доступно после настройки разрешённых отправителей.</p>}
       {manager&&<div><button className="secondary" disabled={Boolean(busy)||Boolean(health?.running)} onClick={()=>void save()}>{busy==='settings'?'Сохраняем...':'Сохранить настройки'}</button></div>}
     </div>
     <Feedback error={error} notice={notice}/>
-    <h4>Пакеты и отправки</h4>
+    <details className="gmail-history">
+    <summary>Пакеты и отправки{deliveries.length > 0 ? ` · ${deliveries.length}` : ''}</summary>
     {deliveries.length===0?<p className="batch-hint">Пакеты появятся после новых накладных из почты. Существующие акции можно отправить через «Пакет ценников» в общей таблице.</p>
       :<ul className="gmail-import-list" tabIndex={0} aria-label="История пакетов и отправок">{deliveries.map(job=><li key={job.id}>
         <div><strong>{job.manual?'Пакет из общей таблицы':'Пакет из письма'} · {new Date(job.createdAt).toLocaleString('ru-RU')}</strong><span className={`gmail-import-status ${job.status==='sent'?'success':job.status==='failed'?'failed':''}`}>{labels[job.status]}</span></div>
@@ -56,5 +58,6 @@ export const GmailDeliveryPanel=({session,health,settings,deliveries,onChanged}:
           {job.status==='unknown'&&<button className="secondary" onClick={()=>void action(job.id,onChanged)} disabled={Boolean(busy)}>Обновить статус</button>}
         </div>
       </li>)}</ul>}
+    </details>
   </section>;
 };

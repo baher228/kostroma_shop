@@ -225,12 +225,14 @@ test('Drive PSD listings share concurrent requests, expire after two minutes and
     if (String(url).startsWith('https://oauth2.googleapis.com/token')) {
       return new Response(JSON.stringify({ access_token: 'mock-token', expires_in: 3600 }), { status: 200 });
     }
-    listings += 1;
     if (fail) return new Response(JSON.stringify({ error: { message: 'Temporary error' } }), { status: 503 });
-    return new Response(JSON.stringify({ files: [{ id: 'test-psd', name: 'Сосиски.psd', mimeType: 'image/x-photoshop' }] }), { status: 200 });
+    if(String(url).includes('/files/')&&!String(url).includes('/files?'))return new Response(JSON.stringify({mimeType:'application/vnd.google-apps.folder',capabilities:{canListChildren:true}}));
+    listings += 1;
+    return new Response(JSON.stringify({ files: [{ id: 'test-psd', name: 'Сосиски.psd', mimeType: 'application/octet-stream' },{id:'pdf',name:'Сосиски.pdf',mimeType:'application/pdf'}] }), { status: 200 });
   };
   const [first, second] = await Promise.all([listPosterPsdFiles('batch-test-cache'), listPosterPsdFiles('batch-test-cache')]);
   assert.deepEqual(first, second);
+  assert.equal(first.length,1);assert.equal(first[0].mimeType,'application/octet-stream');
   assert.equal(listings, 1);
   first.pop();
   assert.equal((await listPosterPsdFiles('batch-test-cache')).length, 1, 'caller mutations must not change cached list');
@@ -242,5 +244,9 @@ test('Drive PSD listings share concurrent requests, expire after two minutes and
   await assert.rejects(listPosterPsdFiles('batch-test-error'), /Temporary error/);
   fail = false;
   await listPosterPsdFiles('batch-test-error');
-  assert.equal(listings, 4);
+  assert.equal(listings, 3);
+  global.fetch=async url=>String(url).startsWith('https://oauth2.googleapis.com/token')
+    ?new Response(JSON.stringify({access_token:'mock-token'}))
+    :new Response(JSON.stringify({error:{message:'Poster folder not found'}}),{status:404});
+  await assert.rejects(listPosterPsdFiles('missing-folder'),/Poster folder not found/);
 });

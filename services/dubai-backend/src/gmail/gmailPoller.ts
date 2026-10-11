@@ -3,6 +3,8 @@ import { GmailConfigurationError, isGmailAuthenticationError, sanitizedGmailErro
 import { getConnectedGmailClient } from './gmailOAuth';
 import { GmailPollBusyError, GmailPollResult, GmailService } from './gmailService';
 import { getLastSuccessfulGmailImportAt } from '../repositories/gmailImportsRepository';
+import { readGmailDeliverySettings } from '../repositories/gmailDeliveryRepository';
+import { processGmailDeliveries } from './gmailDeliveryProcessor';
 
 export type GmailHealth = {
   enabled: boolean; authenticated: boolean; running: boolean;
@@ -21,10 +23,12 @@ export class GmailPoller {
   constructor(private readonly options: {
     enabled: boolean; intervalMs: number; createService: () => Pick<GmailService,'poll'>;
     lastImportAt?: () => Promise<string | null>;
+    afterPoll?: () => Promise<unknown>;
   } = {
     enabled: config.gmailEnabled,intervalMs: config.gmailPollIntervalMs,
-    createService: () => new GmailService(null,{ resolveClient: getConnectedGmailClient }),
+    createService: () => new GmailService(null,{ resolveClient: getConnectedGmailClient,resolveSettings:async()=>({allowedSenders:(await readGmailDeliverySettings()).allowedSenders,requireAuthentication:true}) }),
     lastImportAt: getLastSuccessfulGmailImportAt,
+    afterPoll:processGmailDeliveries,
   }) {
     this.health = { enabled: options.enabled,authenticated: false,running: false,lastPollAt: null,lastSuccessfulPollAt: null,lastImportAt: null,lastError: null };
   }
@@ -55,9 +59,11 @@ export class GmailPoller {
           this.health.lastImportAt = await this.options.lastImportAt();
         }
         const result = await this.service.poll();
+        await this.options.afterPoll?.().catch(()=>console.warn('gmail delivery processing deferred'));
         this.health.authenticated = true;
         this.health.lastSuccessfulPollAt = new Date().toISOString();
-        if (result.imported) this.health.lastImportAt = this.health.lastSuccessfulPollAt;
+        if (this.options.lastImportAt) this.health.lastImportAt=await this.options.lastImportAt();
+        else if (result.imported) this.health.lastImportAt = this.health.lastSuccessfulPollAt;
         this.health.lastError = result.failed ? 'Некоторые вложения не импортированы. Проверьте историю импорта.' : null;
         console.info('gmail poll completed',result);
         return result;

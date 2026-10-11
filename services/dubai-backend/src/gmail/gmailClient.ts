@@ -1,11 +1,13 @@
 import { config } from '../config/config';
 import type { GmailMimePart } from './gmailAttachmentParser';
 
-export type GmailMessage = { id?: string | null; internalDate?: string | null; payload?: GmailMimePart | null };
+export type GmailMessage = { id?: string | null; internalDate?: string | null; payload?: GmailMimePart | null; labelIds?: string[] | null };
 export type GmailApiClient = {
   listMessages: (query: string, maxResults: number, pageToken?: string) => Promise<{ messages: Array<{ id: string }>; nextPageToken?: string }>;
   getMessage: (messageId: string) => Promise<GmailMessage>;
   getAttachment: (messageId: string, attachmentId: string) => Promise<string>;
+  sendMessage?: (raw: string,signal?:AbortSignal) => Promise<string>;
+  findSentMessage?: (messageId:string) => Promise<string|null>;
 };
 export class GmailConfigurationError extends Error {
   constructor() {
@@ -64,6 +66,18 @@ export const createGmailClient = (refreshToken = config.gmailRefreshToken): Gmai
     getAttachment: async (messageId,id) => {
       const response: any = await withGmailRetry(() => gmail.users.messages.attachments.get({ userId: config.gmailUser,messageId,id },options),config.gmailMaxRetries);
       return response.data.data || '';
+    },
+    // Sending is deliberately not wrapped in withGmailRetry: a timeout or 5xx
+    // can occur after Google accepted the message. Reconcile by Message-ID.
+    sendMessage: async (raw,signal) => {
+      const response:any=await gmail.users.messages.send({userId:'me',requestBody:{raw}},{...options,signal});
+      if (!response.data.id) throw new Error('Gmail send acknowledgement missing.');
+      return response.data.id;
+    },
+    findSentMessage: async messageId => {
+      if (!/^[a-z0-9-]+@affera\.co\.uk$/i.test(messageId)) throw new Error('Invalid delivery Message-ID.');
+      const response:any=await withGmailRetry(()=>gmail.users.messages.list({userId:'me',q:`in:sent rfc822msgid:${messageId}`,maxResults:1},options),config.gmailMaxRetries);
+      return response.data.messages?.[0]?.id??null;
     },
   };
 };

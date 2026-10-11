@@ -102,6 +102,7 @@ const requestAccessToken = async () => {
   const assertion = `${unsigned}.${base64Url(signature)}`;
 
   const response = await fetch(serviceAccount.token_uri ?? 'https://oauth2.googleapis.com/token', {
+    signal: AbortSignal.timeout(30000),
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -124,6 +125,7 @@ const requestAccessToken = async () => {
 const driveRequest = async <T>(pathAndQuery: string): Promise<T> => {
   const token = await requestAccessToken();
   const response = await fetch(`${driveApiBase}${pathAndQuery}`, {
+    signal: AbortSignal.timeout(30000),
     headers: { Authorization: `Bearer ${token}` },
   });
   const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
@@ -199,6 +201,7 @@ export const findPosterPsdForProduct = async (productName: string) =>
 export const downloadPosterDriveFile = async (fileId: string) => {
   const token = await requestAccessToken();
   const response = await fetch(`${driveApiBase}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`, {
+    signal: AbortSignal.timeout(30000),
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {

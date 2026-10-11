@@ -116,6 +116,14 @@ export const createPromotionDocumentImporter = (overrides: Partial<typeof depend
         input.signal?.throwIfAborted();
         if (input.gmailImportId) {
           await deps.completeGmail(input.gmailImportId, 'success', { promotionDocumentId: document.id,attemptCount: input.gmailImportAttempt });
+          if (input.documentType==='invoice') {
+            const deliveryId=randomUUID();
+            // Queue creation shares the document/import transaction. A crash
+            // cannot commit an invoice without its delivery or queue a rollback.
+            await deps.query(`INSERT INTO gmail_deliveries (id,mailbox,source_key,message_id,send_message_id)
+              SELECT $2,mailbox,'gmail:'||message_id,message_id,$3 FROM gmail_imports WHERE id=$1
+              ON CONFLICT(mailbox,source_key) DO NOTHING;`,[input.gmailImportId,deliveryId,`affera-promotions-${deliveryId}@affera.co.uk`]);
+          }
         }
         await deps.query('DELETE FROM promotion_import_objects WHERE storage_key = $1;', [key]);
         completed = { document, import: result };

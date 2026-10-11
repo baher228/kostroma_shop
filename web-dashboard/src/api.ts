@@ -327,8 +327,11 @@ export const api = {
     listStoreTablets: async (token: string) => (await ruRequest<{ storeTablets: StoreTablet[] }>('/api/store-tablets', { token })).storeTablets,
     create: async (
       token: string,
-      payload: { title: string; assigneeId: string; deadlineAt: string | null; requiresPhotoConfirmation: boolean },
-    ) => (await ruRequest<{ task: Task }>('/api/tasks', { method: 'POST', token, body: payload })).task,
+      payload: { title: string; assigneeIds: string[]; deadlineAt: string | null; requiresPhotoConfirmation: boolean },
+    ) => {
+      const response = await ruRequest<{ task: Task; tasks?: Task[] }>('/api/tasks', { method: 'POST', token, body: payload });
+      return response.tasks ?? [response.task];
+    },
     updateStatus: async (token: string, taskId: string, status: TaskStatus) =>
       (await ruRequest<{ task: Task }>(`/api/tasks/${taskId}/status`, { method: 'PATCH', token, body: { status } })).task,
     reviewPhoto: async (token: string, taskId: string, decision: 'approve' | 'decline') =>

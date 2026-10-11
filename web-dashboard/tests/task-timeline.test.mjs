@@ -37,6 +37,6 @@ test('task cards show neither the creation date nor a delete button', async () =
     const source = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /Создана/);
     assert.doesNotMatch(source, /Удалить/);
-    assert.match(source, /groupTasksByUrgency\(tasks, now\)/);
+    assert.match(source, /groupTasksByUrgency\((?:tasks|taskCards), now\)/);
   }
 });

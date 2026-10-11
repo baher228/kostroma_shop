@@ -26,19 +26,27 @@ export const createManagedTask = async (
   manager: SessionUser,
   payload: z.infer<typeof createTaskSchema>,
 ) => {
-  const assignee = await findStoreTabletById(payload.assigneeId);
-  if (!assignee) {
+  const assigneeIds = [...new Set(payload.assigneeIds ?? (payload.assigneeId ? [payload.assigneeId] : []))];
+  const assignees = await Promise.all(assigneeIds.map((assigneeId) => findStoreTabletById(assigneeId)));
+  if (assignees.length === 0 || assignees.some((assignee) => !assignee)) {
     return null;
   }
-  return createTask({
-    title: payload.title,
-    assigneeId: assignee.id,
-    assigneeDisplayName: assignee.fullName,
-    createdById: manager.id,
-    createdByDisplayName: manager.fullName,
-    deadlineAt: payload.deadlineAt ?? null,
-    requiresPhotoConfirmation: payload.requiresPhotoConfirmation ?? false,
-  });
+  const groupId = assignees.length > 1 ? `group_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
+  const tasks: Task[] = [];
+  for (const assignee of assignees) {
+    if (!assignee) continue;
+    tasks.push(await createTask({
+      groupId,
+      title: payload.title,
+      assigneeId: assignee.id,
+      assigneeDisplayName: assignee.fullName,
+      createdById: manager.id,
+      createdByDisplayName: manager.fullName,
+      deadlineAt: payload.deadlineAt ?? null,
+      requiresPhotoConfirmation: payload.requiresPhotoConfirmation ?? false,
+    }));
+  }
+  return tasks;
 };
 
 export const changeTaskStatus = async (

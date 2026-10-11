@@ -40,10 +40,12 @@ export const registerTaskRoutes = (app: Express) => {
         res.status(400).json({ message: 'Store tablet was not found.' });
         return;
       }
-      void notifyTaskAssigneeOfNewTask(created).catch((error) => {
-        console.error('Failed to send task notification:', error);
+      created.forEach((task) => {
+        void notifyTaskAssigneeOfNewTask(task).catch((error) => {
+          console.error('Failed to send task notification:', error);
+        });
       });
-      res.status(201).json({ task: created });
+      res.status(201).json({ task: created[0], tasks: created });
     } catch (error) {
       if (error instanceof ZodError) {
         res.status(400).json({ message: toValidationMessage(error) });

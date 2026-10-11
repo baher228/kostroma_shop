@@ -66,6 +66,8 @@ test('task service assigns tasks to store tablets and enforces ownership rules',
     photoDeletesAt: null,
     overdue: false,
   };
+  const secondTablet = { ...tablet, id: 'tablet_2', fullName: 'Tablet 2' };
+  const createdTaskInputs = [];
   let currentTask = baseTask;
   let attachedPhoto = null;
   let reviewedDecision = null;
@@ -78,6 +80,7 @@ test('task service assigns tasks to store tablets and enforces ownership rules',
       },
       createTask: async (input) => {
         createdTaskInput = input;
+        createdTaskInputs.push(input);
         return { ...baseTask, ...input, id: 'task_created', status: 'open' };
       },
       deleteTask: async () => false,
@@ -97,7 +100,7 @@ test('task service assigns tasks to store tablets and enforces ownership rules',
       updateTaskStatus: async () => ({ ...baseTask, status: 'done' }),
     },
     '../dist/repositories/userRepository': {
-      findStoreTabletById: async (id) => (id === tablet.id ? tablet : null),
+      findStoreTabletById: async (id) => [tablet, secondTablet].find((candidate) => candidate.id === id) ?? null,
     },
     '../dist/services/taskPhotoStorageService': {
       deleteTaskPhotoFile: async () => undefined,
@@ -138,9 +141,31 @@ test('task service assigns tasks to store tablets and enforces ownership rules',
     deadlineAt: null,
     requiresPhotoConfirmation: false,
   });
-  assert.equal(created.assigneeId, tablet.id);
-  assert.equal(created.createdById, manager.id);
+  assert.equal(created.length, 1);
+  assert.equal(created[0].assigneeId, tablet.id);
+  assert.equal(created[0].createdById, manager.id);
   assert.equal(createdTaskInput.assigneeDisplayName, tablet.fullName);
+  assert.equal(createdTaskInput.groupId, null);
+
+  createdTaskInputs.length = 0;
+  const grouped = await createManagedTask(manager, {
+    title: 'Check shelves',
+    assigneeIds: [tablet.id, secondTablet.id, tablet.id],
+    deadlineAt: null,
+    requiresPhotoConfirmation: false,
+  });
+  assert.deepEqual(grouped.map((task) => task.assigneeId), [tablet.id, secondTablet.id]);
+  assert.ok(createdTaskInputs[0].groupId);
+  assert.equal(createdTaskInputs[1].groupId, createdTaskInputs[0].groupId);
+  assert.equal(
+    await createManagedTask(manager, {
+      title: 'Unknown tablet in the group',
+      assigneeIds: [tablet.id, worker.id],
+      deadlineAt: null,
+      requiresPhotoConfirmation: false,
+    }),
+    null,
+  );
   assert.equal(
     await createManagedTask(manager, {
       title: 'Worker cannot be assigned',
@@ -201,7 +226,7 @@ test('task repository create insert covers photo review columns', async () => {
   });
 
   assert.equal(task.id, 'task_created');
-  assert.equal(insertParams.length, 8);
+  assert.equal(insertParams.length, 9);
   assert.match(insertSql, /photo_confirmation_uploaded_at,\s*photo_confirmed_at,\s*photo_review_status/);
   assert.match(insertSql, /NULL,NULL,NULL,'none',NULL,NULL,NOW\(\)/);
 });

@@ -40,3 +40,9 @@ test('task cards show neither the creation date nor a delete button', async () =
     assert.match(source, /groupTasksByUrgency\((?:tasks|taskCards), now\)/);
   }
 });
+
+test('dashboard tasks do not fail the page when shop labels are unavailable', async () => {
+  const source = await readFile(new URL('../src/panels/tasks/TasksPanel.tsx', import.meta.url), 'utf8');
+  assert.match(source, /api\.shops\.list\(session\.token\)\.catch/);
+  assert.match(source, /tablet\.shopName/);
+});

@@ -302,6 +302,7 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
 
 const tabletShopLabel = (tablet: StoreTablet, shopsById: Record<string, Shop>) => {
   const shop = tablet.shopId ? shopsById[tablet.shopId] : null;
+  if (!shop && tablet.shopName) return tablet.shopName;
   if (!shop) return 'Магазин не назначен';
   return shop.name;
 };
@@ -512,7 +513,10 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       const [nextTasks, nextStoreTablets, nextShops, nextSeries] = await Promise.all([
         api.tasks.list(session.token),
         api.tasks.listStoreTablets(session.token),
-        api.shops.list(session.token),
+        api.shops.list(session.token).catch((err) => {
+          console.warn('Failed to load task shop labels:', err);
+          return [] as Shop[];
+        }),
         api.tasks.listSeries(session.token),
       ]);
       setTasks(nextTasks);

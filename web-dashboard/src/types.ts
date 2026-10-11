@@ -335,7 +335,7 @@ export type TaskSeries = {
   createdAt: string;
 };
 
-export type StoreTablet = Pick<SessionUser, 'id' | 'username' | 'firstName' | 'lastName' | 'fullName' | 'shopId'>;
+export type StoreTablet = Pick<SessionUser, 'id' | 'username' | 'firstName' | 'lastName' | 'fullName' | 'shopId' | 'shopName'>;
 
 export type SellerOrder = {
   id: string;

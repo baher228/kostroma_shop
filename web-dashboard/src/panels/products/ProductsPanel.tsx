@@ -151,6 +151,88 @@ const orderFetchRangeForWindowStart = (weekStart: string, businessCategory: Busi
 const startsNewSubcategory = <T extends { category: string }>(rows: T[], index: number): boolean =>
   index > 0 && rows[index - 1]?.category !== rows[index]?.category;
 
+const moveGridFocus = (input: HTMLInputElement, delta: number) => {
+  const column = input.dataset.gridCol;
+  const table = input.closest('table');
+  if (!column || !table) return;
+  const cells = Array.from(table.querySelectorAll<HTMLInputElement>('input[data-grid-col]'))
+    .filter((cell) => cell.dataset.gridCol === column && !cell.disabled);
+  const target = cells[cells.indexOf(input) + delta];
+  if (target) {
+    target.focus();
+    target.select();
+  } else if (delta > 0) {
+    input.blur();
+  }
+};
+
+const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  if (event.key === 'Enter' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    moveGridFocus(event.currentTarget, 1);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveGridFocus(event.currentTarget, -1);
+  }
+};
+
+const StockCellInput = ({
+  value,
+  gridCol,
+  label,
+  onCommit,
+}: {
+  value: string;
+  gridCol: string;
+  label: string;
+  onCommit: (value: string) => void;
+}) => {
+  const [draft, setDraft] = useState(value);
+  const committed = useRef(value);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    committed.current = value;
+    if (!focused.current) setDraft(value);
+  }, [value]);
+
+  const commit = () => {
+    if (draft === committed.current) return;
+    committed.current = draft;
+    onCommit(draft);
+  };
+
+  return (
+    <input
+      className="dashboard-order-input stock-cell-input"
+      data-grid-col={gridCol}
+      aria-label={label}
+      inputMode="numeric"
+      value={draft}
+      placeholder="-"
+      maxLength={2}
+      onFocus={(event) => {
+        focused.current = true;
+        event.currentTarget.select();
+      }}
+      onBlur={() => {
+        focused.current = false;
+        commit();
+      }}
+      onChange={(event) => setDraft(sanitizeStock(event.target.value))}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setDraft(committed.current);
+          return;
+        }
+        if (event.key === 'Enter' || event.key === 'ArrowDown' || event.key === 'ArrowUp') commit();
+        handleGridKeyDown(event);
+      }}
+    />
+  );
+};
+
 export const ProductsPanel = ({ session }: { session: Session }) => {
   const currentWeekStart = startOfWeek();
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
@@ -173,8 +255,6 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   });
   const [newSubcategoryName, setNewSubcategoryName] = useState('');
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
-  const [editingCell, setEditingCell] = useState<{ productId: string; date: string; productName: string } | null>(null);
-  const [editingValue, setEditingValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -394,24 +474,6 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     }
   };
 
-  const openEditCell = (row: Product, date: string) => {
-    setEditingCell({ productId: row.productId, date, productName: row.name });
-    setEditingValue(row.values[date] ?? '');
-  };
-
-  const saveStockCellAndEditNext = async () => {
-    if (!editingCell) return;
-    const currentCell = editingCell;
-    const currentIndex = orderedRows.findIndex((row) => row.productId === currentCell.productId);
-    const nextRow = currentIndex >= 0 ? orderedRows[currentIndex + 1] : undefined;
-    await saveStockCell(currentCell.productId, currentCell.date, editingValue);
-    if (nextRow) {
-      openEditCell(nextRow, currentCell.date);
-    } else {
-      setEditingCell(null);
-    }
-  };
-
   const createProduct = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -604,9 +666,12 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                         <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
                           <input
                             className="dashboard-order-input"
+                            data-grid-col={`${weekStart}:${column.key}`}
                             value={value}
                             maxLength={MAX_ORDER_VALUE_LEN}
                             placeholder="-"
+                            onFocus={(event) => event.currentTarget.select()}
+                            onKeyDown={handleGridKeyDown}
                             onChange={(event) => setOrderCellValue(row.productId, manualOrderKey, event.target.value, weeks)}
                           />
                         </td>
@@ -616,9 +681,16 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                       const date = currentStockDateForColumn(column.key, weeks);
                       return (
                         <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
-                          <button className="stock-cell-button" onClick={() => date && openEditCell(row, date)}>
-                            {value || '-'}
-                          </button>
+                          {date ? (
+                            <StockCellInput
+                              value={value}
+                              gridCol={`${weekStart}:${column.key}`}
+                              label={`${row.name}, ${formatDateLabel(date)}`}
+                              onCommit={(nextValue) => void saveStockCell(row.productId, date, nextValue)}
+                            />
+                          ) : (
+                            <span className="dashboard-cell-value dashboard-stock-value">{value || '-'}</span>
+                          )}
                         </td>
                       );
                     }
@@ -717,16 +789,22 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   return (
                     <React.Fragment key={`${row.productId}:${date}`}>
                       <td>
-                        <button className="stock-cell-button" onClick={() => openEditCell(row, date)}>
-                          {row.values[date] || '-'}
-                        </button>
+                        <StockCellInput
+                          value={row.values[date] ?? ''}
+                          gridCol={`stock:${date}`}
+                          label={`${row.name}, ${formatDateLabel(date)}`}
+                          onCommit={(nextValue) => void saveStockCell(row.productId, date, nextValue)}
+                        />
                       </td>
                       <td>
                         <input
                           className="dashboard-order-input"
+                          data-grid-col={`order:${date}`}
                           value={orderPacksForDate(row.productId, orderDate)}
                           maxLength={MAX_ORDER_VALUE_LEN}
                           placeholder="-"
+                          onFocus={(event) => event.currentTarget.select()}
+                          onKeyDown={handleGridKeyDown}
                           onChange={(event) => {
                             const nextValue = sanitizeOrderValue(event.target.value);
                             setOrderValues((current) => ({ ...current, [`${row.productId}:${orderDate}`]: nextValue }));
@@ -832,31 +910,6 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         </Modal>
       )}
 
-      {editingCell && (
-        <Modal title="Изменить остаток" onClose={() => setEditingCell(null)}>
-          <form className="modal-form" onSubmit={(event) => {
-            event.preventDefault();
-            void saveStockCell(editingCell.productId, editingCell.date, editingValue).then(() => setEditingCell(null));
-          }}>
-            <p className="modal-meta">{editingCell.productName} · {formatDateLabel(editingCell.date)}</p>
-            <input
-              autoFocus
-              placeholder="0-15"
-              value={editingValue}
-              onChange={(event) => setEditingValue(sanitizeStock(event.target.value))}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.repeat) return;
-                event.preventDefault();
-                void saveStockCellAndEditNext();
-              }}
-            />
-            <div className="modal-actions">
-              <button type="button" className="secondary" onClick={() => setEditingCell(null)}>Отмена</button>
-              <button type="submit">Сохранить</button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </section>
   );
 };

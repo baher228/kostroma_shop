@@ -88,6 +88,10 @@ test('full outbox builds once, fences before send and never sends terminal deliv
   assert.equal(files.length,1);assert.equal((await readPackageFile(h.jobs[0].storage_key,0,async key=>({body:h.objects.get(key)}))).body.toString(),'%PDF-tag');
   assert.equal(await readPackageFile(h.jobs[0].storage_key,1,async key=>({body:h.objects.get(key)})),null);
   assert.ok([...h.objects.keys()].every(key=>!key.endsWith('.zip')));
+  const mime=Buffer.from(h.sends[0],'base64url').toString();
+  const body=Buffer.from(mime.split('Content-Transfer-Encoding: base64\r\n\r\n')[1].split('\r\n--')[0],'base64').toString();
+  assert.equal(body,'');
+  assert.deepEqual(h.jobs[0].manifest.missingPosters,['Сервелат']);
 });
 test('packages wait for all message imports, recipient, send consent and original mailbox; manual send bypasses only auto toggle',async()=>{
   const incomplete=harness({importsComplete:false});await incomplete.run();assert.equal(incomplete.jobs[0].status,'queued');assert.equal(incomplete.objects.size,0);
@@ -118,7 +122,7 @@ test('large package uses private expiring links for individual PDFs, without an 
   const h=harness({build:async()=>({files:[{name:'large.pdf',body:Buffer.alloc(19*1024*1024)},{name:'small.pdf',body:Buffer.from('%PDF')}],manifest})});await h.run();
   const mime=Buffer.from(h.sends[0],'base64url').toString();assert.ok(!mime.includes('application/zip'));
   const body=Buffer.from(mime.split('Content-Transfer-Encoding: base64\r\n\r\n')[1].split('\r\n--')[0],'base64').toString();
-  assert.match(body,/https:\/\/private.example\/package/);assert.match(body,/7 дней/);assert.equal(h.jobs[0].status,'sent');
+  assert.equal(body,'large.pdf\nhttps://private.example/package?signature=secret\n\nsmall.pdf\nhttps://private.example/package?signature=secret');assert.equal(h.jobs[0].status,'sent');
   assert.match(body,/large.pdf/);assert.match(body,/small.pdf/);assert.ok(!body.includes('ZIP'));
 });
 

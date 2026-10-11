@@ -2,7 +2,7 @@ import * as repository from '../repositories/gmailDeliveryRepository';
 import { withGmailPollLock } from '../repositories/gmailImportsRepository';
 import { listPromotionRowsForGmailMessage } from '../repositories/promotionRowsRepository';
 import { getConnectedGmailClient } from './gmailOAuth';
-import { buildPromotionPackage,buildPackageMimeMessage,promotionPackageText } from './gmailPromotionPackage';
+import { buildPromotionPackage,buildPackageMimeMessage } from './gmailPromotionPackage';
 import { uploadObject,downloadObject,createEmailPackageDownloadUrl } from '../services/r2StorageService';
 import { readPackageFileIndex,StoredPackageFile } from './gmailPackageStorage';
 
@@ -69,12 +69,11 @@ export const createGmailDeliveryProcessor=(overrides:Partial<typeof defaults>={}
       try{
         if(!job.storage_key||!job.manifest||!job.rows_snapshot)throw new Error('Package is incomplete.');
         const files=await readPackageFileIndex(job.storage_key,deps.download);
-        let text=promotionPackageText(job.manifest,job.rows_snapshot);
+        let text='';
         const asLink=files.reduce((total,file)=>total+file.size,0)>18*1024*1024;
         const attachments=[];
         if(asLink){
-          text+='\n\nФайлы превышают размер вложений. Защищённые ссылки на отдельные PDF (действуют 7 дней):';
-          for(const file of files)text+=`\n${file.name}:\n${await deps.downloadUrl(file.key,file.name)}`;
+          for(const file of files)text+=`${text?'\n\n':''}${file.name}\n${await deps.downloadUrl(file.key,file.name)}`;
         }else for(const file of files)attachments.push({name:file.name,body:(await deps.download(file.key)).body});
         raw=buildPackageMimeMessage({from:connection!.mailbox,to:settings.recipient!,messageId:job.send_message_id,text,files:attachments});
       }catch{await patch({status:'failed',error:'Не удалось прочитать сохранённый пакет. Повторите подготовку.'});continue;}

@@ -1,5 +1,5 @@
 import zlib from 'zlib';
-import { createCanvas, SKRSContext2D } from '@napi-rs/canvas';
+import { Canvas, createCanvas, SKRSContext2D } from '@napi-rs/canvas';
 import { initializeCanvas, Layer, Psd, readPsd } from 'ag-psd';
 import { PromotionTableRow } from '../repositories/promotionRowsRepository';
 import { promotionFont, registerPromotionFonts } from './promotionFonts';
@@ -67,8 +67,9 @@ const collectTextLayers = (children: Layer[] | undefined): ParsedTextLayer[] => 
   const layers: ParsedTextLayer[] = [];
   const visit = (items: Layer[] | undefined) => {
     for (const layer of items ?? []) {
+      if (layer.hidden === true) continue;
       const text = layer.text?.text?.trim();
-      if (text && layer.hidden !== true) {
+      if (text) {
         const left = Number(layer.left ?? layer.text?.left ?? 0);
         const top = Number(layer.top ?? layer.text?.top ?? 0);
         const right = Number(layer.right ?? layer.text?.right ?? left);
@@ -128,33 +129,28 @@ export const classifyPosterTextLayers = (layers: ParsedTextLayer[], row: Promoti
   return replacements;
 };
 
-const roleSizeScale = (role: TextRole) => {
-  if (role === 'currentPrice') return 0.96;
-  if (role === 'benefit') return 0.96;
-  if (role === 'oldPrice') return 0.96;
-  return 1;
-};
-
-const roleMaxWidthScale = (role: TextRole) => {
-  if (role === 'currentPrice') return 1.06;
-  if (role === 'benefit') return 1.06;
-  if (role === 'oldPrice') return 1.04;
-  return 1.04;
-};
-
 const fitAndDrawText = (ctx: SKRSContext2D, replacement: Replacement) => {
-  const maxWidth = Math.max(20, replacement.width * roleMaxWidthScale(replacement.role));
-  let size = Math.max(16, Math.round((replacement.fontSize ?? replacement.height * 0.86) * roleSizeScale(replacement.role)));
-  while (size > 8) {
-    ctx.font = promotionFont(size);
-    if (ctx.measureText(replacement.value).width <= maxWidth) break;
-    size -= 2;
-  }
+  const style = replacement.layer.text?.style;
+  const fontName = style?.font?.name ?? '';
+  const weight = /semi.?bold/i.test(fontName) ? 600 : /regular/i.test(fontName) ? 400 : 700;
+  const size = replacement.fontSize ?? replacement.height;
+  ctx.font = promotionFont(size, weight);
+  ctx.letterSpacing = `${(style?.tracking ?? 0) * size / 1000}px`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  const original = ctx.measureText(replacement.text);
+  const updated = ctx.measureText(replacement.value);
+  const originalWidth = Math.max(1, original.actualBoundingBoxLeft + original.actualBoundingBoxRight);
+  const updatedWidth = Math.max(1, updated.actualBoundingBoxLeft + updated.actualBoundingBoxRight);
+  const originalHeight = Math.max(1, original.actualBoundingBoxAscent + original.actualBoundingBoxDescent);
+  // PSD fontSize is before the Photoshop text transform. Calibrate against
+  // the original raster's bounds so its actual scale and stretch are retained.
+  const scaleX = Math.min(replacement.width / originalWidth, replacement.width / updatedWidth);
+  const scaleY = replacement.height / originalHeight;
+  ctx.translate(replacement.left + (replacement.width - updatedWidth * scaleX) / 2, replacement.top);
+  ctx.scale(scaleX, scaleY);
   ctx.fillStyle = replacement.color ?? (replacement.role === 'discountPercent' ? '#e30613' : '#ffffff');
-  ctx.font = promotionFont(size);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(replacement.value, replacement.left + replacement.width / 2, replacement.top + replacement.height / 2);
+  ctx.fillText(replacement.value, updated.actualBoundingBoxLeft, original.actualBoundingBoxAscent);
 };
 
 const drawLayerImage = (ctx: SKRSContext2D, layer: Layer, draw: () => void) => {
@@ -181,7 +177,22 @@ const renderLayerTree = (ctx: SKRSContext2D, layers: Layer[] | undefined, replac
         return;
       }
       const layerCanvas = layer.canvas as unknown as Parameters<typeof ctx.drawImage>[0] | undefined;
-      if (layerCanvas) ctx.drawImage(layerCanvas, Number(layer.left ?? 0), Number(layer.top ?? 0));
+      if (layerCanvas) {
+        const fills = layer.effects?.solidFill?.filter((fill) => fill.enabled);
+        if (fills?.length) {
+          const tinted = createCanvas(layerCanvas.width, layerCanvas.height);
+          const tint = tinted.getContext('2d');
+          tint.drawImage(layerCanvas, 0, 0);
+          for (const fill of fills) {
+            if (fill.blendMode && fill.blendMode !== 'normal') throw new Error('Неподдерживаемый цветовой эффект PSD.');
+            tint.globalCompositeOperation = 'source-atop';
+            tint.globalAlpha = fill.opacity ?? 1;
+            tint.fillStyle = rgbToHex(fill.color) ?? '#ffffff';
+            tint.fillRect(0, 0, tinted.width, tinted.height);
+          }
+          ctx.drawImage(tinted, Number(layer.left ?? 0), Number(layer.top ?? 0));
+        } else ctx.drawImage(layerCanvas, Number(layer.left ?? 0), Number(layer.top ?? 0));
+      }
     });
   }
 };
@@ -238,10 +249,10 @@ const buildPdf = (image: { width: number; height: number; rgb: Buffer }) => {
   return Buffer.concat(chunks);
 };
 
-export const createGeneratedPosterPdfFromPsd = (psdBuffer: Buffer, row: PromotionTableRow) => {
+export const renderGeneratedPosterFromPsd = (psdBuffer: Buffer, row: PromotionTableRow) => {
   initialize();
   const psd = readPsd(psdBuffer, { skipThumbnail: true, skipLinkedFilesData: true, totalMemoryLimit: 512 * 1024 * 1024 }) as Psd;
-  const sourceCanvas = psd.canvas as unknown as ReturnType<typeof createCanvas> | undefined;
+  const sourceCanvas = psd.canvas as unknown as Canvas | undefined;
   if (!sourceCanvas) throw new Error('PSD не содержит composite preview, из которого можно собрать постер.');
 
   const canvas = createCanvas(psd.width, psd.height);
@@ -249,16 +260,33 @@ export const createGeneratedPosterPdfFromPsd = (psdBuffer: Buffer, row: Promotio
   const replacements = classifyPosterTextLayers(collectTextLayers(psd.children), row);
   if (replacements.length < 3) throw new Error('Не удалось уверенно найти ценовые слои в PSD.');
 
-  const replacementsByLayer = new Map(replacements.map((replacement) => [replacement.layer, replacement]));
-  renderLayerTree(ctx, psd.children, replacementsByLayer);
-  if (!psd.children?.length) ctx.drawImage(sourceCanvas as unknown as Parameters<typeof ctx.drawImage>[0], 0, 0);
+  ctx.drawImage(sourceCanvas, 0, 0);
+  const changes = replacements.filter((replacement) => replacement.text !== replacement.value);
+  if (changes.length) {
+    const updated = createCanvas(psd.width, psd.height);
+    const updatedContext = updated.getContext('2d');
+    renderLayerTree(updatedContext, psd.children, new Map(changes.map((replacement) => [replacement.layer, replacement])));
+    // Keep Photoshop's composite everywhere else: photographs, typography,
+    // layer effects, dividers and the overall composition are never rebuilt.
+    for (const replacement of changes) {
+      const { left, top, width, height } = replacement;
+      ctx.drawImage(updated, left, top, width, height, left, top, width, height);
+    }
+  }
+  return canvas;
+};
 
-  const imageData = ctx.getImageData(0, 0, psd.width, psd.height).data;
-  const rgb = Buffer.allocUnsafe(psd.width * psd.height * 3);
+export const createGeneratedPosterPdfFromPsd = (psdBuffer: Buffer, row: PromotionTableRow) => {
+  const canvas = renderGeneratedPosterFromPsd(psdBuffer, row);
+  const { width, height } = canvas;
+  const ctx = canvas.getContext('2d');
+
+  const imageData = ctx.getImageData(0, 0, width, height).data;
+  const rgb = Buffer.allocUnsafe(width * height * 3);
   for (let sourceIndex = 0, targetIndex = 0; sourceIndex < imageData.length; sourceIndex += 4, targetIndex += 3) {
     rgb[targetIndex] = imageData[sourceIndex];
     rgb[targetIndex + 1] = imageData[sourceIndex + 1];
     rgb[targetIndex + 2] = imageData[sourceIndex + 2];
   }
-  return buildPdf({ width: psd.width, height: psd.height, rgb });
+  return buildPdf({ width, height, rgb });
 };

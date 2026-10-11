@@ -16,6 +16,7 @@ require('./promotion-price-tag-batch.test');
 require('./promotion-fonts.test');
 require('./promotion-price-tag-filename.test');
 require('./promotion-price-tag-pdf.test');
+require('./generated-poster-pdf.test');
 require('./promotion-rules.test');
 require('./promotion-provenance.test');
 require('./product.creation.test');

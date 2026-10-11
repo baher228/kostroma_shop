@@ -15,6 +15,7 @@ const harness=(options={})=>{
   const client={sendMessage:async raw=>{sends.push(raw);stages.push('api-send');if(options.sendError)throw options.sendError;return 'sent-id';},findSentMessage:async()=>foundSent};
   const connection={mailbox:'owner@example.com',canSend:true,client,...options.connection};
   const repo={readGmailDeliverySettings:async()=>settings,pendingGmailDeliveries:async()=>jobs.filter(j=>!['sent','failed'].includes(j.status)),
+    canSendGmailToRecipient:async()=>options.limitAllowed!==false,
     messageImportsComplete:async()=>options.importsComplete!==false,
     updateGmailDelivery:async(id,patch)=>{stages.push(patch.status||'update');if(patch.status==='sent'&&options.commitError){options.commitError=false;throw Error('lost DB commit response');}Object.assign(jobs.find(j=>j.id===id),patch);}};
   const run=createGmailDeliveryProcessor({repository:repo,withLock:async fn=>fn(new AbortController().signal),getConnection:async()=>connection,
@@ -83,6 +84,14 @@ test('accepted email with lost acknowledgement or DB commit is reconciled from S
 });
 test('definite Gmail rejection is visible and never silently retried',async()=>{
   const h=harness({sendError:{response:{status:403,data:{secret:'hidden'}}}});await h.run();await h.run();assert.equal(h.jobs[0].status,'failed');assert.equal(h.sends.length,1);assert.ok(!JSON.stringify(h.jobs).includes('hidden'));
+});
+
+test('daily recipient limit pauses automatic and manual packages before touching Gmail and resumes when a slot is free',async()=>{
+  for(const manual of [false,true]){
+    const options={limitAllowed:false,job:{...job(),manual}};const h=harness(options);
+    await h.run();await h.run();assert.equal(h.sends.length,0);assert.equal(h.jobs[0].status,'ready');assert.match(h.jobs[0].error,/5 писем/);
+    options.limitAllowed=true;await h.run();assert.equal(h.sends.length,1);assert.equal(h.jobs[0].status,'sent');assert.ok(h.jobs[0].send_started_at);
+  }
 });
 test('large package is sent through a private expiring link instead of an oversized attachment',async()=>{
   const h=harness({build:async()=>({zip:Buffer.alloc(19*1024*1024),manifest})});await h.run();

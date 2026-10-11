@@ -42,7 +42,7 @@ const base64Url = (input: Buffer | string) =>
 export const normalizePosterName = (value: string) =>
   value
     .normalize('NFKD')
-    .replace(/\.[^.]+$/i, '')
+    .replace(/\.(?:psd|pdf)$/i, '')
     .replace(/ё/g, 'е')
     .replace(/Ё/g, 'Е')
     .replace(/[^a-zа-я0-9]+/giu, ' ')
@@ -162,8 +162,11 @@ export const listPosterPsdFiles = async (folderId = config.googleDrivePostersFol
   const entry = {
     expiresAt: Number.POSITIVE_INFINITY,
     promise: (async () => {
-      const mimeQuery = psdMimeTypes.map((mimeType) => `mimeType = '${mimeType}'`).join(' or ');
-      const files = await listPosterFilesByQuery(mimeQuery, folderId);
+      const folder = await driveRequest<{mimeType?:string;capabilities?:{canListChildren?:boolean}}>(`/files/${encodeURIComponent(folderId)}?fields=mimeType,capabilities(canListChildren)&supportsAllDrives=true`);
+      if(folder.mimeType!=='application/vnd.google-apps.folder'||folder.capabilities?.canListChildren===false)throw new Error('Папка постеров недоступна. Проверьте её адрес и доступ сервисного аккаунта.');
+      // Drive may identify an uploaded PSD as application/octet-stream. Read
+      // the configured folder and check both the extension and MIME locally.
+      const files = await listPosterFilesByQuery('mimeType != \'application/vnd.google-apps.folder\'', folderId);
       return files.filter((file) => file.name.toLowerCase().endsWith('.psd') || psdMimeTypes.includes(file.mimeType));
     })(),
   };

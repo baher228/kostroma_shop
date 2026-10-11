@@ -52,6 +52,9 @@ export const createGmailDeliveryProcessor=(overrides:Partial<typeof defaults>={}
         :!connection.canSend?'Подключите Gmail повторно и разрешите отправку писем.':!settings.recipient?'Укажите получателя в настройках почты.'
           :!job.manual&&!settings.autoSend?'Автоматическая отправка выключена. Можно отправить пакет вручную.':null;
       if(waiting){await patch({error:waiting});continue;}
+      if(!await deps.repository.canSendGmailToRecipient(settings.recipient!)){
+        await patch({error:'Достигнут лимит: 5 писем этому получателю за 24 часа. Пакет сохранён и будет отправлен, когда лимит освободится.'});continue;
+      }
       // Prepare all fallible local/storage work before the durable send fence.
       let raw:string;
       try{
@@ -62,7 +65,7 @@ export const createGmailDeliveryProcessor=(overrides:Partial<typeof defaults>={}
         if(asLink)text+='\n\nПакет превышает размер вложения. Защищённая ссылка на ZIP (действует 7 дней):\n'+await deps.downloadUrl(job.storage_key);
         raw=buildPackageMimeMessage({from:connection!.mailbox,to:settings.recipient!,messageId:job.send_message_id,text,...(!asLink?{zip:archive.body}:{})});
       }catch{await patch({status:'failed',error:'Не удалось прочитать сохранённый пакет. Повторите подготовку.'});continue;}
-      await patch({status:'sending',recipient:settings.recipient,error:null});
+      await patch({status:'sending',recipient:settings.recipient,send_started_at:new Date(),error:null});
       try{
         signal.throwIfAborted();
         if(!connection!.client.sendMessage)throw new Error('Gmail sender unavailable.');

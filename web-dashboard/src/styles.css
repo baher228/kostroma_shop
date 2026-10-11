@@ -4580,6 +4580,35 @@ input[type='datetime-local'] {
   resize: vertical;
 }
 
+.gmail-delivery-settings input,
+.gmail-delivery-settings textarea {
+  font: inherit;
+  color: inherit;
+  line-height: 1.45;
+}
+
+.gmail-delivery-settings textarea {
+  padding: 10px 12px;
+  border: 1px solid #b9c9c0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.gmail-history > summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 0;
+}
+
+.gmail-history[open] > summary {
+  margin-bottom: 8px;
+}
+
+.gmail-history > summary:focus-visible {
+  outline: 2px solid #245d43;
+  outline-offset: 3px;
+}
+
 .gmail-delivery-settings .gmail-auto-send,
 .gmail-package-actions {
   display: flex;

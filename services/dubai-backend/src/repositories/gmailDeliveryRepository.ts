@@ -29,7 +29,7 @@ export type GmailDelivery = {
   id:string; mailbox:string; message_id:string|null; status:'queued'|'preparing'|'ready'|'sending'|'sent'|'failed'|'unknown';
   manual:boolean; rows_snapshot:PromotionTableRow[]|null; storage_key:string|null; manifest:PackageManifest|null;
   recipient:string|null; send_message_id:string; gmail_sent_id:string|null; error:string|null; attempts:number;
-  created_at:Date; updated_at:Date; sent_at:Date|null;
+  created_at:Date; updated_at:Date; sent_at:Date|null; send_started_at:Date|null;
 };
 export const deliveryView = (row: GmailDelivery) => ({id:row.id,mailbox:row.mailbox,status:row.status,manual:row.manual,
   recipient:row.recipient,manifest:row.manifest,downloadAvailable:Boolean(row.storage_key),error:row.error,
@@ -38,7 +38,7 @@ export const listGmailDeliveries = async () => (await opsDb.query<GmailDelivery>
 export const getGmailDelivery = async (id:string) => (await opsDb.query<GmailDelivery>('SELECT * FROM gmail_deliveries WHERE id=$1;',[id])).rows[0]??null;
 export const pendingGmailDeliveries = async () => (await opsDb.query<GmailDelivery>("SELECT * FROM gmail_deliveries WHERE status IN ('queued','preparing','ready','sending','unknown') ORDER BY updated_at,id LIMIT 5;")).rows;
 export const updateGmailDelivery = async (id:string,patch:Partial<GmailDelivery>) => {
-  const allowed=['status','rows_snapshot','storage_key','manifest','recipient','gmail_sent_id','error','attempts','manual','sent_at'] as const;
+  const allowed=['status','rows_snapshot','storage_key','manifest','recipient','gmail_sent_id','error','attempts','manual','sent_at','send_started_at'] as const;
   const entries=Object.entries(patch).filter(([key])=>allowed.includes(key as typeof allowed[number]));
   if (!entries.length) return;
   const values=entries.map(([key,value])=>['rows_snapshot','manifest'].includes(key)&&value!==null?JSON.stringify(value):value);
@@ -54,4 +54,13 @@ export const createManualGmailDelivery = async (mailbox:string,requestId:string,
 export const messageImportsComplete = async (mailbox:string,messageId:string) => {
   const result=await opsDb.query<{complete:boolean}>(`SELECT NOT EXISTS(SELECT 1 FROM gmail_imports WHERE mailbox=$1 AND message_id=$2 AND status IN ('processing','failed')) AS complete;`,[mailbox,messageId]);
   return result.rows[0].complete;
+};
+
+// All sends reserve their slot while holding withGmailPollLock. Uncertain
+// Gmail acknowledgements count too; a definitive rejection does not.
+export const canSendGmailToRecipient = async (recipient:string) => {
+  const result=await opsDb.query<{allowed:boolean}>(`SELECT count(*) < 5 AS allowed FROM gmail_deliveries
+    WHERE lower(recipient)=$1 AND status IN ('sent','sending','unknown')
+      AND COALESCE(sent_at,send_started_at)>NOW()-INTERVAL '24 hours';`,[validateEmailAddress(recipient)]);
+  return result.rows[0].allowed;
 };

@@ -110,15 +110,16 @@ const main = async () => {
   const queued=(await opsDb.query('SELECT * FROM gmail_deliveries WHERE mailbox=$1 AND message_id=$2;',['smoke@example.com',messageId])).rows;
   assert.equal(queued.length,1);assert.equal(queued[0].status,'queued');
   const mailObjects=new Map();const sent=[];
-  const processor=createGmailDeliveryProcessor({repository:{...deliveryRepository,
-    readGmailDeliverySettings:async()=>({recipient:'recipient@example.com',allowedSenders:['allowed@example.com'],autoSend:true}),
+    const deliveryRecipient=`recipient-${suffix}@example.com`;
+    const processor=createGmailDeliveryProcessor({repository:{...deliveryRepository,
+      readGmailDeliverySettings:async()=>({recipient:deliveryRecipient,allowedSenders:['allowed@example.com'],autoSend:true}),
     pendingGmailDeliveries:async()=>(await opsDb.query("SELECT * FROM gmail_deliveries WHERE id=$1 AND status NOT IN ('sent','failed');",[queued[0].id])).rows},
     getConnection:async()=>({mailbox:'smoke@example.com',canSend:true,client:{...client,sendMessage:async raw=>{sent.push(raw);return 'fake-sent-id';},findSentMessage:async()=>null}}),
     build:createPromotionPackageBuilder({findPoster:async()=>({best:null,candidates:[]})}),
     upload:async({key,body})=>mailObjects.set(key,body),download:async key=>({body:mailObjects.get(key)})});
   await processor();await processor();assert.equal(sent.length,1);
   const delivered=(await opsDb.query('SELECT * FROM gmail_deliveries WHERE id=$1;',[queued[0].id])).rows[0];
-  assert.equal(delivered.status,'sent');assert.equal(delivered.recipient,'recipient@example.com');
+    assert.equal(delivered.status,'sent');assert.equal(delivered.recipient,deliveryRecipient);
   assert.equal(delivered.rows_snapshot.length,1);assert.equal(delivered.rows_snapshot[0].promoPrice,80);
   assert.equal(delivered.rows_snapshot[0].startDate,'2026-10-04');assert.equal(delivered.rows_snapshot[0].endDate,'2026-10-10');
   const archive=await JSZip.loadAsync(mailObjects.get(delivered.storage_key));
@@ -128,6 +129,30 @@ const main = async () => {
   const manualOne=await deliveryRepository.createManualGmailDelivery('smoke@example.com',requestId,manualRows);
   const manualTwo=await deliveryRepository.createManualGmailDelivery('smoke@example.com',requestId,manualRows);
   assert.equal(manualOne.id,manualTwo.id);
+    // The daily quota is global for a recipient, including uncertain sends,
+    // but excludes old sends and definite provider rejections.
+    const quotaIds=[];
+    for(const status of ['sent','sent','sent','unknown']){
+      const id=randomUUID();quotaIds.push(id);
+      await opsDb.query(`INSERT INTO gmail_deliveries(id,mailbox,source_key,status,recipient,send_message_id,send_started_at,sent_at)
+        VALUES($1,'quota-test',$1,$2,$3,$1,NOW(),CASE WHEN $2='sent' THEN NOW() END);`,[id,status,deliveryRecipient.toUpperCase()]);
+    }
+    assert.equal(await deliveryRepository.canSendGmailToRecipient(deliveryRecipient),false);
+    assert.equal(await deliveryRepository.canSendGmailToRecipient('other@example.com'),true);
+    await opsDb.query("UPDATE gmail_deliveries SET status='failed' WHERE id=$1;",[quotaIds[3]]);
+    assert.equal(await deliveryRepository.canSendGmailToRecipient(deliveryRecipient),true);
+    await opsDb.query("UPDATE gmail_deliveries SET status='unknown',send_started_at=NOW()-INTERVAL '25 hours' WHERE id=$1;",[quotaIds[3]]);
+    assert.equal(await deliveryRepository.canSendGmailToRecipient(deliveryRecipient),true);
+    await opsDb.query("UPDATE gmail_deliveries SET send_started_at=NOW() WHERE id=$1;",[quotaIds[3]]);
+    const limitedProcessor=createGmailDeliveryProcessor({repository:{...deliveryRepository,
+      readGmailDeliverySettings:async()=>({recipient:deliveryRecipient,allowedSenders:['allowed@example.com'],autoSend:true}),
+      pendingGmailDeliveries:async()=>(await opsDb.query('SELECT * FROM gmail_deliveries WHERE id=$1;',[manualOne.id])).rows},
+      getConnection:async()=>({mailbox:'smoke@example.com',canSend:true,client:{sendMessage:async()=>{throw Error('Quota must prevent Gmail request');}}}),
+      build:createPromotionPackageBuilder({findPoster:async()=>({best:null,candidates:[]})}),
+      upload:async({key,body})=>mailObjects.set(key,body)});
+    await limitedProcessor();const limited=await deliveryRepository.getGmailDelivery(manualOne.id);
+    assert.equal(limited.status,'ready');assert.ok(limited.error.includes('5 писем'));
+    await opsDb.query('DELETE FROM gmail_deliveries WHERE id=ANY($1);',[quotaIds]);
   const expectedObjects=objects.size;
 
   // Nested repository commits must not escape the import transaction.

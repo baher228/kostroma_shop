@@ -11,6 +11,7 @@ export const GmailDeliveryPanel=({session,health,settings,deliveries,onChanged}:
   const [senders,setSenders]=useState(settings.allowedSenders.join('\n'));
   const [autoSend,setAutoSend]=useState(settings.autoSend);
   const [busy,setBusy]=useState('');const pending=useRef(false);
+  const sendRequests=useRef(new Map<string,string>());
   const [error,setError]=useState('');const [notice,setNotice]=useState('');
   const action=async(id:string,operation:()=>Promise<void>)=>{
     if(pending.current)return;pending.current=true;setBusy(id);setError('');setNotice('');
@@ -22,9 +23,9 @@ export const GmailDeliveryPanel=({session,health,settings,deliveries,onChanged}:
     setRecipient(result.settings.recipient??'');setSenders(result.settings.allowedSenders.join('\n'));setAutoSend(result.settings.autoSend);
     setNotice('Настройки почты сохранены.');await onChanged();
   });
-  const download=(job:GmailDelivery)=>action(job.id,async()=>{
-    const file=await api.promotions.downloadGmailPackage(session.token,job.id);
-    const url=URL.createObjectURL(file.blob);const link=document.createElement('a');link.href=url;link.download=file.fileName||'promotions.zip';link.click();
+  const download=(job:GmailDelivery,index:number,name:string)=>action(job.id,async()=>{
+    const file=await api.promotions.downloadGmailPackageFile(session.token,job.id,index);
+    const url=URL.createObjectURL(file.blob);const link=document.createElement('a');link.href=url;link.download=file.fileName||name;link.click();
     window.setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
   return <section className="gmail-delivery-panel">
@@ -34,7 +35,7 @@ export const GmailDeliveryPanel=({session,health,settings,deliveries,onChanged}:
       <label>Принимать письма от<textarea rows={3} placeholder="sender@example.com — один адрес на строке" value={senders} disabled={!manager||Boolean(busy)} onChange={e=>setSenders(e.target.value)}/></label>
       <p className="batch-hint">Принимаются только точные адреса из списка и письма, подлинность которых подтвердил Gmail. Пустой список приостанавливает импорт.</p>
       <label className="gmail-auto-send"><input type="checkbox" checked={autoSend} disabled={!manager||Boolean(busy)} onChange={e=>setAutoSend(e.target.checked)}/>Автоматически отправлять пакет после импорта накладной</label>
-      <p className="batch-hint">Отправитель — подключённый Gmail. ZIP содержит ценники A4, доступные постеры и список товаров без постеров. Для большого пакета письмо содержит защищённую ссылку на 7 дней.</p>
+      <p className="batch-hint">Отправитель — подключённый Gmail. Каждый ценник и постер прикладывается отдельным PDF. Товары без постеров перечисляются в письме. Если файлы превышают размер вложений, письмо содержит отдельные защищённые ссылки на 7 дней.</p>
       <p className="batch-hint">Лимит — 5 писем каждому получателю за 24 часа. После достижения лимита пакет остаётся в очереди.</p>
       {health?.connected&&!health.canSend&&<p className="batch-hint">Для отправки подключите Gmail повторно и разрешите отправку писем. Чтение почты доступно после настройки разрешённых отправителей.</p>}
       {manager&&<div><button className="secondary" disabled={Boolean(busy)||Boolean(health?.running)} onClick={()=>void save()}>{busy==='settings'?'Сохраняем...':'Сохранить настройки'}</button></div>}
@@ -51,12 +52,15 @@ export const GmailDeliveryPanel=({session,health,settings,deliveries,onChanged}:
         {job.manifest?.missingPrices.map(name=><p key={`price-${name}`}>Для товара «{name}» отсутствует старая или новая цена.</p>)}
         {job.error&&<p>{job.error}</p>}
         <div className="gmail-package-actions">
-          {job.downloadAvailable&&<button className="secondary" disabled={Boolean(busy)} onClick={()=>void download(job)}>Скачать ZIP</button>}
-          {manager&&['ready','failed','queued'].includes(job.status)&&<button className="secondary" disabled={Boolean(busy)||!health?.canSend||!settings.recipient||Boolean(health.running)} onClick={()=>void action(job.id,async()=>{
-            await api.promotions.sendGmailPackage(session.token,job.id);setNotice('Пакет поставлен в очередь. Отправка выполняется при следующей проверке почты.');await onChanged();
+          {manager&&['ready','failed','queued','sent'].includes(job.status)&&<button className="secondary" disabled={Boolean(busy)||!health?.canSend||!settings.recipient||Boolean(health.running)} onClick={()=>void action(job.id,async()=>{
+            const requestId=sendRequests.current.get(job.id)??crypto.randomUUID();sendRequests.current.set(job.id,requestId);
+            await api.promotions.sendGmailPackage(session.token,job.id,requestId);setNotice('Пакет поставлен в очередь. Отправка выполняется при следующей проверке почты.');await onChanged();sendRequests.current.delete(job.id);
           })}>Отправить</button>}
           {job.status==='unknown'&&<button className="secondary" onClick={()=>void action(job.id,onChanged)} disabled={Boolean(busy)}>Обновить статус</button>}
         </div>
+        {job.downloadAvailable&&<details><summary>Скачать файлы · {job.manifest?.files.filter(name=>name.endsWith('.pdf')).length??0}</summary>
+          <div className="gmail-package-actions">{job.manifest?.files.filter(name=>name.endsWith('.pdf')).map((name,index)=><button key={name} className="secondary" disabled={Boolean(busy)} onClick={()=>void download(job,index,name)}>{name.split('/').pop()}</button>)}</div>
+        </details>}
       </li>)}</ul>}
     </details>
   </section>;

@@ -9,6 +9,8 @@ import {
   updateTaskStatus,
 } from '../repositories/taskRepository';
 import { SessionUser, Task } from '../domain/types';
+import { createTaskSeries } from '../repositories/taskSeriesRepository';
+import { TASK_REPEAT_INTERVAL_MS } from '../domain/taskRepeat';
 import { findStoreTabletById } from '../repositories/userRepository';
 import { createTaskSchema, reviewTaskPhotoSchema, updateTaskStatusSchema, uploadTaskPhotoSchema } from '../http/validation';
 import { deleteTaskPhotoFile, readTaskPhoto, saveTaskPhoto } from './taskPhotoStorageService';
@@ -31,12 +33,24 @@ export const createManagedTask = async (
   if (assignees.length === 0 || assignees.some((assignee) => !assignee)) {
     return null;
   }
+  const series = payload.repeat !== 'none' && payload.deadlineAt
+    ? await createTaskSeries({
+      title: payload.title,
+      assigneeIds: assignees.map((assignee) => assignee!.id),
+      createdById: manager.id,
+      createdByDisplayName: manager.fullName,
+      requiresPhotoConfirmation: payload.requiresPhotoConfirmation ?? false,
+      repeat: payload.repeat,
+      nextDeadlineAt: new Date(Date.parse(payload.deadlineAt) + TASK_REPEAT_INTERVAL_MS[payload.repeat]).toISOString(),
+    })
+    : null;
   const groupId = assignees.length > 1 ? `group_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
   const tasks: Task[] = [];
   for (const assignee of assignees) {
     if (!assignee) continue;
     tasks.push(await createTask({
       groupId,
+      seriesId: series?.id ?? null,
       title: payload.title,
       assigneeId: assignee.id,
       assigneeDisplayName: assignee.fullName,

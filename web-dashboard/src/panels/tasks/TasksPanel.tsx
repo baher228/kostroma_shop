@@ -2,8 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, RefreshButton } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
-import type { Session, Shop, StoreTablet, Task } from '../../types';
+import type { Session, Shop, StoreTablet, Task, TaskRepeat, TaskSeries } from '../../types';
 import { groupTasksByUrgency, taskDueLabel, taskTimeParts } from '../../../../shared/task-timeline';
+
+const TASK_REPEAT_OPTIONS: { value: TaskRepeat; label: string }[] = [
+  { value: 'daily', label: 'Каждый день' },
+  { value: 'every_2_days', label: 'Каждые 2 дня' },
+  { value: 'weekly', label: 'Каждую неделю' },
+];
+
+const repeatLabel = (repeat: TaskRepeat) => TASK_REPEAT_OPTIONS.find((option) => option.value === repeat)?.label ?? 'Повтор';
 
 const statusLabel = (task: Task) => {
   if (task.photoReviewStatus === 'pending') return 'На проверке';
@@ -257,6 +265,7 @@ type TaskCard = {
   deadlineAt: string | null;
   completedAt: string | null;
   requiresPhotoConfirmation: boolean;
+  seriesId: string | null;
   members: Task[];
 };
 
@@ -278,6 +287,7 @@ const toTaskCards = (tasks: Task[]): TaskCard[] => {
       deadlineAt: members[0].deadlineAt,
       completedAt: allDone ? latestIso(members.map((member) => member.completedAt)) : null,
       requiresPhotoConfirmation: members.some((member) => member.requiresPhotoConfirmation),
+      seriesId: members[0].seriesId ?? null,
       members,
     };
   });
@@ -410,8 +420,9 @@ const ShopMultiPicker = ({
 };
 
 export const TasksPanel = ({ session }: { session: Session }) => {
-  const emptyForm = { title: '', assigneeIds: [] as string[], deadlineAt: '', requiresPhotoConfirmation: false };
+  const emptyForm = { title: '', assigneeIds: [] as string[], deadlineAt: '', requiresPhotoConfirmation: false, repeat: 'none' as TaskRepeat | 'none' };
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [series, setSeries] = useState<TaskSeries[]>([]);
   const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -426,6 +437,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const overdueCount = taskCards.filter((card) => card.members.some((member) => member.overdue)).length;
   const shopsById = Object.fromEntries(shops.map((shop) => [shop.id, shop]));
   const tabletsById = Object.fromEntries(storeTablets.map((tablet) => [tablet.id, tablet]));
+  const seriesById = Object.fromEntries(series.map((item) => [item.id, item]));
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -436,12 +448,14 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     setLoading(true);
     setError('');
     try {
-      const [nextTasks, nextStoreTablets, nextShops] = await Promise.all([
+      const [nextTasks, nextStoreTablets, nextShops, nextSeries] = await Promise.all([
         api.tasks.list(session.token),
         api.tasks.listStoreTablets(session.token),
         api.shops.list(session.token),
+        api.tasks.listSeries(session.token),
       ]);
       setTasks(nextTasks);
+      setSeries(nextSeries);
       setStoreTablets(nextStoreTablets);
       setShops(nextShops);
     } catch (err) {
@@ -464,6 +478,10 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       setError('Выберите хотя бы один магазин.');
       return;
     }
+    if (form.repeat !== 'none' && !form.deadlineAt) {
+      setError('Для повторяющейся задачи укажите дедлайн.');
+      return;
+    }
     try {
       setSaving(true);
       const createdTasks = await api.tasks.create(session.token, {
@@ -471,14 +489,32 @@ export const TasksPanel = ({ session }: { session: Session }) => {
         assigneeIds,
         deadlineAt: form.deadlineAt ? new Date(form.deadlineAt).toISOString() : null,
         requiresPhotoConfirmation: form.requiresPhotoConfirmation,
+        repeat: form.repeat,
       });
       setTasks((current) => [...createdTasks, ...current]);
+      if (form.repeat !== 'none') setSeries(await api.tasks.listSeries(session.token));
       setForm({ ...emptyForm, assigneeIds });
       setNotice(createdTasks.length > 1 ? `Задача назначена магазинам: ${createdTasks.length}.` : 'Задача назначена.');
     } catch (err) {
       setError(messageOf(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const stopSeries = async (seriesId: string) => {
+    if (!window.confirm('Остановить повтор? Уже созданные задачи останутся.')) return;
+    setError('');
+    setNotice('');
+    try {
+      setPendingId(seriesId);
+      await api.tasks.stopSeries(session.token, seriesId);
+      setSeries((current) => current.filter((item) => item.id !== seriesId));
+      setNotice('Повтор остановлен.');
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setPendingId(null);
     }
   };
 
@@ -556,8 +592,15 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           </div>
           <div className="task-deadline-row">
             <label className="task-field task-deadline-field">
-              <span>Дедлайн <small>необязательно</small></span>
+              <span>Дедлайн <small>{form.repeat === 'none' ? 'необязательно' : 'первой задачи'}</small></span>
               <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt })} />
+            </label>
+            <label className="task-field task-repeat-field">
+              <span>Повтор</span>
+              <select value={form.repeat} onChange={(event) => setForm({ ...form, repeat: event.target.value as TaskRepeat | 'none' })}>
+                <option value="none">Никогда</option>
+                {TASK_REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
             </label>
             <label className="task-photo-control">
               <input type="checkbox" checked={form.requiresPhotoConfirmation} onChange={(event) => setForm({ ...form, requiresPhotoConfirmation: event.target.checked })} />
@@ -589,6 +632,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                   const due = taskDueLabel(card, now);
                   const single = card.members.length === 1 ? card.members[0] : null;
                   const doneCount = card.members.filter((member) => member.status === 'done').length;
+                  const activeSeries = card.seriesId ? seriesById[card.seriesId] : undefined;
                   return (
                     <li key={card.key} className={`task-row task-row-${group.key}`} aria-busy={card.members.some((member) => pendingId === member.id)}>
                       <div className="task-time" aria-label={card.deadlineAt ? `Дедлайн ${formatDateTime(card.deadlineAt)}` : 'Без дедлайна'}>
@@ -598,6 +642,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                       <div className="task-row-body">
                         <div className="task-row-title">
                           {card.requiresPhotoConfirmation && <span className="task-badge">Фото</span>}
+                          {activeSeries && <span className="task-badge task-badge-repeat" title={`Следующая задача: ${formatDateTime(activeSeries.nextDeadlineAt)}`}>↻ {repeatLabel(activeSeries.repeat)}</span>}
                           <strong>{card.title}</strong>
                         </div>
                         {single ? (
@@ -632,6 +677,11 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                       <div className="task-row-side">
                         {due && <span className={`task-due task-due-${group.key}`}>{due}</span>}
                         {single && <div className="actions">{renderActions(single, false)}</div>}
+                        {activeSeries && (
+                          <button type="button" className="task-stop-repeat" onClick={() => void stopSeries(activeSeries.id)} disabled={pendingId === activeSeries.id}>
+                            Остановить повтор
+                          </button>
+                        )}
                       </div>
                     </li>
                   );

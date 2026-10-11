@@ -179,6 +179,7 @@ export type TaskPhotoReviewStatus = 'none' | 'pending' | 'approved' | 'declined'
 export type Task = {
   id: string;
   groupId: string | null;
+  seriesId: string | null;
   title: string;
   assigneeId: string;
   assigneeDisplayName: string;
@@ -195,6 +196,19 @@ export type Task = {
   photoReviewedAt: string | null;
   photoDeletesAt: string | null;
   overdue: boolean;
+};
+
+export type TaskSeries = {
+  id: string;
+  title: string;
+  assigneeIds: string[];
+  createdById: string;
+  createdByDisplayName: string;
+  requiresPhotoConfirmation: boolean;
+  repeat: import('./taskRepeat').TaskRepeat;
+  nextDeadlineAt: string;
+  active: boolean;
+  createdAt: string;
 };
 
 export type SupportCategory = 'technical_failure' | 'suppliers_failure' | 'client_conflict';

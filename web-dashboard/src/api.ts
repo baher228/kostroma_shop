@@ -31,7 +31,7 @@ import {
   StockTable,
   Task,
   TaskStatus,
-  StoreTablet,
+  StoreTablet, TaskRepeat, TaskSeries
 } from './types';
 import { downloadFileName } from './downloadFileName';
 
@@ -327,11 +327,14 @@ export const api = {
     listStoreTablets: async (token: string) => (await ruRequest<{ storeTablets: StoreTablet[] }>('/api/store-tablets', { token })).storeTablets,
     create: async (
       token: string,
-      payload: { title: string; assigneeIds: string[]; deadlineAt: string | null; requiresPhotoConfirmation: boolean },
+      payload: { title: string; assigneeIds: string[]; deadlineAt: string | null; requiresPhotoConfirmation: boolean; repeat: TaskRepeat | 'none' },
     ) => {
       const response = await ruRequest<{ task: Task; tasks?: Task[] }>('/api/tasks', { method: 'POST', token, body: payload });
       return response.tasks ?? [response.task];
     },
+    listSeries: async (token: string) => (await ruRequest<{ series: TaskSeries[] }>('/api/task-series', { token })).series,
+    stopSeries: async (token: string, seriesId: string) =>
+      ruRequest<{ stopped: boolean }>(`/api/task-series/${seriesId}/stop`, { method: 'POST', token }),
     updateStatus: async (token: string, taskId: string, status: TaskStatus) =>
       (await ruRequest<{ task: Task }>(`/api/tasks/${taskId}/status`, { method: 'PATCH', token, body: { status } })).task,
     reviewPhoto: async (token: string, taskId: string, decision: 'approve' | 'decline') =>

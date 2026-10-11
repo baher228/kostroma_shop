@@ -226,7 +226,7 @@ test('task repository create insert covers photo review columns', async () => {
   });
 
   assert.equal(task.id, 'task_created');
-  assert.equal(insertParams.length, 9);
+  assert.equal(insertParams.length, 10);
   assert.match(insertSql, /photo_confirmation_uploaded_at,\s*photo_confirmed_at,\s*photo_review_status/);
   assert.match(insertSql, /NULL,NULL,NULL,'none',NULL,NULL,NOW\(\)/);
 });
@@ -434,4 +434,14 @@ test('deadline reminders use the loud deadline channel for claimed tasks only', 
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+test('repeating tasks create the next occurrence after the previous deadline and skip missed ones', () => {
+  const { dueTaskOccurrence } = require('../dist/domain/taskRepeat');
+  const day = 24 * 60 * 60 * 1000;
+  const next = Date.parse('2026-10-11T10:00:00.000Z');
+  assert.equal(dueTaskOccurrence(next, 'daily', next - day - 1), null);
+  assert.deepEqual(dueTaskOccurrence(next, 'daily', next - day + 1), { deadlineMs: next, followingDeadlineMs: next + day });
+  assert.deepEqual(dueTaskOccurrence(next, 'every_2_days', next + 1), { deadlineMs: next + 2 * day, followingDeadlineMs: next + 4 * day });
+  assert.deepEqual(dueTaskOccurrence(next, 'weekly', next + 8 * day), { deadlineMs: next + 14 * day, followingDeadlineMs: next + 21 * day });
 });

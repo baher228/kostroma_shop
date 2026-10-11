@@ -103,9 +103,13 @@ export const createTaskSchema = z
     assigneeIds: z.array(z.string().trim().min(1).max(100)).min(1).max(200).optional(),
     deadlineAt: dateTimeString,
     requiresPhotoConfirmation: z.boolean().optional().default(false),
+    repeat: z.enum(['none', 'daily', 'every_2_days', 'weekly']).optional().default('none'),
   })
   .refine((payload) => Boolean(payload.assigneeId || payload.assigneeIds?.length), {
     message: 'Choose at least one store tablet.',
+  })
+  .refine((payload) => payload.repeat === 'none' || Boolean(payload.deadlineAt), {
+    message: 'A repeating task needs a deadline.',
   });
 
 export const updateTaskStatusSchema = z.object({

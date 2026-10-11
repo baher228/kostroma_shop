@@ -7,6 +7,7 @@ import { qcConfig, validateQcConfig } from './quality-control/config';
 import { createQualityControlWorker } from './quality-control/worker';
 import { createQualityControlRetentionWorker } from './quality-control/retentionWorker';
 import { sendTaskDeadlineReminders } from './services/notificationService';
+import { createDueTaskSeriesOccurrences } from './services/taskSeriesService';
 
 const startServer = async () => {
   validateQcConfig();
@@ -22,6 +23,9 @@ const startServer = async () => {
   setInterval(() => {
     void sendTaskDeadlineReminders().catch((error) => {
       console.error('Failed to send task deadline reminders:', error);
+    });
+    void createDueTaskSeriesOccurrences().catch((error) => {
+      console.error('Failed to create repeating task occurrences:', error);
     });
   }, 30 * 1000).unref();
   const app = createRussiaApp();

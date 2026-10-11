@@ -12,6 +12,7 @@ import {
   uploadTaskPhotoConfirmation,
 } from '../services/taskService';
 import { notifyTaskAssigneeOfNewTask } from '../services/notificationService';
+import { getActiveTaskSeries, stopManagedTaskSeries } from '../services/taskSeriesService';
 import {
   createTaskSchema,
   idParamSchema,
@@ -52,6 +53,31 @@ export const registerTaskRoutes = (app: Express) => {
         return;
       }
       res.status(500).json({ message: 'Failed to create task.' });
+    }
+  });
+
+  app.get('/api/task-series', requireAuth, requireRole('manager'), async (_req: Request, res: Response) => {
+    try {
+      res.json({ series: await getActiveTaskSeries() });
+    } catch {
+      res.status(500).json({ message: 'Failed to load repeating tasks.' });
+    }
+  });
+
+  app.post('/api/task-series/:id/stop', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const { id } = idParamSchema.parse(req.params);
+      if (!(await stopManagedTaskSeries(id))) {
+        res.status(404).json({ message: 'Repeating task was not found.' });
+        return;
+      }
+      res.json({ stopped: true });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to stop repeating task.' });
     }
   });
 

@@ -303,6 +303,7 @@ export type TaskPhotoReviewStatus = 'none' | 'pending' | 'approved' | 'declined'
 export type Task = {
   id: string;
   groupId?: string | null;
+  seriesId?: string | null;
   title: string;
   assigneeId: string;
   assigneeDisplayName: string;
@@ -319,6 +320,18 @@ export type Task = {
   photoReviewedAt: string | null;
   photoDeletesAt: string | null;
   overdue: boolean;
+};
+
+export type TaskRepeat = 'daily' | 'every_2_days' | 'weekly';
+
+export type TaskSeries = {
+  id: string;
+  title: string;
+  assigneeIds: string[];
+  repeat: TaskRepeat;
+  nextDeadlineAt: string;
+  active: boolean;
+  createdAt: string;
 };
 
 export type StoreTablet = Pick<SessionUser, 'id' | 'username' | 'firstName' | 'lastName' | 'fullName' | 'shopId'>;

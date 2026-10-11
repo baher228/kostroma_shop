@@ -418,10 +418,10 @@ export const api = {
       dxbRequest<{settings:GmailDeliverySettings}>('/api/promotions/gmail/settings',{method:'PUT',token,body:settings}),
     queuePromotionEmail:async(token:string,rowNumbers:number[],requestId:string)=>
       dxbRequest<{delivery:GmailDelivery}>('/api/promotions/gmail/packages',{method:'POST',token,body:{rowNumbers,requestId}}),
-    sendGmailPackage:async(token:string,id:string)=>
-      dxbRequest<{ok:boolean}>(`/api/promotions/gmail/packages/${encodeURIComponent(id)}/send`,{method:'POST',token}),
-    downloadGmailPackage:async(token:string,id:string)=>
-      dxbDownloadBlobRequest(`/api/promotions/gmail/packages/${encodeURIComponent(id)}/package.zip`,token),
+    sendGmailPackage:async(token:string,id:string,requestId:string)=>
+      dxbRequest<{ok:boolean}>(`/api/promotions/gmail/packages/${encodeURIComponent(id)}/send`,{method:'POST',token,body:{requestId}}),
+    downloadGmailPackageFile:async(token:string,id:string,index:number)=>
+      dxbDownloadBlobRequest(`/api/promotions/gmail/packages/${encodeURIComponent(id)}/files/${index}`,token),
     pollGmail: async (token: string) =>
       dxbRequest<{ health: GmailHealth; result: { messages: number; attachments: number; imported: number; skipped: number; failed: number } }>(
         '/api/promotions/gmail/poll', { method: 'POST', token, timeoutMs: 10 * 60_000 },

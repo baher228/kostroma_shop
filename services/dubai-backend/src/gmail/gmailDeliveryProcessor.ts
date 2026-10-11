@@ -4,6 +4,7 @@ import { listPromotionRowsForGmailMessage } from '../repositories/promotionRowsR
 import { getConnectedGmailClient } from './gmailOAuth';
 import { buildPromotionPackage,buildPackageMimeMessage,promotionPackageText } from './gmailPromotionPackage';
 import { uploadObject,downloadObject,createEmailPackageDownloadUrl } from '../services/r2StorageService';
+import { readPackageFileIndex,StoredPackageFile } from './gmailPackageStorage';
 
 const defaults={repository,withLock:withGmailPollLock,getConnection:getConnectedGmailClient,rowsForMessage:listPromotionRowsForGmailMessage,
   build:buildPromotionPackage,upload:uploadObject,download:downloadObject,downloadUrl:createEmailPackageDownloadUrl};
@@ -28,7 +29,7 @@ export const createGmailDeliveryProcessor=(overrides:Partial<typeof defaults>={}
         }
         continue;
       }
-      if(job.status==='queued'||job.status==='preparing'){
+      if(job.status==='queued'||job.status==='preparing'||(job.status==='ready'&&job.storage_key?.endsWith('.zip'))){
         if(job.message_id&&!await deps.repository.messageImportsComplete(job.mailbox,job.message_id)){
           await patch({error:'Не все вложения письма импортированы. Проверьте историю импорта.'});continue;
         }
@@ -38,8 +39,16 @@ export const createGmailDeliveryProcessor=(overrides:Partial<typeof defaults>={}
           await patch({status:'preparing',rows_snapshot:rows,attempts:job.attempts+1,error:null});
           const result=await deps.build(rows,signal);
           signal.throwIfAborted();
-          const key=`promotions/email-packages/${job.id}/promotions.zip`;
-          await deps.upload({key,body:result.zip,contentType:'application/zip'});
+          const prefix=`promotions/email-packages/${job.id}`;
+          const files:StoredPackageFile[]=[];
+          for(let index=0;index<result.files.length;index++){
+            signal.throwIfAborted();
+            const file=result.files[index];const key=`${prefix}/files/${index}.pdf`;
+            await deps.upload({key,body:file.body,contentType:'application/pdf'});
+            files.push({name:file.name,key,size:file.body.length});
+          }
+          const key=`${prefix}/package.json`;
+          await deps.upload({key,body:Buffer.from(JSON.stringify({version:2,files})),contentType:'application/json'});
           await patch({status:'ready',storage_key:key,manifest:result.manifest,error:null});
         }catch(error){
           signal.throwIfAborted();
@@ -59,11 +68,15 @@ export const createGmailDeliveryProcessor=(overrides:Partial<typeof defaults>={}
       let raw:string;
       try{
         if(!job.storage_key||!job.manifest||!job.rows_snapshot)throw new Error('Package is incomplete.');
-        const archive=await deps.download(job.storage_key);
+        const files=await readPackageFileIndex(job.storage_key,deps.download);
         let text=promotionPackageText(job.manifest,job.rows_snapshot);
-        const asLink=archive.body.length>18*1024*1024;
-        if(asLink)text+='\n\nПакет превышает размер вложения. Защищённая ссылка на ZIP (действует 7 дней):\n'+await deps.downloadUrl(job.storage_key);
-        raw=buildPackageMimeMessage({from:connection!.mailbox,to:settings.recipient!,messageId:job.send_message_id,text,...(!asLink?{zip:archive.body}:{})});
+        const asLink=files.reduce((total,file)=>total+file.size,0)>18*1024*1024;
+        const attachments=[];
+        if(asLink){
+          text+='\n\nФайлы превышают размер вложений. Защищённые ссылки на отдельные PDF (действуют 7 дней):';
+          for(const file of files)text+=`\n${file.name}:\n${await deps.downloadUrl(file.key,file.name)}`;
+        }else for(const file of files)attachments.push({name:file.name,body:(await deps.download(file.key)).body});
+        raw=buildPackageMimeMessage({from:connection!.mailbox,to:settings.recipient!,messageId:job.send_message_id,text,files:attachments});
       }catch{await patch({status:'failed',error:'Не удалось прочитать сохранённый пакет. Повторите подготовку.'});continue;}
       await patch({status:'sending',recipient:settings.recipient,send_started_at:new Date(),error:null});
       try{

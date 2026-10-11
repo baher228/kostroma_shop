@@ -25,7 +25,7 @@ const { promotionInvoicePdf,textPdf } = require('./helpers/promotion-invoice-fix
 const deliveryRepository=require('../dist/repositories/gmailDeliveryRepository');
 const {createGmailDeliveryProcessor}=require('../dist/gmail/gmailDeliveryProcessor');
 const {createPromotionPackageBuilder}=require('../dist/gmail/gmailPromotionPackage');
-const JSZip=require('jszip');
+const {readPackageFile,readPackageFileIndex}=require('../dist/gmail/gmailPackageStorage');
 
 const main = async () => {
   await runMigrations();
@@ -122,13 +122,20 @@ const main = async () => {
     assert.equal(delivered.status,'sent');assert.equal(delivered.recipient,deliveryRecipient);
   assert.equal(delivered.rows_snapshot.length,1);assert.equal(delivered.rows_snapshot[0].promoPrice,80);
   assert.equal(delivered.rows_snapshot[0].startDate,'2026-10-04');assert.equal(delivered.rows_snapshot[0].endDate,'2026-10-10');
-  const archive=await JSZip.loadAsync(mailObjects.get(delivered.storage_key));
-  assert.equal((await archive.file('price-tags.pdf').async('nodebuffer')).subarray(0,5).toString(),'%PDF-');
-  assert.ok((await archive.file('README.txt').async('string')).includes(`Для товара «${product}» постеров ещё нет.`));
+  const download=async key=>({body:mailObjects.get(key)});
+  const packageFiles=await readPackageFileIndex(delivered.storage_key,download);
+  assert.equal(packageFiles.length,1);assert.ok(packageFiles[0].name.includes('Ценник'));
+  assert.equal((await readPackageFile(delivered.storage_key,0,download)).body.subarray(0,5).toString(),'%PDF-');
+  assert.ok(!Buffer.from(sent[0],'base64url').toString().includes('application/zip'));
   const requestId=randomUUID();const manualRows=delivered.rows_snapshot;
   const manualOne=await deliveryRepository.createManualGmailDelivery('smoke@example.com',requestId,manualRows);
   const manualTwo=await deliveryRepository.createManualGmailDelivery('smoke@example.com',requestId,manualRows);
   assert.equal(manualOne.id,manualTwo.id);
+  const resendRequest=`resend:${delivered.id}:${randomUUID()}`;
+  const resend=await deliveryRepository.createManualGmailDelivery(delivered.mailbox,resendRequest,manualRows);
+  const resendAgain=await deliveryRepository.createManualGmailDelivery(delivered.mailbox,resendRequest,manualRows);
+  assert.equal(resend.id,resendAgain.id);assert.notEqual(resend.send_message_id,delivered.send_message_id);
+  assert.equal((await deliveryRepository.getGmailDelivery(delivered.id)).status,'sent');
     // The daily quota is global for a recipient, including uncertain sends,
     // but excludes old sends and definite provider rejections.
     const quotaIds=[];
@@ -223,7 +230,7 @@ const main = async () => {
   assert.ok(await repository.claimGmailImport({ ...metadata,mailbox: 'second@example.com' },3));
   console.log('PostgreSQL smoke PASS: migrations, PDF recognition, priority, Gmail→document→parsers→row→A4 PDF, restart dedupe, terminal success, nested rollback, R2 compensation, poll locking.');
   console.log('OAuth PostgreSQL smoke PASS: expiring browser-bound one-time states, persistent single mailbox, disconnect and mailbox-scoped import claims.');
-  console.log('Email PostgreSQL smoke PASS: atomic invoice/outbox rollback, exact source period snapshot, A4 PDF/ZIP/missing-poster notice, MIME/fake-send, restart dedupe and idempotent manual queue.');
+  console.log('Email PostgreSQL smoke PASS: atomic invoice/outbox rollback, exact source snapshot, separate PDF files/MIME/fake-send, quota, restart dedupe and idempotent resend queue.');
 };
 
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => opsDb.close());

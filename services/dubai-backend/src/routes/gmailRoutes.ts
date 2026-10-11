@@ -9,7 +9,7 @@ import { getConnectedGmailClient } from '../gmail/gmailOAuth';
 import { withGmailPollLock } from '../repositories/gmailImportsRepository';
 import * as delivery from '../repositories/gmailDeliveryRepository';
 import { listPromotionRows } from '../repositories/promotionRowsRepository';
-import { downloadObject } from '../services/r2StorageService';
+import { readPackageFile } from '../gmail/gmailPackageStorage';
 
 const statuses = new Set<GmailImportStatus>(['processing','success','failed','skipped']);
 const integer = (value: unknown,fallback: number,min: number,max: number) => {
@@ -69,25 +69,34 @@ export const registerGmailRoutes = (app: Express) => {
       const result=await withGmailPollLock(async()=>{
         const job=await delivery.getGmailDelivery(String(req.params.id));
         if(!job)return 'missing';
-        if(['sent','sending','unknown'].includes(job.status))return 'fenced';
+        if(['sending','unknown'].includes(job.status))return 'fenced';
         const connection=await getConnectedGmailClient();
         const settings=await delivery.readGmailDeliverySettings();
         if(connection.mailbox!==job.mailbox||!connection.canSend||!settings.recipient)return 'configuration';
-        await delivery.updateGmailDelivery(job.id,{manual:true,status:job.storage_key?'ready':'queued',attempts:0,error:null});
+        if(job.status==='sent'){
+          const requestId=req.body?.requestId;
+          if(typeof requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))return 'invalid';
+          if(!job.rows_snapshot?.length)return 'configuration';
+          await delivery.createManualGmailDelivery(job.mailbox,`resend:${job.id}:${requestId}`,job.rows_snapshot);
+        }else await delivery.updateGmailDelivery(job.id,{manual:true,status:'queued',storage_key:null,attempts:0,error:null});
         return 'queued';
       });
       if(result==='missing'){res.status(404).json({message:'Пакет не найден.'});return;}
+      if(result==='invalid'){res.status(400).json({message:'Обновите страницу и повторите отправку.'});return;}
       if(result!=='queued'){res.status(409).json({message:result==='fenced'?'Пакет уже отправлен или отправка не подтверждена. Проверьте папку «Отправленные».':'Подключите исходный Gmail с разрешением отправки, укажите получателя и дождитесь окончания проверки почты.'});return;}
       res.status(202).json({ok:true});
     }catch{res.status(503).json({message:'Не удалось поставить пакет в очередь отправки.'});}
   });
-  app.get('/api/promotions/gmail/packages/:id/package.zip',async(req,res)=>{
+  app.get('/api/promotions/gmail/packages/:id/files/:index',async(req,res)=>{
+    const index=Number(req.params.index);
+    if(!Number.isSafeInteger(index)||index<0||index>=1000){res.status(400).json({message:'Некорректный номер файла.'});return;}
     try{
       const job=await delivery.getGmailDelivery(String(req.params.id));
       if(!job?.storage_key){res.status(404).json({message:'Пакет ещё не сформирован.'});return;}
-      const file=await downloadObject(job.storage_key);
-      res.setHeader('Content-Type','application/zip');res.setHeader('Cache-Control','no-store');
-      res.setHeader('Content-Disposition',`attachment; filename="promotions-${job.id}.zip"`);
+      const file=await readPackageFile(job.storage_key,index);
+      if(!file){res.status(404).json({message:'Файл не найден.'});return;}
+      res.setHeader('Content-Type','application/pdf');res.setHeader('Cache-Control','no-store');
+      res.setHeader('Content-Disposition',`attachment; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(file.name)}`);
       res.send(file.body);
     }catch{res.status(503).json({message:'Не удалось скачать пакет. Повторите попытку.'});}
   });

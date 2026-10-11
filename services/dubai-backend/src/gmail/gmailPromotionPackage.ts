@@ -71,7 +71,7 @@ export const buildPackageMimeMessage = (input:{from:string;to:string;messageId:s
     const chunks:string[]=[];let chunk='';
     for(const char of encoded){if(chunk.length+char.length>48){chunks.push(chunk);chunk='';}chunk+=char;}
     if(chunk)chunks.push(chunk);
-    lines.push(`--${boundary}`,'Content-Type: application/pdf','Content-Disposition: attachment; filename="document.pdf";',
+    lines.push(`--${boundary}`,'Content-Type: application/pdf','Content-Disposition: attachment;',
       ...chunks.map((part,index)=>` filename*${index}*=${index===0?"UTF-8''":''}${part}${index<chunks.length-1?';':''}`),
       'Content-Transfer-Encoding: base64','',foldedBase64(file.body));
   }

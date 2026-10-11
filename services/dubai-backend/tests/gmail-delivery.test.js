@@ -67,6 +67,7 @@ test('MIME sends separate intact PDFs with UTF-8 filenames, body and no ZIP or h
   const decoded=Buffer.from(raw,'base64url').toString();assert.match(decoded,/From: owner@example.com\r\nTo: destination@example.com/);
   assert.match(decoded,/Message-ID: <affera-promotions-test@affera.co.uk>/);assert.ok(!decoded.includes('application/zip'));
   assert.equal(decoded.match(/Content-Type: application\/pdf/g).length,2);
+  assert.ok(!decoded.includes('filename="document.pdf"'));
   const dispositions=decoded.match(/Content-Disposition: attachment;[\s\S]*?(?=\r\nContent-Transfer-Encoding)/g);
   dispositions.forEach((header,index)=>{
     const value=[...header.matchAll(/filename\*\d+\*=([^;\r\n]+)/g)].map(match=>match[1]).join('').replace(/^UTF-8''/,'');

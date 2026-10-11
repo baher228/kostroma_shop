@@ -6,6 +6,7 @@ import { createGmailClient,GmailConfigurationError } from './gmailClient';
 import { GmailPollBusyError } from './gmailService';
 
 export const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+export const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 export class GmailOAuthError extends Error {
   constructor(public readonly reason: 'configuration' | 'state' | 'permission' | 'authorization') {
     super('Не удалось подключить Gmail. Попробуйте подключить аккаунт заново.');
@@ -56,7 +57,7 @@ export const beginGmailOAuth = async () => {
   const verifier = randomBytes(32).toString('base64url');
   await repository.saveGmailOAuthState(hash(state),hash(browser),encryptGmailSecret(verifier));
   return { browser,authorizationUrl: auth.generateAuthUrl({
-    scope: [GMAIL_READ_SCOPE],access_type: 'offline',prompt: 'consent select_account',state,
+    scope: [GMAIL_READ_SCOPE,GMAIL_SEND_SCOPE],access_type: 'offline',prompt: 'consent select_account',state,include_granted_scopes: true,
     code_challenge: createHash('sha256').update(verifier).digest('base64url'),code_challenge_method: 'S256',
   }) as string };
 };
@@ -72,9 +73,9 @@ export const exchangeGmailOAuthCode = async (code: string,verifier: string) => {
   const profile = await google.gmail({ version: 'v1',auth }).users.getProfile({ userId: 'me' },{ timeout: 30000,retry: false });
   const email = String(profile.data.emailAddress || '').toLowerCase();
   if (!email || email.length > 320 || !email.includes('@')) throw new GmailOAuthError('authorization');
-  return { email,refreshToken: tokens.refresh_token as string };
+  return { email,refreshToken: tokens.refresh_token as string,scopes: info.scopes.filter((scope: string) => [GMAIL_READ_SCOPE,GMAIL_SEND_SCOPE].includes(scope)) };
 };
-export const finishGmailOAuth = async (state: string,browser: string,code: string,exchange = exchangeGmailOAuthCode) => {
+export const finishGmailOAuth = async (state: string,browser: string,code: string,exchange: (code: string,verifier: string) => Promise<{ email: string; refreshToken: string; scopes?: string[] }> = exchangeGmailOAuthCode) => {
   gmailOAuthConfig();
   if (!/^[A-Za-z0-9_-]{43}$/.test(state) || !/^[A-Za-z0-9_-]{43}$/.test(browser) || !code || code.length > 4096) throw new GmailOAuthError('state');
   const encrypted = await repository.consumeGmailOAuthState(hash(state),hash(browser));
@@ -82,7 +83,7 @@ export const finishGmailOAuth = async (state: string,browser: string,code: strin
   const result = await exchange(code,decryptGmailSecret(encrypted));
   const saved = await withGmailPollLock(async (signal) => {
     signal.throwIfAborted();
-    await repository.saveGmailConnection(result.email,encryptGmailSecret(result.refreshToken));
+    await repository.saveGmailConnection(result.email,encryptGmailSecret(result.refreshToken),result.scopes ?? []);
     return true;
   });
   if (!saved) throw new GmailPollBusyError();
@@ -97,13 +98,14 @@ export const disconnectGmail = async () => {
 };
 export const getGmailConnectionStatus = async () => {
   const connection = await repository.readGmailConnection();
-  return { configured: isGmailOAuthConfigured(),connected: Boolean(connection || config.gmailRefreshToken),email: connection?.email ?? null };
+  return { configured: isGmailOAuthConfigured(),connected: Boolean(connection || config.gmailRefreshToken),email: connection?.email ?? null,
+    canSend: Boolean(connection?.granted_scopes?.includes(GMAIL_SEND_SCOPE)) };
 };
 // Called inside the poll lock, so changing the mailbox never races an import.
 export const getConnectedGmailClient = async () => {
   const connection = await repository.readGmailConnection();
-  if (connection) return { client: createGmailClient(decryptGmailSecret(connection.refresh_token_encrypted)),mailbox: connection.email };
+  if (connection) return { client: createGmailClient(decryptGmailSecret(connection.refresh_token_encrypted)),mailbox: connection.email,canSend: Boolean(connection.granted_scopes?.includes(GMAIL_SEND_SCOPE)) };
   // Preserve existing CLI integrations for installations that already use them.
-  if (config.gmailRefreshToken) return { client: createGmailClient(),mailbox: 'legacy' };
+  if (config.gmailRefreshToken) return { client: createGmailClient(),mailbox: 'legacy',canSend: false };
   throw new GmailConfigurationError();
 };

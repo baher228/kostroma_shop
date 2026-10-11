@@ -5,6 +5,7 @@ import { importPromotionDocument, ImportablePromotionDocumentType, PromotionImpo
 import { classifyPromotionAttachment } from './gmailAttachmentClassifier';
 import { GmailApiClient, isGmailAuthenticationError, isTemporaryGmailError, isInvalidGmailPageTokenError, sanitizedGmailError } from './gmailClient';
 import { decodeGmailBase64Url, extractGmailAttachments, gmailMessageHeader, senderAddress, senderAllowed, validateGmailAttachmentType } from './gmailAttachmentParser';
+import { gmailSenderAuthenticated } from './gmailSenderPolicy';
 
 export type GmailPollResult = { messages: number; attachments: number; imported: number; skipped: number; failed: number };
 export class GmailPollBusyError extends Error {
@@ -13,7 +14,7 @@ export class GmailPollBusyError extends Error {
 const settings = () => ({
   query: config.gmailQuery, allowedSenders: config.gmailAllowedSenders, allowedExtensions: config.gmailAllowedExtensions,
   maxMessages: config.gmailMaxMessagesPerPoll, maxAttempts: config.gmailMaxRetries,
-  maxBytes: config.gmailMaxAttachmentBytes, globalDedupe: config.gmailGlobalDedupeByHash,
+  maxBytes: config.gmailMaxAttachmentBytes, globalDedupe: config.gmailGlobalDedupeByHash,requireAuthentication:false,
 });
 const dependencies = { repository, importDocument: importPromotionDocument, classify: classifyPromotionAttachment };
 const queryValue = (value: string) => `"${value.replace(/["\\]/g,' ').trim()}"`;
@@ -32,16 +33,19 @@ export class GmailService {
   private readonly deps: typeof dependencies;
   private mailbox: string;
   private readonly resolveClient?: () => Promise<{ client: GmailApiClient; mailbox: string }>;
+  private readonly resolveSettings?: () => Promise<Partial<ReturnType<typeof settings>>>;
   constructor(private client: GmailApiClient | null,options: {
     settings?: Partial<ReturnType<typeof settings>>;
     dependencies?: Partial<typeof dependencies>;
     mailbox?: string;
     resolveClient?: () => Promise<{ client: GmailApiClient; mailbox: string }>;
+    resolveSettings?: () => Promise<Partial<ReturnType<typeof settings>>>;
   } = {}) {
     this.settings = { ...settings(),...options.settings };
     this.deps = { ...dependencies,...options.dependencies };
     this.mailbox = options.mailbox ?? 'legacy';
     this.resolveClient = options.resolveClient;
+    this.resolveSettings=options.resolveSettings;
   }
 
   async poll(): Promise<GmailPollResult> {
@@ -51,12 +55,16 @@ export class GmailService {
   }
 
   private async pollLocked(signal: AbortSignal): Promise<GmailPollResult> {
+    if (this.resolveSettings) Object.assign(this.settings,await this.resolveSettings());
     if (this.resolveClient) {
       const connection = await this.resolveClient();
       this.client = connection.client;
       this.mailbox = connection.mailbox;
     }
     if (!this.client) throw new Error('Gmail client unavailable.');
+    if (this.settings.requireAuthentication && !this.settings.allowedSenders.length) {
+      return {messages:0,attachments:0,imported:0,skipped:0,failed:0};
+    }
     await this.deps.repository.recoverGmailImportObjects();
     await this.deps.repository.failExhaustedGmailImports(this.settings.maxAttempts);
     const ids = new Set<string>();
@@ -97,7 +105,8 @@ export class GmailService {
       try {
         const message = await this.client.getMessage(messageId);
         const sender = senderAddress(gmailMessageHeader(message.payload,'From'));
-        if (!senderAllowed(sender,this.settings.allowedSenders)) { summary.skipped++; continue; }
+        if (!senderAllowed(sender,this.settings.allowedSenders) || message.labelIds?.some(label=>['SPAM','TRASH','SENT','DRAFT'].includes(label))
+          || this.settings.requireAuthentication && !gmailSenderAuthenticated(message.payload,sender)) { summary.skipped++; continue; }
         const subject = gmailMessageHeader(message.payload,'Subject') || '';
         const seen = new Set<string>();
         for (const attachment of extractGmailAttachments(message.payload)) {
@@ -184,7 +193,8 @@ export class GmailService {
       if (attachment.attachmentId) data = await this.client!.getAttachment(messageId,attachment.attachmentId);
       else {
         const message = await this.client!.getMessage(messageId);
-        if (!senderAllowed(senderAddress(gmailMessageHeader(message.payload,'From')),this.settings.allowedSenders)) throw new Error('sender_changed');
+        const sender=senderAddress(gmailMessageHeader(message.payload,'From'));
+        if (!senderAllowed(sender,this.settings.allowedSenders) || this.settings.requireAuthentication&&!gmailSenderAuthenticated(message.payload,sender)) throw new Error('sender_changed');
         data = extractGmailAttachments(message.payload).find((item) => item.attachmentKey === attachment.attachmentKey)?.inlineData || '';
       }
     }

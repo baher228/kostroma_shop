@@ -21,7 +21,11 @@ const { parsePromotionInvoice } = require('../dist/services/promotionInvoiceImpo
 const { createPromotionPriceTagBatch } = require('../dist/services/promotionPriceTagBatchService');
 const { createPromotionDocumentPreview } = require('../dist/services/promotionDocumentPreviewService');
 const { GmailService } = require('../dist/gmail/gmailService');
-const { promotionInvoicePdf } = require('./helpers/promotion-invoice-fixture');
+const { promotionInvoicePdf,textPdf } = require('./helpers/promotion-invoice-fixture');
+const deliveryRepository=require('../dist/repositories/gmailDeliveryRepository');
+const {createGmailDeliveryProcessor}=require('../dist/gmail/gmailDeliveryProcessor');
+const {createPromotionPackageBuilder}=require('../dist/gmail/gmailPromotionPackage');
+const JSZip=require('jszip');
 
 const main = async () => {
   await runMigrations();
@@ -56,12 +60,14 @@ const main = async () => {
     listMessages: async () => ({ messages: [{ id: messageId }, { id: messageId }] }),
     getMessage: async () => ({
       internalDate: String(Date.now()),
-      payload: { headers: [{ name: 'From', value: 'Allowed <allowed@example.com>' }, { name: 'Subject', value: '' }], parts: [{ parts: attachments.map((part) => ({ ...part,body: { ...part.body,attachmentId: `${downloadEpoch}:${part.body.attachmentId}` } })) }] },
+      payload: { headers: [{ name: 'From', value: 'Allowed <allowed@example.com>' }, { name: 'Subject', value: '' },
+        {name:'Authentication-Results',value:'mx.google.com; dmarc=pass header.from=example.com'}], parts: [{ parts: attachments.map((part) => ({ ...part,body: { ...part.body,attachmentId: `${downloadEpoch}:${part.body.attachmentId}` } })) }] },
     }),
     getAttachment: async (_id, attachmentId) => { downloads++; return files.get(attachmentId.split(':')[1]).toString('base64url'); },
   };
   const options = {
-    settings: { allowedSenders: ['allowed@example.com'], allowedExtensions: ['.pdf', '.xlsx', '.csv'],globalDedupe: false },
+    mailbox:'smoke@example.com',
+    settings: { allowedSenders: ['allowed@example.com'], allowedExtensions: ['.pdf', '.xlsx', '.csv'],globalDedupe: false,requireAuthentication:true },
     dependencies: { importDocument: importer },
   };
   const first = await new GmailService(client, options).poll();
@@ -97,6 +103,33 @@ const main = async () => {
   }
   assert.equal((await opsDb.query("SELECT COUNT(*)::int AS count FROM gmail_imports WHERE message_id=$1 AND status='success';", [messageId])).rows[0].count, 3);
 
+  // Adjacent invoice periods consolidate in the table. The queued email must
+  // still use the original message's own period and prices, not the new ones.
+  await importer({documentType:'invoice',fileName:'adjacent.pdf',contentType:'application/pdf',uploadedBy:'smoke-adjacent',buffer:textPdf([
+    'Период акции: 11.10.2026 - 20.10.2026','Рекомендованные розничные цены:',`${product} - 70 р/кг`])});
+  const queued=(await opsDb.query('SELECT * FROM gmail_deliveries WHERE mailbox=$1 AND message_id=$2;',['smoke@example.com',messageId])).rows;
+  assert.equal(queued.length,1);assert.equal(queued[0].status,'queued');
+  const mailObjects=new Map();const sent=[];
+  const processor=createGmailDeliveryProcessor({repository:{...deliveryRepository,
+    readGmailDeliverySettings:async()=>({recipient:'recipient@example.com',allowedSenders:['allowed@example.com'],autoSend:true}),
+    pendingGmailDeliveries:async()=>(await opsDb.query("SELECT * FROM gmail_deliveries WHERE id=$1 AND status NOT IN ('sent','failed');",[queued[0].id])).rows},
+    getConnection:async()=>({mailbox:'smoke@example.com',canSend:true,client:{...client,sendMessage:async raw=>{sent.push(raw);return 'fake-sent-id';},findSentMessage:async()=>null}}),
+    build:createPromotionPackageBuilder({findPoster:async()=>({best:null,candidates:[]})}),
+    upload:async({key,body})=>mailObjects.set(key,body),download:async key=>({body:mailObjects.get(key)})});
+  await processor();await processor();assert.equal(sent.length,1);
+  const delivered=(await opsDb.query('SELECT * FROM gmail_deliveries WHERE id=$1;',[queued[0].id])).rows[0];
+  assert.equal(delivered.status,'sent');assert.equal(delivered.recipient,'recipient@example.com');
+  assert.equal(delivered.rows_snapshot.length,1);assert.equal(delivered.rows_snapshot[0].promoPrice,80);
+  assert.equal(delivered.rows_snapshot[0].startDate,'2026-10-04');assert.equal(delivered.rows_snapshot[0].endDate,'2026-10-10');
+  const archive=await JSZip.loadAsync(mailObjects.get(delivered.storage_key));
+  assert.equal((await archive.file('price-tags.pdf').async('nodebuffer')).subarray(0,5).toString(),'%PDF-');
+  assert.ok((await archive.file('README.txt').async('string')).includes(`Для товара «${product}» постеров ещё нет.`));
+  const requestId=randomUUID();const manualRows=delivered.rows_snapshot;
+  const manualOne=await deliveryRepository.createManualGmailDelivery('smoke@example.com',requestId,manualRows);
+  const manualTwo=await deliveryRepository.createManualGmailDelivery('smoke@example.com',requestId,manualRows);
+  assert.equal(manualOne.id,manualTwo.id);
+  const expectedObjects=objects.size;
+
   // Nested repository commits must not escape the import transaction.
   const failingPrice = createPromotionDocumentImporter({
     upload: async ({ key, body }) => { objects.set(key, Buffer.from(body)); },
@@ -111,9 +144,21 @@ const main = async () => {
   const prices = await opsDb.query('SELECT regular_price FROM promotion_price_list_items WHERE product_name_clean=$1;', [product]);
   assert.equal(Number(prices.rows[0].regular_price), 120);
   assert.equal((await listPromotionDocuments()).filter((doc) => doc.uploadedBy === 'smoke-rollback').length, 0);
-  assert.equal(objects.size, 3);
+  assert.equal(objects.size, expectedObjects);
   assert.equal(deletedKeys.length, 1);
   assert.equal((await opsDb.query('SELECT COUNT(*)::int AS count FROM promotion_import_objects;')).rows[0].count, 0);
+
+  const rollbackMessage=`queue-rollback-${suffix}`;
+  const rollbackClaim=await repository.claimGmailImport({mailbox:'smoke@example.com',messageId:rollbackMessage,attachmentId:'rollback',attachmentKey:'rollback',
+    filename:'rollback.pdf',mimeType:'application/pdf',sender:'allowed@example.com',subject:'',receivedAt:null},3);
+  const failingQueue=createPromotionDocumentImporter({upload:async({key,body})=>objects.set(key,body),deleteObject:async key=>objects.delete(key),
+    query:async(sql,params)=>{if(sql.includes('INSERT INTO gmail_deliveries'))throw Error('forced-queue-failure');return opsDb.query(sql,params);}});
+  await assert.rejects(failingQueue({documentType:'invoice',fileName:'queue-rollback.pdf',contentType:'application/pdf',buffer:invoice,uploadedBy:'smoke-queue-rollback',
+    gmailImportId:rollbackClaim.id,gmailImportAttempt:rollbackClaim.attemptCount}),/forced-queue-failure/);
+  assert.equal((await opsDb.query('SELECT COUNT(*)::int AS count FROM gmail_deliveries WHERE message_id=$1;',[rollbackMessage])).rows[0].count,0);
+  assert.equal((await opsDb.query('SELECT status FROM gmail_imports WHERE id=$1;',[rollbackClaim.id])).rows[0].status,'processing');
+  assert.equal((await listPromotionDocuments()).filter(doc=>doc.uploadedBy==='smoke-queue-rollback').length,0);
+  assert.equal(objects.size,expectedObjects);
 
   // PostgreSQL serializes independent service instances across a full poll.
   let release;
@@ -153,6 +198,7 @@ const main = async () => {
   assert.ok(await repository.claimGmailImport({ ...metadata,mailbox: 'second@example.com' },3));
   console.log('PostgreSQL smoke PASS: migrations, PDF recognition, priority, Gmail→document→parsers→row→A4 PDF, restart dedupe, terminal success, nested rollback, R2 compensation, poll locking.');
   console.log('OAuth PostgreSQL smoke PASS: expiring browser-bound one-time states, persistent single mailbox, disconnect and mailbox-scoped import claims.');
+  console.log('Email PostgreSQL smoke PASS: atomic invoice/outbox rollback, exact source period snapshot, A4 PDF/ZIP/missing-poster notice, MIME/fake-send, restart dedupe and idempotent manual queue.');
 };
 
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => opsDb.close());

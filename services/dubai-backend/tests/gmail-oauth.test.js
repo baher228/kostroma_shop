@@ -32,14 +32,14 @@ test('Gmail connection secrets use authenticated encryption and reject tampering
   assert.equal(oauth.isGmailOAuthConfigured(),false);
 });
 
-test('Gmail authorization requests readonly offline consent with PKCE and hashed browser-bound state', async (t) => {
+test('Gmail authorization requests read and send offline consent with PKCE and hashed browser-bound state', async (t) => {
   configured(t);
   let saved;
   t.mock.method(repository,'saveGmailOAuthState',async (...args) => { saved=args; });
   const result = await oauth.beginGmailOAuth();
   const url = new URL(result.authorizationUrl);
   assert.equal(url.origin,'https://accounts.google.com');
-  assert.equal(url.searchParams.get('scope'),oauth.GMAIL_READ_SCOPE);
+  assert.deepEqual(url.searchParams.get('scope').split(' '),[oauth.GMAIL_READ_SCOPE,oauth.GMAIL_SEND_SCOPE]);
   assert.equal(url.searchParams.get('access_type'),'offline');
   assert.equal(url.searchParams.get('prompt'),'consent select_account');
   assert.equal(url.searchParams.get('redirect_uri'),config.gmailRedirectUri);
@@ -78,7 +78,7 @@ test('Gmail callback cannot replace a mailbox with wrong browser state or replay
   await assert.rejects(oauth.finishGmailOAuth(state,start.browser,'google-code',exchange),oauth.GmailOAuthError);
   assert.equal(exchanges,1);
   const status = await oauth.getGmailConnectionStatus();
-  assert.deepEqual(status,{ configured: true,connected: true,email: 'mailbox@example.com' });
+  assert.deepEqual(status,{ configured: true,connected: true,email: 'mailbox@example.com',canSend:false });
   assert.ok(!JSON.stringify(status).includes('token'));
   const restarted = await oauth.getConnectedGmailClient();
   assert.equal(restarted.mailbox,'mailbox@example.com');
@@ -108,7 +108,9 @@ test('Google token exchange verifies actual readonly consent before reading the 
   await assert.rejects(oauth.exchangeGmailOAuthCode('code','verifier'),(error) => error instanceof oauth.GmailOAuthError && error.reason === 'permission');
   assert.equal(profileCalls,0);
   scopes=[oauth.GMAIL_READ_SCOPE];
-  assert.deepEqual(await oauth.exchangeGmailOAuthCode('code','verifier'),{ email: 'mailbox@example.com',refreshToken: 'hidden-refresh' });
+  assert.deepEqual(await oauth.exchangeGmailOAuthCode('code','verifier'),{ email: 'mailbox@example.com',refreshToken: 'hidden-refresh',scopes:[oauth.GMAIL_READ_SCOPE] });
+  scopes=[oauth.GMAIL_READ_SCOPE,oauth.GMAIL_SEND_SCOPE];
+  assert.deepEqual((await oauth.exchangeGmailOAuthCode('code','verifier')).scopes,scopes);
   assert.deepEqual(codeRequest,{ code: 'code',codeVerifier: 'verifier' });
 });
 

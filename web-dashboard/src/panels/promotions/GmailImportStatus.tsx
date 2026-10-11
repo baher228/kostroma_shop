@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback } from '../../components/ui';
 import { messageOf } from '../../shared/format';
-import type { GmailHealth, GmailImport, Session } from '../../types';
+import type { GmailHealth, GmailImport, GmailDelivery,GmailDeliverySettings,Session } from '../../types';
+import { GmailDeliveryPanel } from './GmailDeliveryPanel';
 
 const statuses: Record<GmailImport['status'], string> = {
   processing: 'Обрабатывается', success: 'Импортирован', failed: 'Ошибка импорта', skipped: 'Пропущен',
@@ -28,6 +29,8 @@ const dateTime = (value: string | null) => value ? new Date(value).toLocaleStrin
 export const GmailImportStatus = ({ session, onImported }: { session: Session; onImported: () => void | Promise<void> }) => {
   const [health, setHealth] = useState<GmailHealth | null>(null);
   const [imports, setImports] = useState<GmailImport[]>([]);
+  const [deliverySettings,setDeliverySettings]=useState<GmailDeliverySettings|null>(null);
+  const [deliveries,setDeliveries]=useState<GmailDelivery[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(() => {
     const result = new URLSearchParams(window.location.search).get('gmail');
@@ -56,6 +59,7 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
         if (!mounted.current || sessionToken.current !== session.token) return;
         setHealth(result.health);
         setImports(result.imports);
+        setDeliverySettings(result.settings??null);setDeliveries(result.deliveries??[]);
         setError('');
         const changed = lastImport.current !== undefined && result.health.lastImportAt !== lastImport.current;
         lastImport.current = result.health.lastImportAt;
@@ -163,6 +167,7 @@ export const GmailImportStatus = ({ session, onImported }: { session: Session; o
           {item.error && <p>{importReasons[item.error] || item.error}{item.retryable && item.status === 'failed' ? ' Повторная попытка при следующей проверке.' : ''}</p>}
         </li>
       ))}</ul> : health && <p className="batch-hint">Импортов из почты пока нет.</p>}
+      {deliverySettings&&<GmailDeliveryPanel key={session.token} session={session} health={health} settings={deliverySettings} deliveries={deliveries} onChanged={load}/>}
     </section>
   );
 };

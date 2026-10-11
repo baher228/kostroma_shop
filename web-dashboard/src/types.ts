@@ -426,6 +426,7 @@ export type PromotionTablePreview = {
 };
 
 export type GmailHealth = {
+  canSend?: boolean;
   configured?: boolean;
   connected?: boolean;
   email?: string | null;
@@ -436,6 +437,13 @@ export type GmailHealth = {
   lastSuccessfulPollAt: string | null;
   lastImportAt: string | null;
   lastError: string | null;
+};
+
+export type GmailDeliverySettings = { recipient: string | null; allowedSenders: string[]; autoSend: boolean };
+export type GmailDelivery = {
+  id:string; mailbox:string; status:'queued'|'preparing'|'ready'|'sending'|'sent'|'failed'|'unknown';
+  manual:boolean;recipient:string|null;downloadAvailable:boolean;error:string|null;createdAt:string;sentAt:string|null;
+  manifest:{products:string[];priceTags:number;posters:number;missingPosters:string[];missingPrices:string[];files:string[]}|null;
 };
 
 export type GmailImport = {

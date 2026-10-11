@@ -100,3 +100,11 @@ export const createDownloadUrl = async (key: string): Promise<string> => {
     { expiresIn: config.r2SignedUrlTtlSeconds },
   );
 };
+
+// Email links must stay private even when ordinary document downloads use a
+// public base URL. Seven days is the maximum SigV4 presigned URL lifetime.
+export const createEmailPackageDownloadUrl = async (key:string):Promise<string> => {
+  assertR2Configured();
+  return getSignedUrl(client!,new GetObjectCommand({Bucket:config.r2Bucket!,Key:key,
+    ResponseContentDisposition:'attachment; filename="promotions.zip"'}),{expiresIn:7*24*60*60});
+};

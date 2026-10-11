@@ -21,6 +21,9 @@ export const BatchPriceTagsModal = ({ session, rows, onClose }: { session: Sessi
   const preview = useDocumentPreview(session.token);
   const [generating, setGenerating] = useState(false);
   const generationPending = useRef(false);
+  const [sending,setSending]=useState(false);
+  const [mailError,setMailError]=useState('');const [mailNotice,setMailNotice]=useState('');
+  const mailRequest=useRef<{key:string;id:string}|null>(null);
   const request: PromotionBatchRequest = { scope, rowNumbers: selected, from: from || null, to: to || null, layout: 'a4_2x2' };
   const found = selectBatchRows(rows, request);
   const ready = found.filter(priceTagReady);
@@ -52,9 +55,21 @@ export const BatchPriceTagsModal = ({ session, rows, onClose }: { session: Sessi
     }
   };
 
+  const sendPackage=async()=>{
+    if(generationPending.current)return;
+    generationPending.current=true;setSending(true);setMailError('');setMailNotice('');
+    const numbers=found.map(row=>row.rowNumber);const key=JSON.stringify([...numbers].sort((a,b)=>a-b));
+    if(mailRequest.current?.key!==key)mailRequest.current={key,id:crypto.randomUUID()};
+    try{
+      await api.promotions.queuePromotionEmail(session.token,numbers,mailRequest.current.id);
+      mailRequest.current=null;setMailNotice('Пакет ценников и постеров поставлен в очередь. Получатель и статус — в разделе «Документы → Почта».');
+    }catch(error){setMailError(error instanceof Error?error.message:'Не удалось поставить пакет в очередь.');}
+    finally{generationPending.current=false;setSending(false);}
+  };
+
   return (
     <>
-      <Modal title="Сформировать ценники" onClose={onClose}>
+      <Modal title="Ценники и постеры" onClose={onClose}>
         <div className="batch-price-tags-form">
           <fieldset className="batch-scopes">
             <legend>Какие акции печатать</legend>
@@ -87,10 +102,12 @@ export const BatchPriceTagsModal = ({ session, rows, onClose }: { session: Sessi
           <p className="batch-count" role="status">Найдено: {found.length}. Готово к печати: {ready.length} ценников.</p>
           {skipped > 0 && <p className="notice">{skipped} позиции пропущены — отсутствует старая/новая цена или цена некорректна.</p>}
           <Feedback error={datesInvalid ? 'Дата начала периода должна быть не позже даты окончания.' : ''} />
+          <Feedback error={mailError} notice={mailNotice}/>
           <p className="batch-hint">На каждом листе A4 до 4 ценников, размер каждого — 100 × 115 мм.</p>
           <div className="modal-actions">
             <button className="secondary" onClick={onClose}>Отмена</button>
-            <button disabled={generating || datesInvalid || ready.length === 0} onClick={() => void generate()}>{generating ? 'Формируем...' : 'Сформировать'}</button>
+            {session.user.role==='manager'&&<button className="secondary" disabled={generating||sending||datesInvalid||found.length===0||found.length>500} onClick={()=>void sendPackage()}>{sending?'Добавляем в очередь...':'Отправить ценники и постеры'}</button>}
+            <button disabled={generating || sending || datesInvalid || ready.length === 0} onClick={() => void generate()}>{generating ? 'Формируем...' : 'Сформировать ценники'}</button>
           </div>
         </div>
       </Modal>

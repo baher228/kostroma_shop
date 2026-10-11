@@ -11,13 +11,13 @@ export const consumeGmailOAuthState = async (stateHash: string,browserHash: stri
   return result.rows[0]?.verifier_encrypted ?? null;
 };
 export const readGmailConnection = async () => {
-  const result = await opsDb.query<{ email: string; refresh_token_encrypted: string; connected_at: Date }>(
-    'SELECT email,refresh_token_encrypted,connected_at FROM gmail_connection WHERE singleton=TRUE;');
+  const result = await opsDb.query<{ email: string; refresh_token_encrypted: string; connected_at: Date; granted_scopes: string[] }>(
+    'SELECT email,refresh_token_encrypted,connected_at,granted_scopes FROM gmail_connection WHERE singleton=TRUE;');
   return result.rows[0] ?? null;
 };
-export const saveGmailConnection = async (email: string,encryptedToken: string) => {
-  await opsDb.query(`INSERT INTO gmail_connection (singleton,email,refresh_token_encrypted) VALUES (TRUE,$1,$2)
-    ON CONFLICT (singleton) DO UPDATE SET email=EXCLUDED.email,refresh_token_encrypted=EXCLUDED.refresh_token_encrypted,connected_at=NOW();`, [email,encryptedToken]);
+export const saveGmailConnection = async (email: string,encryptedToken: string,scopes: string[] = []) => {
+  await opsDb.query(`INSERT INTO gmail_connection (singleton,email,refresh_token_encrypted,granted_scopes) VALUES (TRUE,$1,$2,$3)
+    ON CONFLICT (singleton) DO UPDATE SET email=EXCLUDED.email,refresh_token_encrypted=EXCLUDED.refresh_token_encrypted,granted_scopes=EXCLUDED.granted_scopes,connected_at=NOW();`, [email,encryptedToken,scopes]);
 };
 export const deleteGmailConnection = async () => {
   await opsDb.query('DELETE FROM gmail_connection;');

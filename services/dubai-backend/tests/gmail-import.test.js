@@ -8,6 +8,7 @@ const { GmailService, GmailPollBusyError, buildGmailQuery } = require('../dist/g
 const { GmailPoller } = require('../dist/gmail/gmailPoller');
 const { withGmailRetry, isGmailAuthenticationError, isTemporaryGmailError, sanitizedGmailError } = require('../dist/gmail/gmailClient');
 const { PromotionImportPrerequisiteError } = require('../dist/services/promotionDocumentImportService');
+const {gmailSenderAuthenticated}=require('../dist/gmail/gmailSenderPolicy');
 const { parsePromotionInvoice, parsePromotionInvoiceText } = require('../dist/services/promotionInvoiceImportService');
 const { promotionInvoicePdf, textPdf } = require('./helpers/promotion-invoice-fixture');
 
@@ -107,6 +108,32 @@ test('blocked or malformed sender never downloads attachments despite Gmail sear
     assert.equal((await h.service.poll()).imported,0);
     assert.equal(h.downloads.length,0);
   }
+});
+
+test('production sender policy fails closed, rejects forged From and untrusted or later authentication results', async()=>{
+  const good='mx.google.com; dkim=pass header.i=@example.com; spf=pass; dmarc=pass (p=REJECT) header.from=example.com';
+  const auth=value=>({name:'Authentication-Results',value});
+  assert.equal(gmailSenderAuthenticated({headers:[{name:'From',value:'allowed@example.com'},auth(good)]},'allowed@example.com'),true);
+  assert.equal(gmailSenderAuthenticated({headers:[{name:'From',value:'allowed@example.com'},{name:'From',value:'other@example.com'},auth(good)]},'allowed@example.com'),false);
+  for(const headers of [[auth(good.replace('dmarc=pass','dmarc=fail')),auth(good)],
+    [auth(good.replace('mx.google.com','attacker.example')),auth(good)],
+    [auth(good.replace('header.from=example.com','header.from=evil.example'))],[]]){
+    const m=message();m.payload.headers.push(...headers);
+    const h=harness({messages:[m],settings:{requireAuthentication:true}});
+    assert.equal((await h.service.poll()).imported,0);assert.equal(h.downloads.length,0);
+  }
+  const m=message();m.payload.headers.push(auth(good));
+  const paused=harness({messages:[m],settings:{requireAuthentication:true,allowedSenders:[]}});
+  assert.equal((await paused.service.poll()).messages,0);assert.equal(paused.downloads.length,0);
+  for(const label of ['SPAM','TRASH','SENT','DRAFT']){
+    const h=harness({messages:[{...m,labelIds:[label]}],settings:{requireAuthentication:true}});
+    assert.equal((await h.service.poll()).imported,0);assert.equal(h.downloads.length,0);
+  }
+  let allowedSenders=['other@example.com'];
+  const h=harness({messages:[m]});
+  const service=new GmailService(h.client,{...h.options,resolveSettings:async()=>({allowedSenders,requireAuthentication:true})});
+  assert.equal((await service.poll()).imported,0);
+  allowedSenders=['allowed@example.com'];assert.equal((await service.poll()).imported,1);
 });
 test('signature PNG, oversized metadata and empty inline attachment are skipped', async () => {
   const m=message(); m.payload.parts=[

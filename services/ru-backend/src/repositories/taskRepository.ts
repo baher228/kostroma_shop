@@ -5,6 +5,7 @@ type TaskDbRow = {
   id: string;
   group_id: string | null;
   series_id: string | null;
+  instruction_photo_id: string | null;
   title: string;
   assignee_id: string;
   assignee_display_name: string;
@@ -44,6 +45,7 @@ const mapTask = (row: TaskDbRow): Task => ({
   id: row.id,
   groupId: row.group_id ?? null,
   seriesId: row.series_id ?? null,
+  instructionPhotoUrl: row.instruction_photo_id ? `/api/tasks/${encodeURIComponent(row.id)}/instruction-photo` : null,
   title: normalizeTitle(row.title),
   assigneeId: row.assignee_id,
   assigneeDisplayName: row.assignee_display_name,
@@ -66,6 +68,7 @@ const selectFields = `
   id,
   group_id,
   series_id,
+  instruction_photo_id,
   title,
   assignee_id,
   assignee_display_name,
@@ -94,6 +97,7 @@ export const listTasks = async (): Promise<Task[]> => {
 export const createTask = async (input: {
   groupId?: string | null;
   seriesId?: string | null;
+  instructionPhotoId?: string | null;
   title: string;
   assigneeId: string;
   assigneeDisplayName: string;
@@ -110,8 +114,8 @@ export const createTask = async (input: {
         status, created_at, completed_at, deadline_at, requires_photo_confirmation,
         photo_confirmation_url, photo_confirmation_file_name, photo_confirmation_mime_type,
         photo_confirmation_uploaded_at, photo_confirmed_at, photo_review_status,
-        photo_reviewed_at, photo_deletes_at, updated_at, group_id, series_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL,$7,$8,NULL,NULL,NULL,NULL,NULL,'none',NULL,NULL,NOW(),$9,$10)
+        photo_reviewed_at, photo_deletes_at, updated_at, group_id, series_id, instruction_photo_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,'open',NOW(),NULL,$7,$8,NULL,NULL,NULL,NULL,NULL,'none',NULL,NULL,NOW(),$9,$10,$11)
       RETURNING ${selectFields};
     `,
     [
@@ -125,6 +129,7 @@ export const createTask = async (input: {
       input.requiresPhotoConfirmation ?? false,
       input.groupId ?? null,
       input.seriesId ?? null,
+      input.instructionPhotoId ?? null,
     ],
   );
   return mapTask(result.rows[0]);

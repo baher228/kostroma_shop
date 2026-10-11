@@ -226,7 +226,7 @@ test('task repository create insert covers photo review columns', async () => {
   });
 
   assert.equal(task.id, 'task_created');
-  assert.equal(insertParams.length, 10);
+  assert.equal(insertParams.length, 11);
   assert.match(insertSql, /photo_confirmation_uploaded_at,\s*photo_confirmed_at,\s*photo_review_status/);
   assert.match(insertSql, /NULL,NULL,NULL,'none',NULL,NULL,NOW\(\)/);
 });

@@ -2,6 +2,8 @@ const LEGACY_API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2
 const RU_API_BASE_URL = (process.env.EXPO_PUBLIC_RU_API_URL || LEGACY_API_BASE_URL).replace(/\/+$/, '');
 const DXB_API_BASE_URL = (process.env.EXPO_PUBLIC_DXB_API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:4001').replace(/\/+$/, '');
 
+export const ruApiUrl = (path: string) => `${RU_API_BASE_URL}${path}`;
+
 export class ApiError extends Error {
   status: number;
 

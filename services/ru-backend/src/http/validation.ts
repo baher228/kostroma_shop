@@ -104,6 +104,10 @@ export const createTaskSchema = z
     deadlineAt: dateTimeString,
     requiresPhotoConfirmation: z.boolean().optional().default(false),
     repeat: z.enum(['none', 'daily', 'every_2_days', 'weekly']).optional().default('none'),
+    instructionPhotoDataUrl: z
+      .string()
+      .regex(/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\s]+$/, 'Invalid photo payload.')
+      .optional(),
   })
   .refine((payload) => Boolean(payload.assigneeId || payload.assigneeIds?.length), {
     message: 'Choose at least one store tablet.',

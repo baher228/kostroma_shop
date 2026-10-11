@@ -78,6 +78,67 @@ const TaskPhotoPreview = ({ token, task }: { token: string; task: Task }) => {
   );
 };
 
+const TaskInstructionPreview = ({ token, task }: { token: string; task: Task }) => {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    api.tasks.instructionPhotoBlob(token, task.id)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [task.id, token]);
+
+  if (failed) return <span className="task-photo-error">Инструкция недоступна</span>;
+  if (!photoUrl) return <span className="task-instruction-thumb loading">Инструкция...</span>;
+  return (
+    <a className="task-instruction-thumb" href={photoUrl} target="_blank" rel="noreferrer" title="Открыть фото-инструкцию">
+      <img src={photoUrl} alt={`Фото-инструкция: ${task.title}`} />
+      <span>Фото-инструкция</span>
+    </a>
+  );
+};
+
+const MAX_INSTRUCTION_SIDE = 1600;
+
+const readInstructionPhoto = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, MAX_INSTRUCTION_SIDE / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      const context = canvas.getContext('2d');
+      URL.revokeObjectURL(objectUrl);
+      if (!context) {
+        reject(new Error('Не удалось обработать фото.'));
+        return;
+      }
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Не удалось открыть фото. Выберите JPG, PNG или WEBP.'));
+    };
+    image.src = objectUrl;
+  });
+
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const hour = String(Math.floor(index / 2)).padStart(2, '0');
@@ -420,7 +481,7 @@ const ShopMultiPicker = ({
 };
 
 export const TasksPanel = ({ session }: { session: Session }) => {
-  const emptyForm = { title: '', assigneeIds: [] as string[], deadlineAt: '', requiresPhotoConfirmation: false, repeat: 'none' as TaskRepeat | 'none' };
+  const emptyForm = { title: '', assigneeIds: [] as string[], deadlineAt: '', requiresPhotoConfirmation: false, repeat: 'none' as TaskRepeat | 'none', instructionPhoto: '' };
   const [tasks, setTasks] = useState<Task[]>([]);
   const [series, setSeries] = useState<TaskSeries[]>([]);
   const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
@@ -490,6 +551,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
         deadlineAt: form.deadlineAt ? new Date(form.deadlineAt).toISOString() : null,
         requiresPhotoConfirmation: form.requiresPhotoConfirmation,
         repeat: form.repeat,
+        ...(form.instructionPhoto ? { instructionPhotoDataUrl: form.instructionPhoto } : {}),
       });
       setTasks((current) => [...createdTasks, ...current]);
       if (form.repeat !== 'none') setSeries(await api.tasks.listSeries(session.token));
@@ -499,6 +561,19 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       setError(messageOf(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const pickInstructionPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      setError('');
+      const instructionPhoto = await readInstructionPhoto(file);
+      setForm((current) => ({ ...current, instructionPhoto }));
+    } catch (err) {
+      setError(messageOf(err));
     }
   };
 
@@ -610,6 +685,26 @@ export const TasksPanel = ({ session }: { session: Session }) => {
               </span>
             </label>
           </div>
+          <div className="task-instruction-row">
+            {form.instructionPhoto ? (
+              <div className="task-instruction-picked">
+                <img src={form.instructionPhoto} alt="Фото-инструкция" />
+                <span>
+                  <strong>Фото-инструкция</strong>
+                  <small>Магазины увидят её в задаче</small>
+                </span>
+                <button type="button" className="secondary" onClick={() => setForm({ ...form, instructionPhoto: '' })}>Убрать</button>
+              </div>
+            ) : (
+              <label className="task-instruction-pick">
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void pickInstructionPhoto(event)} />
+                <span>
+                  <strong>+ Фото-инструкция</strong>
+                  <small>Фото или схема выкладки, необязательно</small>
+                </span>
+              </label>
+            )}
+          </div>
         </div>
         <footer className="task-composer-footer">
           <p id="task-form-hint">{storeTablets.length === 0 && !loading ? 'Сначала создайте планшет магазина, чтобы назначить задачу.' : 'Отметьте один или несколько магазинов — задача будет одна, у каждого магазина свой статус.'}</p>
@@ -645,6 +740,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                           {activeSeries && <span className="task-badge task-badge-repeat" title={`Следующая задача: ${formatDateTime(activeSeries.nextDeadlineAt)}`}>↻ {repeatLabel(activeSeries.repeat)}</span>}
                           <strong>{card.title}</strong>
                         </div>
+                        {card.members[0].instructionPhotoUrl && <TaskInstructionPreview token={session.token} task={card.members[0]} />}
                         {single ? (
                           <div className="task-row-meta">
                             <span className="task-shop">{taskShopLabel(single, tabletsById, shopsById)}</span>

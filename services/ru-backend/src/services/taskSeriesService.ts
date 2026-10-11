@@ -27,6 +27,7 @@ export const createDueTaskSeriesOccurrences = async (now = Date.now()): Promise<
       const task = await createTask({
         groupId,
         seriesId: series.id,
+        instructionPhotoId: series.instructionPhotoId,
         title: series.title,
         assigneeId: assignee.id,
         assigneeDisplayName: assignee.fullName,

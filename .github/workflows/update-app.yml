@@ -125,7 +125,16 @@ jobs:
           if [ -z "$MESSAGE" ]; then
             MESSAGE="${GITHUB_SHA}"
           fi
-          eas branch:create "$UPDATE_CHANNEL" --non-interactive || true
-          eas channel:create "$UPDATE_CHANNEL" --non-interactive || true
-          eas channel:edit "$UPDATE_CHANNEL" --branch "$UPDATE_CHANNEL" --non-interactive
-          eas update --branch "$UPDATE_CHANNEL" --message "$MESSAGE" --non-interactive
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            CHANNELS=("$UPDATE_CHANNEL")
+          else
+            CHANNELS=(preview production)
+          fi
+
+          for CHANNEL in "${CHANNELS[@]}"; do
+            eas branch:create "$CHANNEL" --non-interactive || true
+            eas channel:create "$CHANNEL" --non-interactive || true
+            eas channel:edit "$CHANNEL" --branch "$CHANNEL" --non-interactive
+            eas update --branch "$CHANNEL" --message "$MESSAGE" --non-interactive
+          done

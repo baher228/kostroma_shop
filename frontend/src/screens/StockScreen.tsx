@@ -428,6 +428,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
+  const usesMilkTones = activeBusinessCategory === 'Курица';
   const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
 
   const orderedRows = useMemo(
@@ -1010,8 +1011,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                     <Text style={styles.dateDayText}>{formatDate(date)}</Text>
                     <View style={styles.dailySubHeaderRow}>
                       <Text style={[styles.dailySubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText]}>{usesEveningStockHeaders ? 'Остаток вечер' : 'Ост'}</Text>
-                      <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText]}>{usesEveningStockHeaders ? 'Заказ на' : 'Зак'}</Text>
-                      <Text style={[styles.dailySubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText]}>{usesEveningStockHeaders ? 'Продано' : 'Прод'}</Text>
+                      <Text style={[styles.dailySubHeaderText, styles.dailyOrderSubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText, usesMilkTones && styles.dashboardHeaderOrder]}>{usesEveningStockHeaders ? 'Заказ на' : 'Зак'}</Text>
+                      <Text style={[styles.dailySubHeaderText, usesEveningStockHeaders && styles.breadDailySubHeaderText, usesMilkTones && styles.dashboardHeaderYellow]}>{usesEveningStockHeaders ? 'Продано' : 'Прод'}</Text>
                     </View>
                   </View>
                 </View>
@@ -1041,7 +1042,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                           <Pressable style={[styles.cell, styles.dailyValueCell]} onPress={() => openEditCell(row, date)}>
                             <Text style={styles.valueText}>{row.values[date] || '-'}</Text>
                           </Pressable>
-                          <View style={[styles.cell, styles.dailyValueCell, styles.dailyOrderValueCell]}>
+                          <View style={[styles.cell, styles.dailyValueCell, styles.dailyOrderValueCell, usesMilkTones && styles.dashboardValueOrder]}>
                             <TextInput
                               value={orderPacksForDate(row.productId, orderDate)}
                               onChangeText={(nextValue) => setDailyOrderValue(row.productId, orderDate, nextValue)}
@@ -1052,7 +1053,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                               placeholderTextColor="#6d7d72"
                             />
                           </View>
-                          <View style={[styles.cell, styles.dailyValueCell]}>
+                          <View style={[styles.cell, styles.dailyValueCell, usesMilkTones && styles.dashboardValueYellow]}>
                             <Text style={styles.valueText}>{soldForDate(row, date) || '-'}</Text>
                           </View>
                         </View>

@@ -255,6 +255,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   });
   const [newSubcategoryName, setNewSubcategoryName] = useState('');
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState<ProductPayload>(productToForm());
+  const [savingProduct, setSavingProduct] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -487,19 +490,51 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       });
       setForm({ ...productToForm(), businessCategory: activeBusinessCategory, category: activeSubcategories[0] || DEFAULT_PRODUCT_CATEGORY });
       setIsAddProductOpen(false);
-      await load();
+      await load(selectedShopId, windowStart, true);
     } catch (err) {
       setError(messageOf(err));
     }
   };
 
+  const openEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setEditForm(productToForm(product));
+  };
+
+  const saveProduct = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingProduct) return;
+    const original = productToForm(editingProduct);
+    const next: ProductPayload = { ...editForm, name: editForm.name.trim(), packType: editForm.packType.trim() };
+    const changes = Object.fromEntries(
+      (Object.keys(next) as (keyof ProductPayload)[])
+        .filter((key) => next[key] !== original[key])
+        .map((key) => [key, next[key]]),
+    ) as Partial<ProductPayload>;
+    if (Object.keys(changes).length === 0) {
+      setEditingProduct(null);
+      return;
+    }
+    setSavingProduct(true);
+    try {
+      await api.stock.updateProduct(session.token, editingProduct.productId, changes);
+      setEditingProduct(null);
+      await load(selectedShopId, windowStart, true);
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
   const removeProduct = async (product: Product) => {
-    if (!window.confirm(`Удалить товар ${product.name}?`)) {
+    if (!window.confirm(`Удалить товар «${product.name}»?\n\nВместе с ним во всех магазинах удалятся его остатки и заказы. Это нельзя отменить.`)) {
       return;
     }
     try {
       await api.stock.deleteProduct(session.token, product.productId);
-      await load();
+      setEditingProduct(null);
+      await load(selectedShopId, windowStart, true);
     } catch (err) {
       setError(messageOf(err));
     }
@@ -651,8 +686,10 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   ].filter(Boolean).join(' ') || undefined}
                 >
                   <td className="manager-name-col">
+                    <button type="button" className="manager-name-button" title="Изменить или удалить товар" onClick={() => openEditProduct(row)}>
                     <strong>{managerProductName(row.name)}</strong>
                     <small>{productReferenceLabel(row)}</small>
+                  </button>
                   </td>
                   {dashboardWeekStarts.flatMap((weekStart) => {
                     const weeks = dashboardWeeksForStart(weekStart);
@@ -784,7 +821,12 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                   isBreadSectionBreakProduct(row) ? 'bread-section-end-row' : '',
                 ].filter(Boolean).join(' ') || undefined}
               >
-                <td className="manager-name-col"><strong>{managerProductName(row.name)}</strong><small>{productReferenceLabel(row)}</small></td>
+                <td className="manager-name-col">
+                  <button type="button" className="manager-name-button" title="Изменить или удалить товар" onClick={() => openEditProduct(row)}>
+                    <strong>{managerProductName(row.name)}</strong>
+                    <small>{productReferenceLabel(row)}</small>
+                  </button>
+                </td>
                 {loadedDates.map((date) => {
                   const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
                   return (
@@ -906,6 +948,31 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
             <div className="modal-actions">
               <button type="button" className="secondary" onClick={() => setIsAddProductOpen(false)}>Отмена</button>
               <button type="submit">Сохранить</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {editingProduct && (
+        <Modal title="Изменить товар" onClose={() => setEditingProduct(null)}>
+          <form className="modal-form product-modal-form" onSubmit={saveProduct}>
+            <label className="product-edit-field"><span>Название</span><input placeholder="Название товара" value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} /></label>
+            <label className="product-edit-field"><span>Подкатегория</span><select value={editForm.category} onChange={(event) => setEditForm({ ...editForm, category: event.target.value as ProductCategory })}>
+              {(activeSubcategories.includes(editForm.category) ? activeSubcategories : [editForm.category, ...activeSubcategories])
+                .map((category) => <option key={category} value={category}>{category}</option>)}
+            </select></label>
+            <label className="product-edit-field"><span>Тип упаковки</span><input placeholder="Тип упаковки" value={editForm.packType} onChange={(event) => setEditForm({ ...editForm, packType: event.target.value })} /></label>
+            <label className="product-edit-field"><span>Штук в упаковке</span><NumberInput label="Штук в упаковке" value={editForm.unitsInPack} onChange={(value) => setEditForm({ ...editForm, unitsInPack: intOrZero(value) })} /></label>
+            <label className="product-edit-field"><span>Вес упаковки, кг</span><NumberInput label="Вес упаковки, кг" value={editForm.packWeightKg} onChange={(value) => setEditForm({ ...editForm, packWeightKg: numberOrZero(value) })} /></label>
+            <label className="product-edit-field"><span>Срок годности, дней</span><NumberInput label="Срок годности, дней" value={editForm.shelfLifeDays} onChange={(value) => setEditForm({ ...editForm, shelfLifeDays: intOrZero(value) })} /></label>
+            <label className="product-edit-field"><span>Цена с НДС, руб</span><NumberInput label="Цена с НДС, руб" value={editForm.unitPriceRubVat} onChange={(value) => setEditForm({ ...editForm, unitPriceRubVat: numberOrZero(value) })} /></label>
+            <label className="product-edit-field"><span>Минимальный остаток</span><NumberInput label="Минимальный остаток" value={editForm.minStockUnits} onChange={(value) => setEditForm({ ...editForm, minStockUnits: intOrZero(value) })} /></label>
+            <label className="product-edit-field"><span>Максимальный остаток</span><NumberInput label="Максимальный остаток" value={editForm.maxStockUnits} onChange={(value) => setEditForm({ ...editForm, maxStockUnits: intOrZero(value) })} /></label>
+            <small className="product-edit-note">Изменения применяются во всех магазинах.</small>
+            <div className="modal-actions">
+              <button type="button" className="danger product-delete-button" onClick={() => void removeProduct(editingProduct)} disabled={savingProduct}>Удалить товар</button>
+              <button type="button" className="secondary" onClick={() => setEditingProduct(null)}>Отмена</button>
+              <button type="submit" disabled={savingProduct}>{savingProduct ? 'Сохраняем...' : 'Сохранить'}</button>
             </div>
           </form>
         </Modal>

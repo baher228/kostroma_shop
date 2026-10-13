@@ -180,7 +180,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
         targetShops.flatMap((shop) => [
           { value: 'Номенклатура', style: 1 },
           { value: shop.name, style: 1 },
-        ]),
+        ]).concat({ value: 'Итого', style: 1 }),
         ...targetRows.map((row) =>
           targetShops.flatMap((shop) => {
             const value = rowValue(row, shop.id);
@@ -188,7 +188,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
               { value: row.productName },
               { value: value || '', style: 3, type: value ? 'number' as const : 'string' as const },
             ];
-          }),
+          }).concat({ value: machineTotal(row, targetShops), style: 3, type: 'number' as const }),
         ),
       ];
       const nameColumns = targetShops.map((_, index) => index * 2 + 1);
@@ -326,6 +326,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                       <th key={`${shop.id}:name`} className="pair-name-col">Номенклатура</th>,
                       <th key={shop.id} className="shop-col">{shop.name}</th>,
                     ])}
+                    <th className="total-col">Итого</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -338,6 +339,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
                           <td key={`${row.productId}:${shop.id}`} className="number-cell">{value || ''}</td>,
                         ];
                       })}
+                      <td className="number-cell total-col">{machineTotal(row, pairedShops)}</td>
                     </tr>
                   ))}
                 </tbody>

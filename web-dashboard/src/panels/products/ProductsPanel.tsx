@@ -352,7 +352,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
-  const usesMilkTones = activeBusinessCategory === 'Курица';
+  const usesMilkTones = (['Хлеб', 'Деликатесы', 'Сыр', 'Мороженое', 'Курица'] as BusinessCategory[]).includes(activeBusinessCategory);
   const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
 
   const dashboardWeeks: DashboardWeeks = useMemo(

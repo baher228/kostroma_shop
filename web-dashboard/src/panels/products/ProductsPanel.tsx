@@ -349,6 +349,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
+  const usesMilkTones = activeBusinessCategory === 'Курица';
   const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
 
   const dashboardWeeks: DashboardWeeks = useMemo(
@@ -760,11 +761,11 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                     {usesEveningStockHeaders ? 'Остаток вечер' : formatDateLabel(date)}
                     <small>{usesEveningStockHeaders ? formatDateShort(date) : 'Остаток'}</small>
                   </th>
-                  <th>
+                  <th className={usesMilkTones ? 'dashboard-tone-order' : undefined}>
                     {usesEveningStockHeaders ? 'Заказ на' : formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
                     <small>{usesEveningStockHeaders ? formatDateShort(orderHeaderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
                   </th>
-                  <th>
+                  <th className={usesMilkTones ? 'dashboard-tone-yellow' : undefined}>
                     {usesEveningStockHeaders ? 'Продано' : formatDateLabel(date)}
                     <small>{usesEveningStockHeaders ? formatDateShort(date) : 'Продано'}</small>
                   </th>
@@ -796,7 +797,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                           onCommit={(nextValue) => void saveStockCell(row.productId, date, nextValue)}
                         />
                       </td>
-                      <td>
+                      <td className={usesMilkTones ? 'dashboard-value-order' : undefined}>
                         <input
                           className="dashboard-order-input"
                           data-grid-col={`order:${date}`}
@@ -818,7 +819,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
                           }}
                         />
                       </td>
-                      <td>{soldFor(row, date) || '-'}</td>
+                      <td className={usesMilkTones ? 'dashboard-value-yellow' : undefined}>{soldFor(row, date) || '-'}</td>
                     </React.Fragment>
                   );
                 })}

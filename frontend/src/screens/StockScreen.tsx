@@ -428,7 +428,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
-  const usesMilkTones = activeBusinessCategory === 'Курица';
+  const usesMilkTones = (['Хлеб', 'Деликатесы', 'Сыр', 'Мороженое', 'Курица'] as BusinessCategory[]).includes(activeBusinessCategory);
   const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
 
   const orderedRows = useMemo(

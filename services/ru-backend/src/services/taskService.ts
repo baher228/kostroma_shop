@@ -11,7 +11,7 @@ import {
 import { SessionUser, Task } from '../domain/types';
 import { createTaskSeries } from '../repositories/taskSeriesRepository';
 import { findTaskInstructionPhoto, saveTaskInstructionPhoto } from '../repositories/taskInstructionPhotoRepository';
-import { TASK_REPEAT_INTERVAL_MS } from '../domain/taskRepeat';
+import { nextTaskDeadline } from '../domain/taskRepeat';
 import { findStoreTabletById } from '../repositories/userRepository';
 import { createTaskSchema, reviewTaskPhotoSchema, updateTaskStatusSchema, uploadTaskPhotoSchema } from '../http/validation';
 import { deleteTaskPhotoFile, readTaskPhoto, saveTaskPhoto } from './taskPhotoStorageService';
@@ -37,15 +37,20 @@ export const createManagedTask = async (
   const instructionPhotoId = payload.instructionPhotoDataUrl
     ? await saveTaskInstructionPhoto(payload.instructionPhotoDataUrl)
     : null;
-  const series = payload.repeat !== 'none' && payload.deadlineAt
+  const repeat = payload.repeat;
+  const schedule = repeat === 'weekdays'
+    ? { weekdays: [...new Set(payload.repeatWeekdays ?? [])].sort((a, b) => a - b), utcOffsetMinutes: payload.repeatUtcOffsetMinutes ?? 0 }
+    : { weekdays: null, utcOffsetMinutes: null };
+  const series = repeat !== 'none' && payload.deadlineAt
     ? await createTaskSeries({
       title: payload.title,
       assigneeIds: assignees.map((assignee) => assignee!.id),
       createdById: manager.id,
       createdByDisplayName: manager.fullName,
       requiresPhotoConfirmation: payload.requiresPhotoConfirmation ?? false,
-      repeat: payload.repeat,
-      nextDeadlineAt: new Date(Date.parse(payload.deadlineAt) + TASK_REPEAT_INTERVAL_MS[payload.repeat]).toISOString(),
+      repeat,
+      ...schedule,
+      nextDeadlineAt: new Date(nextTaskDeadline(Date.parse(payload.deadlineAt), repeat, schedule)).toISOString(),
       instructionPhotoId,
     })
     : null;

@@ -4699,8 +4699,27 @@ input[type='datetime-local'] {
 }
 
 .task-repeat-field {
-  min-width: 170px;
+  width: 230px;
+  min-width: 0;
   flex: 0 0 auto;
+}
+
+.repeat-picker .shop-multi-options {
+  max-height: 460px;
+}
+
+.repeat-picker .shop-multi-option {
+  min-height: 34px;
+  padding: 4px 8px;
+}
+
+.shop-multi-options .repeat-picker-group {
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 10px 8px 4px;
+  text-transform: uppercase;
 }
 
 .task-badge-repeat {

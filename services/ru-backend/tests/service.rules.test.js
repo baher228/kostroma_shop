@@ -447,3 +447,24 @@ test('repeating tasks create the next occurrence after the previous deadline and
   assert.deepEqual(dueTaskOccurrence(next, 'every_monday', next + 1), { deadlineMs: next + 7 * day, followingDeadlineMs: next + 14 * day });
   assert.equal(dueTaskOccurrence(next, 'every_sunday', next - 7 * day - 1), null);
 });
+
+test('weekday-set repeats step to the next chosen weekday in the manager timezone', () => {
+  const { dueTaskOccurrence, nextTaskDeadline } = require('../dist/domain/taskRepeat');
+  const day = 24 * 60 * 60 * 1000;
+  // Monday 2026-10-19 00:30 in Moscow (UTC+3) is still Sunday in UTC.
+  const monday = Date.parse('2026-10-18T21:30:00.000Z');
+  const monTue = { weekdays: [1, 2], utcOffsetMinutes: 180 };
+  assert.equal(nextTaskDeadline(monday, 'weekdays', monTue), monday + day);
+  assert.equal(nextTaskDeadline(monday + day, 'weekdays', monTue), monday + 7 * day);
+  // The Tuesday task appears once Monday's deadline has passed, not earlier.
+  assert.equal(dueTaskOccurrence(monday + day, 'weekdays', monday - 1, monTue), null);
+  assert.deepEqual(dueTaskOccurrence(monday + day, 'weekdays', monday + 1, monTue), {
+    deadlineMs: monday + day,
+    followingDeadlineMs: monday + 7 * day,
+  });
+  // Missed occurrences are skipped.
+  assert.deepEqual(dueTaskOccurrence(monday + day, 'weekdays', monday + 3 * day, monTue), {
+    deadlineMs: monday + 7 * day,
+    followingDeadlineMs: monday + 8 * day,
+  });
+});

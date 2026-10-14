@@ -207,6 +207,8 @@ export type TaskSeries = {
   createdByDisplayName: string;
   requiresPhotoConfirmation: boolean;
   repeat: import('./taskRepeat').TaskRepeat;
+  weekdays: number[] | null;
+  utcOffsetMinutes: number | null;
   nextDeadlineAt: string;
   instructionPhotoId: string | null;
   active: boolean;

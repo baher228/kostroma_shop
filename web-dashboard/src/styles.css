@@ -4894,3 +4894,38 @@ input[type='datetime-local'] {
   font-size: 13px;
   font-weight: 600;
 }
+
+.task-shops-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #c9d8cd;
+  border-radius: 999px;
+  background: #f3f8f4;
+  color: #1f5a3a;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.task-shops-toggle:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  box-shadow: none;
+  transform: none;
+}
+
+.task-row-meta > .task-shops-toggle {
+  margin-left: 10px;
+}
+
+.task-row-meta > .task-shops-toggle::before {
+  content: none;
+}
+
+.task-row-meta .task-review-count {
+  color: #b45309;
+  font-weight: 800;
+}

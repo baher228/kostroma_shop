@@ -22,8 +22,24 @@ const TASK_WEEKDAY_REPEAT_OPTIONS: { value: TaskWeekdayRepeat; label: string; da
   { value: 'every_sunday', label: 'Каждое воскресенье', day: 0 },
 ];
 
-const repeatLabel = (repeat: TaskRepeat) =>
-  [...TASK_REPEAT_OPTIONS, ...TASK_WEEKDAY_REPEAT_OPTIONS].find((option) => option.value === repeat)?.label ?? 'Повтор';
+const WEEKDAY_SHORT_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const mondayFirst = (days: number[]) => [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+
+const repeatLabel = (repeat: TaskRepeat | 'none', weekdays?: number[] | null) => {
+  if (repeat === 'none') return 'Никогда';
+  if (repeat === 'weekdays') {
+    const days = mondayFirst(weekdays ?? []);
+    if (days.length === 1) return TASK_WEEKDAY_REPEAT_OPTIONS.find((option) => option.day === days[0])?.label ?? 'По дням недели';
+    return days.length ? days.map((day) => WEEKDAY_SHORT_LABELS[day]).join(', ') : 'Выберите дни недели';
+  }
+  return [...TASK_REPEAT_OPTIONS, ...TASK_WEEKDAY_REPEAT_OPTIONS].find((option) => option.value === repeat)?.label ?? 'Повтор';
+};
+
+const repeatWeekdaySet = (repeat: TaskRepeat | 'none', weekdays: number[]) => {
+  if (repeat === 'weekdays') return weekdays;
+  const day = TASK_WEEKDAY_REPEAT_OPTIONS.find((option) => option.value === repeat)?.day;
+  return day === undefined ? [] : [day];
+};
 
 const statusLabel = (task: Task) => {
   if (task.photoReviewStatus === 'pending') return 'На проверке';
@@ -170,16 +186,17 @@ const dateFromKey = (key: string) => {
   return new Date(year, (month || 1) - 1, day || 1);
 };
 
-// Moves a "YYYY-MM-DDTHH:mm" deadline forward to the repeat's weekday (keeping the time), never into the past.
-const alignDeadlineToRepeat = (deadlineAt: string, repeat: TaskRepeat | 'none') => {
-  const weekday = TASK_WEEKDAY_REPEAT_OPTIONS.find((option) => option.value === repeat)?.day;
-  if (weekday === undefined) return deadlineAt;
+// Moves a "YYYY-MM-DDTHH:mm" deadline forward to the nearest chosen weekday (keeping the time), never into the past.
+const alignDeadlineToRepeat = (deadlineAt: string, repeat: TaskRepeat | 'none', weekdays: number[]) => {
+  const days = new Set(repeatWeekdaySet(repeat, weekdays));
+  if (days.size === 0) return deadlineAt;
   const time = deadlineAt.slice(11, 16) || '09:00';
-  const date = /^\d{4}-\d{2}-\d{2}/.test(deadlineAt) ? dateFromKey(deadlineAt.slice(0, 10)) : new Date();
-  date.setDate(date.getDate() + ((weekday - date.getDay() + 7) % 7));
   const [hours, minutes] = time.split(':').map(Number);
+  const date = /^\d{4}-\d{2}-\d{2}/.test(deadlineAt) ? dateFromKey(deadlineAt.slice(0, 10)) : new Date();
   date.setHours(hours, minutes, 0, 0);
-  if (date.getTime() <= Date.now()) date.setDate(date.getDate() + 7);
+  for (let step = 0; step < 14 && (!days.has(date.getDay()) || date.getTime() <= Date.now()); step += 1) {
+    date.setDate(date.getDate() + 1);
+  }
   return `${toDateKey(date)}T${time}`;
 };
 
@@ -506,8 +523,95 @@ const ShopMultiPicker = ({
   );
 };
 
+const RepeatPicker = ({
+  repeat,
+  weekdays,
+  onChange,
+}: {
+  repeat: TaskRepeat | 'none';
+  weekdays: number[];
+  onChange: (repeat: TaskRepeat | 'none', weekdays: number[]) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selectedDays = new Set(repeat === 'weekdays' ? weekdays : []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const pickSimple = (value: TaskRepeat | 'none') => {
+    onChange(value, []);
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  const toggleDay = (day: number) => {
+    const next = selectedDays.has(day) ? [...selectedDays].filter((item) => item !== day) : [...selectedDays, day];
+    onChange(next.length ? 'weekdays' : 'none', mondayFirst(next));
+  };
+
+  return (
+    <div className="shop-multi-picker repeat-picker" ref={pickerRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="shop-multi-trigger"
+        aria-label="Повтор"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>{repeatLabel(repeat, weekdays)}</span>
+        {selectedDays.size > 1 && <b>{selectedDays.size}</b>}
+        <span className="deadline-picker-icon" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <section className="shop-multi-menu" role="dialog" aria-label="Выбор повтора">
+          <div className="shop-multi-options">
+            {[{ value: 'none' as const, label: 'Никогда' }, ...TASK_REPEAT_OPTIONS].map((option) => (
+              <label key={option.value} className="shop-multi-option">
+                <input type="radio" name="task-repeat" checked={repeat === option.value} onChange={() => pickSimple(option.value)} />
+                <span><strong>{option.label}</strong></span>
+              </label>
+            ))}
+            <p className="repeat-picker-group">По дням недели</p>
+            {TASK_WEEKDAY_REPEAT_OPTIONS.map((option) => (
+              <label key={option.value} className="shop-multi-option">
+                <input type="checkbox" checked={selectedDays.has(option.day)} onChange={() => toggleDay(option.day)} />
+                <span><strong>{option.label}</strong></span>
+              </label>
+            ))}
+          </div>
+          <footer>
+            <span>{selectedDays.size ? `Дней: ${selectedDays.size}` : 'Можно отметить несколько дней'}</span>
+            <button type="button" className="secondary" onClick={() => {
+              setOpen(false);
+              triggerRef.current?.focus();
+            }}>Готово</button>
+          </footer>
+        </section>
+      )}
+    </div>
+  );
+};
+
 export const TasksPanel = ({ session }: { session: Session }) => {
-  const emptyForm = { title: '', assigneeIds: [] as string[], deadlineAt: '', requiresPhotoConfirmation: false, repeat: 'none' as TaskRepeat | 'none', instructionPhoto: '' };
+  const emptyForm = { title: '', assigneeIds: [] as string[], deadlineAt: '', requiresPhotoConfirmation: false, repeat: 'none' as TaskRepeat | 'none', repeatWeekdays: [] as number[], instructionPhoto: '' };
   const [tasks, setTasks] = useState<Task[]>([]);
   const [series, setSeries] = useState<TaskSeries[]>([]);
   const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
@@ -572,14 +676,22 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       setError('Для повторяющейся задачи укажите дедлайн.');
       return;
     }
+    if (form.repeat === 'weekdays' && form.repeatWeekdays.length === 0) {
+      setError('Выберите хотя бы один день недели.');
+      return;
+    }
     try {
       setSaving(true);
+      const deadline = form.deadlineAt ? new Date(alignDeadlineToRepeat(form.deadlineAt, form.repeat, form.repeatWeekdays)) : null;
       const createdTasks = await api.tasks.create(session.token, {
         title: form.title.trim(),
         assigneeIds,
-        deadlineAt: form.deadlineAt ? new Date(alignDeadlineToRepeat(form.deadlineAt, form.repeat)).toISOString() : null,
+        deadlineAt: deadline ? deadline.toISOString() : null,
         requiresPhotoConfirmation: form.requiresPhotoConfirmation,
         repeat: form.repeat,
+        ...(form.repeat === 'weekdays' && deadline
+          ? { repeatWeekdays: form.repeatWeekdays, repeatUtcOffsetMinutes: -deadline.getTimezoneOffset() }
+          : {}),
         ...(form.instructionPhoto ? { instructionPhotoDataUrl: form.instructionPhoto } : {}),
       });
       setTasks((current) => [...createdTasks, ...current]);
@@ -697,24 +809,21 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           <div className="task-deadline-row">
             <label className="task-field task-deadline-field">
               <span>Дедлайн <small>{form.repeat === 'none' ? 'необязательно' : 'первой задачи'}</small></span>
-              <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt: deadlineAt && alignDeadlineToRepeat(deadlineAt, form.repeat) })} />
+              <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt: deadlineAt && alignDeadlineToRepeat(deadlineAt, form.repeat, form.repeatWeekdays) })} />
             </label>
-            <label className="task-field task-repeat-field">
+            <div className="task-field task-repeat-field" role="group" aria-label="Повтор">
               <span>Повтор</span>
-              <select
-                value={form.repeat}
-                onChange={(event) => {
-                  const repeat = event.target.value as TaskRepeat | 'none';
-                  setForm({ ...form, repeat, deadlineAt: alignDeadlineToRepeat(form.deadlineAt, repeat) });
-                }}
-              >
-                <option value="none">Никогда</option>
-                {TASK_REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                <optgroup label="По дням недели">
-                  {TASK_WEEKDAY_REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </optgroup>
-              </select>
-            </label>
+              <RepeatPicker
+                repeat={form.repeat}
+                weekdays={form.repeatWeekdays}
+                onChange={(repeat, repeatWeekdays) => setForm({
+                  ...form,
+                  repeat,
+                  repeatWeekdays,
+                  deadlineAt: alignDeadlineToRepeat(form.deadlineAt, repeat, repeatWeekdays),
+                })}
+              />
+            </div>
             <label className="task-photo-control">
               <input type="checkbox" checked={form.requiresPhotoConfirmation} onChange={(event) => setForm({ ...form, requiresPhotoConfirmation: event.target.checked })} />
               <span>
@@ -775,7 +884,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                       <div className="task-row-body">
                         <div className="task-row-title">
                           {card.requiresPhotoConfirmation && <span className="task-badge">Фото</span>}
-                          {activeSeries && <span className="task-badge task-badge-repeat" title={`Следующая задача: ${formatDateTime(activeSeries.nextDeadlineAt)}`}>↻ {repeatLabel(activeSeries.repeat)}</span>}
+                          {activeSeries && <span className="task-badge task-badge-repeat" title={`Следующая задача: ${formatDateTime(activeSeries.nextDeadlineAt)}`}>↻ {repeatLabel(activeSeries.repeat, activeSeries.weekdays)}</span>}
                           <strong>{card.title}</strong>
                         </div>
                         {card.members[0].instructionPhotoUrl && <TaskInstructionPreview token={session.token} task={card.members[0]} />}

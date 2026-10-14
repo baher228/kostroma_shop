@@ -105,6 +105,8 @@ export const createTaskSchema = z
     deadlineAt: dateTimeString,
     requiresPhotoConfirmation: z.boolean().optional().default(false),
     repeat: z.enum(['none', ...TASK_REPEATS]).optional().default('none'),
+    repeatWeekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),
+    repeatUtcOffsetMinutes: z.number().int().min(-14 * 60).max(14 * 60).optional(),
     instructionPhotoDataUrl: z
       .string()
       .regex(/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\s]+$/, 'Invalid photo payload.')
@@ -115,6 +117,9 @@ export const createTaskSchema = z
   })
   .refine((payload) => payload.repeat === 'none' || Boolean(payload.deadlineAt), {
     message: 'A repeating task needs a deadline.',
+  })
+  .refine((payload) => payload.repeat !== 'weekdays' || Boolean(payload.repeatWeekdays?.length && payload.repeatUtcOffsetMinutes !== undefined), {
+    message: 'Choose at least one weekday.',
   });
 
 export const updateTaskStatusSchema = z.object({

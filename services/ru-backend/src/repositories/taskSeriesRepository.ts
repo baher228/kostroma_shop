@@ -10,6 +10,8 @@ type TaskSeriesDbRow = {
   created_by_display_name: string;
   requires_photo_confirmation: boolean;
   repeat: TaskRepeat;
+  weekdays: number[] | null;
+  utc_offset_minutes: number | null;
   next_deadline_at: Date | string;
   instruction_photo_id: string | null;
   active: boolean;
@@ -26,6 +28,8 @@ const mapSeries = (row: TaskSeriesDbRow): TaskSeries => ({
   createdByDisplayName: row.created_by_display_name,
   requiresPhotoConfirmation: row.requires_photo_confirmation,
   repeat: row.repeat,
+  weekdays: row.weekdays ? [...new Set(row.weekdays.map(Number))].sort((a, b) => a - b) : null,
+  utcOffsetMinutes: row.utc_offset_minutes ?? null,
   nextDeadlineAt: toIso(row.next_deadline_at),
   instructionPhotoId: row.instruction_photo_id ?? null,
   active: row.active,
@@ -34,7 +38,8 @@ const mapSeries = (row: TaskSeriesDbRow): TaskSeries => ({
 
 const selectFields = `
   id, title, assignee_ids, created_by_id, created_by_display_name,
-  requires_photo_confirmation, repeat, next_deadline_at, instruction_photo_id, active, created_at
+  requires_photo_confirmation, repeat, weekdays, utc_offset_minutes, next_deadline_at, instruction_photo_id, active,
+  created_at
 `;
 
 export const createTaskSeries = async (input: {
@@ -44,6 +49,8 @@ export const createTaskSeries = async (input: {
   createdByDisplayName: string;
   requiresPhotoConfirmation: boolean;
   repeat: TaskRepeat;
+  weekdays: number[] | null;
+  utcOffsetMinutes: number | null;
   nextDeadlineAt: string;
   instructionPhotoId: string | null;
 }): Promise<TaskSeries> => {
@@ -52,8 +59,8 @@ export const createTaskSeries = async (input: {
     `
       INSERT INTO task_series (
         id, title, assignee_ids, created_by_id, created_by_display_name,
-        requires_photo_confirmation, repeat, next_deadline_at, instruction_photo_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        requires_photo_confirmation, repeat, next_deadline_at, instruction_photo_id, weekdays, utc_offset_minutes
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       RETURNING ${selectFields};
     `,
     [
@@ -66,6 +73,8 @@ export const createTaskSeries = async (input: {
       input.repeat,
       input.nextDeadlineAt,
       input.instructionPhotoId,
+      input.weekdays,
+      input.utcOffsetMinutes,
     ],
   );
   return mapSeries(result.rows[0]);

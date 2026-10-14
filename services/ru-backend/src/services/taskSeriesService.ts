@@ -12,7 +12,7 @@ export const stopManagedTaskSeries = (seriesId: string) => stopTaskSeries(series
 export const createDueTaskSeriesOccurrences = async (now = Date.now()): Promise<Task[]> => {
   const created: Task[] = [];
   for (const series of await listActiveTaskSeries()) {
-    const due = dueTaskOccurrence(Date.parse(series.nextDeadlineAt), series.repeat, now);
+    const due = dueTaskOccurrence(Date.parse(series.nextDeadlineAt), series.repeat, now, series);
     if (!due) continue;
     const claimed = await advanceTaskSeries(series.id, series.nextDeadlineAt, new Date(due.followingDeadlineMs).toISOString());
     if (!claimed) continue;

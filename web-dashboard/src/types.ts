@@ -332,13 +332,14 @@ export type TaskWeekdayRepeat =
   | 'every_saturday'
   | 'every_sunday';
 
-export type TaskRepeat = 'daily' | 'every_2_days' | 'weekly' | TaskWeekdayRepeat;
+export type TaskRepeat = 'daily' | 'every_2_days' | 'weekly' | 'weekdays' | TaskWeekdayRepeat;
 
 export type TaskSeries = {
   id: string;
   title: string;
   assigneeIds: string[];
   repeat: TaskRepeat;
+  weekdays?: number[] | null;
   nextDeadlineAt: string;
   active: boolean;
   createdAt: string;

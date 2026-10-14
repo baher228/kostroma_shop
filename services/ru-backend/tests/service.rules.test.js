@@ -444,4 +444,6 @@ test('repeating tasks create the next occurrence after the previous deadline and
   assert.deepEqual(dueTaskOccurrence(next, 'daily', next - day + 1), { deadlineMs: next, followingDeadlineMs: next + day });
   assert.deepEqual(dueTaskOccurrence(next, 'every_2_days', next + 1), { deadlineMs: next + 2 * day, followingDeadlineMs: next + 4 * day });
   assert.deepEqual(dueTaskOccurrence(next, 'weekly', next + 8 * day), { deadlineMs: next + 14 * day, followingDeadlineMs: next + 21 * day });
+  assert.deepEqual(dueTaskOccurrence(next, 'every_monday', next + 1), { deadlineMs: next + 7 * day, followingDeadlineMs: next + 14 * day });
+  assert.equal(dueTaskOccurrence(next, 'every_sunday', next - 7 * day - 1), null);
 });

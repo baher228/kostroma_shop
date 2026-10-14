@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ColumnKey } from '../domain/types';
+import { TASK_REPEATS } from '../domain/taskRepeat';
 
 const numericValue = z
   .string()
@@ -103,7 +104,7 @@ export const createTaskSchema = z
     assigneeIds: z.array(z.string().trim().min(1).max(100)).min(1).max(200).optional(),
     deadlineAt: dateTimeString,
     requiresPhotoConfirmation: z.boolean().optional().default(false),
-    repeat: z.enum(['none', 'daily', 'every_2_days', 'weekly']).optional().default('none'),
+    repeat: z.enum(['none', ...TASK_REPEATS]).optional().default('none'),
     instructionPhotoDataUrl: z
       .string()
       .regex(/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\s]+$/, 'Invalid photo payload.')

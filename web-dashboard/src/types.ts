@@ -323,7 +323,16 @@ export type Task = {
   overdue: boolean;
 };
 
-export type TaskRepeat = 'daily' | 'every_2_days' | 'weekly';
+export type TaskWeekdayRepeat =
+  | 'every_monday'
+  | 'every_tuesday'
+  | 'every_wednesday'
+  | 'every_thursday'
+  | 'every_friday'
+  | 'every_saturday'
+  | 'every_sunday';
+
+export type TaskRepeat = 'daily' | 'every_2_days' | 'weekly' | TaskWeekdayRepeat;
 
 export type TaskSeries = {
   id: string;

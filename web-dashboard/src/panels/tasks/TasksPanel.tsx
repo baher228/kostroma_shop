@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, RefreshButton } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
-import type { Session, Shop, StoreTablet, Task, TaskRepeat, TaskSeries } from '../../types';
+import type { Session, Shop, StoreTablet, Task, TaskRepeat, TaskSeries, TaskWeekdayRepeat } from '../../types';
 import { groupTasksByUrgency, taskDueLabel, taskTimeParts } from '../../../../shared/task-timeline';
 
 const TASK_REPEAT_OPTIONS: { value: TaskRepeat; label: string }[] = [
@@ -11,7 +11,19 @@ const TASK_REPEAT_OPTIONS: { value: TaskRepeat; label: string }[] = [
   { value: 'weekly', label: 'Каждую неделю' },
 ];
 
-const repeatLabel = (repeat: TaskRepeat) => TASK_REPEAT_OPTIONS.find((option) => option.value === repeat)?.label ?? 'Повтор';
+// JS getDay(): 0 = Sunday … 6 = Saturday.
+const TASK_WEEKDAY_REPEAT_OPTIONS: { value: TaskWeekdayRepeat; label: string; day: number }[] = [
+  { value: 'every_monday', label: 'Каждый понедельник', day: 1 },
+  { value: 'every_tuesday', label: 'Каждый вторник', day: 2 },
+  { value: 'every_wednesday', label: 'Каждую среду', day: 3 },
+  { value: 'every_thursday', label: 'Каждый четверг', day: 4 },
+  { value: 'every_friday', label: 'Каждую пятницу', day: 5 },
+  { value: 'every_saturday', label: 'Каждую субботу', day: 6 },
+  { value: 'every_sunday', label: 'Каждое воскресенье', day: 0 },
+];
+
+const repeatLabel = (repeat: TaskRepeat) =>
+  [...TASK_REPEAT_OPTIONS, ...TASK_WEEKDAY_REPEAT_OPTIONS].find((option) => option.value === repeat)?.label ?? 'Повтор';
 
 const statusLabel = (task: Task) => {
   if (task.photoReviewStatus === 'pending') return 'На проверке';
@@ -156,6 +168,19 @@ const toDateKey = (date: Date) => {
 const dateFromKey = (key: string) => {
   const [year, month, day] = key.split('-').map(Number);
   return new Date(year, (month || 1) - 1, day || 1);
+};
+
+// Moves a "YYYY-MM-DDTHH:mm" deadline forward to the repeat's weekday (keeping the time), never into the past.
+const alignDeadlineToRepeat = (deadlineAt: string, repeat: TaskRepeat | 'none') => {
+  const weekday = TASK_WEEKDAY_REPEAT_OPTIONS.find((option) => option.value === repeat)?.day;
+  if (weekday === undefined) return deadlineAt;
+  const time = deadlineAt.slice(11, 16) || '09:00';
+  const date = /^\d{4}-\d{2}-\d{2}/.test(deadlineAt) ? dateFromKey(deadlineAt.slice(0, 10)) : new Date();
+  date.setDate(date.getDate() + ((weekday - date.getDay() + 7) % 7));
+  const [hours, minutes] = time.split(':').map(Number);
+  date.setHours(hours, minutes, 0, 0);
+  if (date.getTime() <= Date.now()) date.setDate(date.getDate() + 7);
+  return `${toDateKey(date)}T${time}`;
 };
 
 const monthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
@@ -552,7 +577,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       const createdTasks = await api.tasks.create(session.token, {
         title: form.title.trim(),
         assigneeIds,
-        deadlineAt: form.deadlineAt ? new Date(form.deadlineAt).toISOString() : null,
+        deadlineAt: form.deadlineAt ? new Date(alignDeadlineToRepeat(form.deadlineAt, form.repeat)).toISOString() : null,
         requiresPhotoConfirmation: form.requiresPhotoConfirmation,
         repeat: form.repeat,
         ...(form.instructionPhoto ? { instructionPhotoDataUrl: form.instructionPhoto } : {}),
@@ -672,13 +697,22 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           <div className="task-deadline-row">
             <label className="task-field task-deadline-field">
               <span>Дедлайн <small>{form.repeat === 'none' ? 'необязательно' : 'первой задачи'}</small></span>
-              <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt })} />
+              <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt: deadlineAt && alignDeadlineToRepeat(deadlineAt, form.repeat) })} />
             </label>
             <label className="task-field task-repeat-field">
               <span>Повтор</span>
-              <select value={form.repeat} onChange={(event) => setForm({ ...form, repeat: event.target.value as TaskRepeat | 'none' })}>
+              <select
+                value={form.repeat}
+                onChange={(event) => {
+                  const repeat = event.target.value as TaskRepeat | 'none';
+                  setForm({ ...form, repeat, deadlineAt: alignDeadlineToRepeat(form.deadlineAt, repeat) });
+                }}
+              >
                 <option value="none">Никогда</option>
                 {TASK_REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                <optgroup label="По дням недели">
+                  {TASK_WEEKDAY_REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </optgroup>
               </select>
             </label>
             <label className="task-photo-control">

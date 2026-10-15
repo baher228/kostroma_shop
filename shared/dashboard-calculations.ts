@@ -177,7 +177,7 @@ export const dashboardHeaderSubtitle = (weeks: DashboardWeeks, column: Dashboard
   }
   if (column.dateKind === 'day' && column.dateDay && column.dateWeek) {
     const date = dashboardDateFor(weeks, column.dateWeek, column.dateDay);
-    return date ? `${column.subtitle}\n${formatDateShort(date)}` : column.subtitle;
+    return date ? `${column.subtitle}\n${formatDateShort(addDays(date, column.dateOffsetDays ?? 0))}` : column.subtitle;
   }
   if (column.dateKind === 'range' && column.dateWeek && column.dateFrom && column.dateTo) {
     const range = dashboardRangeLabel(weeks, column.dateWeek, column.dateFrom, column.dateTo, column.dateToWeek);

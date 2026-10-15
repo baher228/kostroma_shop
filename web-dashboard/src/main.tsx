@@ -15,7 +15,7 @@ import { UsersPanel } from './panels/users/UsersPanel';
 import './styles.css';
 import { Session } from './types';
 
-type Section = 'overview' | 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'orders' | 'promotions' | 'app';
+type Section = 'overview' | 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'inventory' | 'orders' | 'promotions' | 'app';
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -78,6 +78,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
     { key: 'tasks', label: 'Задачи' },
     { key: 'shops', label: 'Магазины' },
     { key: 'products', label: 'Остатки' },
+    { key: 'inventory', label: 'Инвентаризация' },
     { key: 'orders', label: 'Заказ' },
     { key: 'promotions', label: 'Акции' },
     { key: 'app', label: 'Приложение' },
@@ -104,7 +105,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         </div>
       </header>
 
-      <main className={section === 'products' ? 'content stock-content' : 'content'}>
+      <main className={section === 'products' || section === 'inventory' ? 'content stock-content' : 'content'}>
         {section === 'overview' && <OverviewPanel session={session} setSection={setSection} />}
         {section === 'attendance' && <AttendancePanel session={session} />}
         {section === 'audioQc' && <AudioQcPanel session={session} />}
@@ -112,6 +113,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         {section === 'tasks' && <TasksPanel session={session} />}
         {section === 'shops' && <ShopsPanel session={session} />}
         {section === 'products' && <ProductsPanel session={session} />}
+        {section === 'inventory' && <ProductsPanel session={session} mode="inventory" />}
         {section === 'orders' && <OrdersPanel session={session} />}
         {section === 'promotions' && <PromotionsPanel session={session} />}
         {section === 'app' && <AppDownloadPanel />}

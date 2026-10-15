@@ -36,6 +36,7 @@ export const registerStockRoutes = (app: Express) => {
         from: toStringParam(req.query.from),
         to: toStringParam(req.query.to),
         range: toStringParam(req.query.range),
+      kind: toStringParam(req.query.kind),
       });
       const table = await getVisibleStockTable(viewer, query);
       if (!table) {

@@ -163,15 +163,19 @@ export const updateShopMachineSchema = z.object({
   machineNumber: machineNumberSchema,
 });
 
+const stockValueKindSchema = z.enum(['stock', 'inventory']).optional().default('stock');
+
 export const listStockTableQuerySchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
   businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
   from: dateKeySchema.optional(),
   to: dateKeySchema.optional(),
   range: z.enum(['week', 'year']).optional(),
+  kind: stockValueKindSchema,
 });
 
 export const upsertStockValueSchema = z.object({
+  kind: stockValueKindSchema,
   shopId: z.string().trim().min(1).max(100).optional(),
   productId: z.string().trim().min(1).max(100),
   date: dateKeySchema,

@@ -360,7 +360,7 @@ export const api = {
     },
   },
   stock: {
-    table: async (token: string, params: { shopId?: string; businessCategory?: BusinessCategory; from?: string; to?: string; range?: 'week' | 'year' }) =>
+    table: async (token: string, params: { shopId?: string; businessCategory?: BusinessCategory; from?: string; to?: string; range?: 'week' | 'year'; kind?: 'stock' | 'inventory' }) =>
       (await dxbRequest<{ table: StockTable }>(`/api/stock${query(params)}`, { token })).table,
     createProduct: async (token: string, payload: ProductPayload) =>
       (await dxbRequest<{ product: unknown }>('/api/stock/products', { method: 'POST', token, body: payload })).product,
@@ -380,7 +380,7 @@ export const api = {
     deleteSubcategory: async (token: string, payload: { businessCategory: BusinessCategory; name: string }) => {
       await dxbRequest<{}>('/api/stock/subcategories', { method: 'DELETE', token, body: payload });
     },
-    updateValue: async (token: string, payload: { shopId: string; productId: string; date: string; value: string }) => {
+    updateValue: async (token: string, payload: { shopId: string; productId: string; date: string; value: string; kind?: 'stock' | 'inventory' }) => {
       await dxbRequest<{}>('/api/stock/value', { method: 'PUT', token, body: payload });
     },
     listShopOrderValues: async (token: string, shopId: string, from: string, to: string, businessCategory?: BusinessCategory) =>

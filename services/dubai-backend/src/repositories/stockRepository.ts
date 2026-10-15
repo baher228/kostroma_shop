@@ -530,10 +530,16 @@ const resolveRequestedShop = async (viewer: OpsTokenClaims, requestedShopId?: st
   return shops[0] ?? null;
 };
 
+export type StockValueKind = 'stock' | 'inventory';
+
+const valuesTableFor = (kind: StockValueKind | undefined): string =>
+  kind === 'inventory' ? 'inventory_values' : 'stock_values';
+
 export const getStockTable = async (
   viewer: OpsTokenClaims,
-  params: { shopId?: string; businessCategory?: BusinessCategory; from?: string; to?: string; range?: 'week' | 'year' },
+  params: { shopId?: string; businessCategory?: BusinessCategory; from?: string; to?: string; range?: 'week' | 'year'; kind?: StockValueKind },
 ): Promise<StockTable | null> => {
+  const valuesTable = valuesTableFor(params.kind);
   const range = resolveRequestedRange(viewer, params);
   const businessCategory =
     params.businessCategory && BUSINESS_CATEGORIES.includes(params.businessCategory) ? params.businessCategory : DEFAULT_BUSINESS_CATEGORY;
@@ -556,7 +562,7 @@ export const getStockTable = async (
     opsDb.query<ValueDbRow>(
       `
         SELECT product_id, day_date::text AS day_date, value
-        FROM stock_values
+        FROM ${valuesTable}
         WHERE shop_id = $1
           AND day_date >= $2::date
           AND day_date <= $3::date
@@ -564,7 +570,7 @@ export const getStockTable = async (
       `,
       [shop.id, range.from, range.to],
     ),
-    opsDb.query<DashboardOverrideDbRow>(
+    params.kind === 'inventory' ? Promise.resolve({ rows: [] as DashboardOverrideDbRow[] }) : opsDb.query<DashboardOverrideDbRow>(
       `
         SELECT product_id, week_start::text AS week_start, cell_key, value
         FROM dashboard_overrides
@@ -647,8 +653,9 @@ const sanitizeStockValue = (raw: string): string => {
 
 export const upsertStockValue = async (
   viewer: OpsTokenClaims,
-  params: { shopId?: string; productId: string; date: string; value: string },
+  params: { shopId?: string; productId: string; date: string; value: string; kind?: StockValueKind },
 ): Promise<boolean> => {
+  const valuesTable = valuesTableFor(params.kind);
   if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
     return false;
   }
@@ -686,7 +693,7 @@ export const upsertStockValue = async (
   if (!sanitized) {
     await opsDb.query(
       `
-        DELETE FROM stock_values
+        DELETE FROM ${valuesTable}
         WHERE shop_id = $1
           AND product_id = $2
           AND day_date = $3::date;
@@ -698,7 +705,7 @@ export const upsertStockValue = async (
 
   await opsDb.query(
     `
-      INSERT INTO stock_values (shop_id, product_id, day_date, value, updated_at)
+      INSERT INTO ${valuesTable} (shop_id, product_id, day_date, value, updated_at)
       VALUES ($1, $2, $3::date, $4::smallint, NOW())
       ON CONFLICT (shop_id, product_id, day_date)
       DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();

@@ -46,6 +46,22 @@ test('renamed shops and the two «Профсоюзная» columns map to the ri
   assert.deepEqual(unplacedShops, []);
 });
 
+test('shop names as written on the platform: «Панова», «Шагово», «Дав2 у Сбера», no dash', () => {
+  const shops = [
+    { id: 'pan', name: 'Панова-Рассадина' },
+    { id: 'sha', name: 'Шагово-Штырбу' },
+    { id: 'dav', name: 'Дав2 у Сбера-Маскатова' },
+    { id: 'kra', name: 'Красное Петухова' },
+  ];
+  const rows = [row('x', 'Премиум Ф', { pan: 1, sha: 2, dav: 3, kra: 4 })];
+  const { values, unplacedShops } = fillCheeseOrderTemplate({ rows, shops, exportDate: '2026-10-12', orderDate: '2026-10-13' });
+  assert.equal(values.C99, 1);
+  assert.equal(values.M11, 2);
+  assert.equal(values.M55, 3);
+  assert.equal(values.M33, 4);
+  assert.deepEqual(unplacedShops, []);
+});
+
 test('shops and products that are not in the form are reported', () => {
   const shops = [{ id: 'm', name: 'Main shop' }];
   const rows = [row('p', 'Новый сыр', { m: 2 })];

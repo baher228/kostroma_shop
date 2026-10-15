@@ -35,27 +35,34 @@ const TEMPLATE_BLOCKS: Array<Array<[shop: string, seller: string]>> = [
   [['Паново', 'Рассадина'], ['Профсоюзная', 'Рассадина']],
 ];
 
-// Form name → platform name, where they differ.
-const SHOP_ALIASES: Record<string, string> = {
-  'Долгая поляна': 'Индустриальная',
-  'Малышковск': 'Малышкого',
-  'Студенческий1': 'Студенческий',
-  'Ив.Сус': 'Сусанино',
-  'пр.мира': 'Пр.Мира',
-  'Дав 2': 'Дав2',
-  'Дав2 у Сбера': 'Дав2',
-  'Давыд': 'Давыдовский',
+// Form name → platform names, where they differ.
+const SHOP_ALIASES: Record<string, string[]> = {
+  'Долгая поляна': ['Индустриальная'],
+  'Малышковск': ['Малышкого'],
+  'Студенческий1': ['Студенческий'],
+  'Ив.Сус': ['Сусанино'],
+  'пр.мира': ['Пр.Мира'],
+  'Дав 2': ['Дав2', 'Дав2 у Сбера'],
+  'Давыд': ['Давыдовский'],
+  'Шагова': ['Шагово'],
+  'Паново': ['Панова'],
 };
 // The form has two «Профсоюзная» shops; the platform tells them apart by number.
-const SHOP_ALIASES_BY_CELL: Record<string, string> = {
-  G9: 'Профсоюзная33',
-  E97: 'Профсоюзная25.2',
+const SHOP_ALIASES_BY_CELL: Record<string, string[]> = {
+  G9: ['Профсоюзная33'],
+  E97: ['Профсоюзная25.2'],
 };
-const SELLER_ALIASES: Record<string, string> = {
-  'Смирнова С.С.': 'Смирнова',
+const SELLER_ALIASES: Record<string, string[]> = {
+  'Смирнова С.С.': ['Смирнова'],
 };
 
-export type CheeseTemplateSlot = { shopCell: string; column: string; firstProductRow: number; shop: string; seller: string };
+export type CheeseTemplateSlot = {
+  shopCell: string;
+  column: string;
+  firstProductRow: number;
+  shops: string[];
+  sellers: string[];
+};
 
 export const CHEESE_TEMPLATE_SLOTS: CheeseTemplateSlot[] = TEMPLATE_BLOCKS.flatMap((block, blockIndex) =>
   block.map(([shop, seller], index) => {
@@ -65,13 +72,13 @@ export const CHEESE_TEMPLATE_SLOTS: CheeseTemplateSlot[] = TEMPLATE_BLOCKS.flatM
       shopCell,
       column,
       firstProductRow: FIRST_PRODUCT_ROW + blockIndex * BLOCK_ROWS,
-      shop: SHOP_ALIASES_BY_CELL[shopCell] ?? SHOP_ALIASES[shop] ?? shop,
-      seller: SELLER_ALIASES[seller] ?? seller,
+      shops: SHOP_ALIASES_BY_CELL[shopCell] ?? [shop, ...(SHOP_ALIASES[shop] ?? [])],
+      sellers: [seller, ...(SELLER_ALIASES[seller] ?? [])],
     };
   }),
 );
 
-const normalize = (value: string): string => value.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, '');
+const normalize = (value: string): string => value.toLowerCase().replace(/ё/g, 'е').replace(/[\s\-–—]+/g, '');
 
 // Platform shop names look like «Магистральная - Морозова» (shop, then seller).
 export const splitShopName = (name: string): { shop: string; seller: string } => {
@@ -79,10 +86,15 @@ export const splitShopName = (name: string): { shop: string; seller: string } =>
   return match ? { shop: match[1].trim(), seller: match[2].trim() } : { shop: name.trim(), seller: '' };
 };
 
+// Shop + seller first, ignoring spaces and dashes («Красное Петухова», «Дав2 у Сбера-Маскатова»);
+// otherwise the shop name alone, if only one platform shop has it.
 const findShop = (slot: CheeseTemplateSlot, shops: CheeseOrderShop[]): CheeseOrderShop | undefined => {
-  const sameShop = shops.filter((shop) => normalize(splitShopName(shop.name).shop) === normalize(slot.shop));
-  if (sameShop.length <= 1) return sameShop[0];
-  return sameShop.find((shop) => normalize(splitShopName(shop.name).seller) === normalize(slot.seller));
+  const fullNames = new Set(slot.shops.flatMap((shop) => slot.sellers.map((seller) => normalize(shop + seller))));
+  const exact = shops.find((shop) => fullNames.has(normalize(shop.name)));
+  if (exact) return exact;
+  const shopNames = new Set(slot.shops.map(normalize));
+  const sameShop = shops.filter((shop) => shopNames.has(normalize(splitShopName(shop.name).shop)));
+  return sameShop.length === 1 ? sameShop[0] : undefined;
 };
 
 const articleKey = (article: string): string => article.replace(/^С/, 'c').toLowerCase();

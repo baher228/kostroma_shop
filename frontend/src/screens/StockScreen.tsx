@@ -1650,7 +1650,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               value={editingValue}
               onChangeText={(value) => setEditingValue(sanitizeStockValue(value))}
               style={styles.modalInput}
-              placeholder="0-15"
+              placeholder="0-50"
               placeholderTextColor="#7a8b7f"
               keyboardType="number-pad"
               maxLength={2}

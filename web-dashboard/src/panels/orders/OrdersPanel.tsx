@@ -15,6 +15,7 @@ import {
   todayDateKey,
 } from '../../dateUtils';
 import { safeFileName } from '../../export/csv';
+import { makeCheeseOrderXlsx } from '../../export/cheeseOrderXlsx';
 import { makeXlsxBlob, xlsxColumnName, type XlsxCell } from '../../export/xlsx';
 import { sortProductsLikeImage } from '../../productOrdering';
 import { formatWeight, messageOf } from '../../shared/format';
@@ -174,6 +175,25 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     const targetGroups = groupShopsByMachine(targetSheet);
     const targetRows = getVisibleRows(targetSheet);
     const sheetName = `Заказ ${orderLabelDate(targetSheet.date)}`;
+    if (activeBusinessCategory === 'Сыр') {
+      const orderDate = orderLabelDate(targetSheet.date);
+      const { blob, unplacedShops, unplacedProducts } = makeCheeseOrderXlsx({
+        rows: targetSheet.rows,
+        shops: targetSheet.shops,
+        exportDate: todayDateKey(),
+        orderDate,
+      });
+      const [year, month, day] = orderDate.split('-');
+      saveXlsx(blob, targetSheet.date, `Тонары сыр на ${day}.${month}.${year.slice(2)}`);
+      const missing = [
+        unplacedShops.length ? `магазины: ${unplacedShops.join(', ')}` : '',
+        unplacedProducts.length ? `товары: ${unplacedProducts.join(', ')}` : '',
+      ].filter(Boolean);
+      if (missing.length) {
+        setError(`Файл скачан, но в шаблоне нет мест для заказов (${missing.join('; ')}).`);
+      }
+      return;
+    }
     if (usesPairedShopLayout(activeBusinessCategory)) {
       const targetShops = targetGroups.flatMap((group) => group.shops);
       const pairedRows: XlsxCell[][] = [
@@ -249,11 +269,11 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     saveXlsx(makeXlsxBlob(sheetName, rows, merges), targetSheet.date);
   };
 
-  const saveXlsx = (blob: Blob, sheetDate: string) => {
+  const saveXlsx = (blob: Blob, sheetDate: string, baseName = `zakaz_${orderLabelDate(sheetDate)}`) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(`zakaz_${orderLabelDate(sheetDate)}`)}.xlsx`;
+    link.download = `${safeFileName(baseName)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

@@ -233,7 +233,9 @@ const StockCellInput = ({
   );
 };
 
-export const ProductsPanel = ({ session }: { session: Session }) => {
+export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; mode?: 'stock' | 'inventory' }) => {
+  const isInventory = mode === 'inventory';
+  const valueKind = isInventory ? 'inventory' : undefined;
   const currentWeekStart = startOfWeek();
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -296,13 +298,17 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       const from = targetRange.from;
       const to = targetRange.to;
-      const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, businessCategory: activeBusinessCategory, from, to });
+      const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, businessCategory: activeBusinessCategory, from, to, kind: valueKind });
       setTable(nextTable);
       setLoadedRange(targetRange);
       setLoadedKey(nextLoadedKey);
       const nextSubcategories = await api.stock.listSubcategories(session.token);
       setSubcategories(nextSubcategories);
 
+      if (isInventory) {
+        setOrderValues({});
+        return;
+      }
       try {
         const loaded: Record<string, string> = {};
         const orderRange = orderFetchRangeForWindowStart(nextWindowStart, activeBusinessCategory);
@@ -471,7 +477,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     }
     try {
       const sanitized = sanitizeStock(value);
-      await api.stock.updateValue(session.token, { shopId: selectedShopId, productId, date, value: sanitized });
+      await api.stock.updateValue(session.token, { shopId: selectedShopId, productId, date, value: sanitized, kind: valueKind });
       updateCalendarCell(productId, date, sanitized);
     } catch (err) {
       setError(messageOf(err));
@@ -552,7 +558,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
       'Вес упаковки, кг',
       'Срок годности, сут',
       'Цена в руб, с НДС',
-      ...(isMilkTable
+      ...(isInventory
+        ? loadedDates.map((date) => `Остаток (${formatDateLabel(date)})`)
+        : isMilkTable
         ? dashboardWeekStarts.flatMap((weekStart) => {
           const weeks = dashboardWeeksForStart(weekStart);
           return DASHBOARD_COLUMNS.map((column) => {
@@ -582,7 +590,9 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
         row.packWeightKg !== null ? String(row.packWeightKg) : '',
         row.shelfLifeDays !== null ? String(row.shelfLifeDays) : '',
         row.unitPriceRubVat !== null && row.unitPriceRubVat !== undefined ? String(row.unitPriceRubVat) : '',
-        ...(isMilkTable
+        ...(isInventory
+          ? loadedDates.map((date) => row.values[date] ?? '')
+          : isMilkTable
           ? dashboardWeekStarts.flatMap((weekStart) => {
             const values = rowValuesFor(row, dashboardWeeksForStart(weekStart));
             return DASHBOARD_COLUMNS.map((column) => values[column.key] ?? '');
@@ -597,7 +607,7 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(`manager_dashboard_${table.shop.name}_${loadedDates[0]}_${loadedDates[loadedDates.length - 1]}`)}.csv`;
+    link.download = `${safeFileName(`${isInventory ? 'inventory' : 'manager_dashboard'}_${table.shop.name}_${loadedDates[0]}_${loadedDates[loadedDates.length - 1]}`)}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -774,6 +784,61 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
     return String(Math.max(0, previous - current));
   };
 
+  const renderInventoryTable = (rows: Product[]) => (
+    <section className="manager-category-block">
+      {renderTopScrollbar()}
+      <div className="manager-table-scroll" onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)} ref={tableScrollRef}>
+        <table className="manager-stock-table manager-dashboard-table">
+          <colgroup>
+            <col className="manager-name-col-width" />
+            {loadedDates.map((date) => <col key={date} className="dashboard-col-stock-width" />)}
+          </colgroup>
+          <thead>
+            <tr>
+              <th className="manager-name-col dashboard-name-header">Товар</th>
+              {loadedDates.map((date) => (
+                <th key={date} data-week-start={date === windowStart ? windowStart : undefined}>
+                  Остаток
+                  <small>{formatDateShort(date)}</small>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={loadedDates.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+            ) : rows.map((row, index) => (
+              <tr
+                key={row.productId}
+                className={[
+                  startsNewSubcategory(rows, index) ? 'subcategory-start-row' : '',
+                  isBreadSectionBreakProduct(row) ? 'bread-section-end-row' : '',
+                ].filter(Boolean).join(' ') || undefined}
+              >
+                <td className="manager-name-col">
+                  <button type="button" className="manager-name-button" title="Изменить или удалить товар" onClick={() => openEditProduct(row)}>
+                    <strong>{managerProductName(row.name)}</strong>
+                    <small>{productReferenceLabel(row)}</small>
+                  </button>
+                </td>
+                {loadedDates.map((date) => (
+                  <td key={`${row.productId}:${date}`}>
+                    <StockCellInput
+                      value={row.values[date] ?? ''}
+                      gridCol={`stock:${date}`}
+                      label={`${row.name}, ${formatDateLabel(date)}`}
+                      onCommit={(nextValue) => void saveStockCell(row.productId, date, nextValue)}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
   const renderDailyTable = (rows: Product[]) => (
     <section className="manager-category-block">
       {renderTopScrollbar()}
@@ -875,7 +940,10 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
   return (
     <section className="page-section stock-page-section">
-      <PageHeader title="Остатки" subtitle="Менеджерская таблица остатков, заказов и продаж по магазину." action={<RefreshButton onClick={() => load(selectedShopId, windowStart, true)} />} />
+      <PageHeader
+        title={isInventory ? 'Инвентаризация' : 'Остатки'}
+        subtitle={isInventory ? 'Инвентаризация по магазину: свои цифры, «Остатки» не меняются.' : 'Менеджерская таблица остатков, заказов и продаж по магазину.'}
+        action={<RefreshButton onClick={() => load(selectedShopId, windowStart, true)} />} />
       <Feedback error={error} />
 
       <div className="manager-controls">
@@ -914,8 +982,10 @@ export const ProductsPanel = ({ session }: { session: Session }) => {
 
       <div className="manager-table-wrap">
         {loading
-          ? <p className="manager-loading">Загружаем остатки...</p>
-          : isMilkTable
+          ? <p className="manager-loading">{isInventory ? 'Загружаем инвентаризацию...' : 'Загружаем остатки...'}</p>
+          : isInventory
+            ? renderInventoryTable(orderedRows)
+            : isMilkTable
             ? renderDashboardTable(orderedRows)
             : renderDailyTable(orderedRows)}
       </div>

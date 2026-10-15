@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import { shopsApi } from '../api/shops';
-import { CreateProductPayload, stockApi } from '../api/stock';
+import { CreateProductPayload, StockValueKind, stockApi } from '../api/stock';
 import { OrdersPanel } from '../components/OrdersPanel';
 import { OrderSheetPanel } from '../components/OrderSheetPanel';
 import { SupportPanel } from '../components/SupportPanel';
@@ -62,7 +62,7 @@ import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 import { BusinessCategoryTabs } from '../components/BusinessCategoryTabs';
 
-type ScreenTab = 'stock' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
+type ScreenTab = 'stock' | 'inventory' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
 type EditingCell = {
   productId: string;
@@ -315,9 +315,17 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [addingProduct, setAddingProduct] = useState(false);
   const { checkingUpdate, checkForAppUpdate } = useAppUpdate();
 
+  const [stockKind, setStockKind] = useState<StockValueKind>('stock');
+  const isInventory = stockKind === 'inventory';
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'stock' || activeTab === 'inventory') {
+      setStockKind(activeTab);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (!canManage && activeTab === 'users') {
@@ -362,6 +370,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         from,
         to,
         range: canManage ? undefined : 'week',
+        kind: stockKind,
       });
       const visibleTable = canManage
         ? { ...nextTable, dates: nextTable.dates.filter((date) => date >= visibleRange.from && date <= visibleRange.to) }
@@ -370,7 +379,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       if (!selectedShopId) {
         setSelectedShopId(visibleTable.shop.id);
       }
-      if (canManage && from && to) {
+      if (canManage && !isInventory && from && to) {
         const targetShopId = selectedShopId ?? visibleTable.shop.id;
         if (targetShopId) {
           try {
@@ -407,7 +416,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return;
     }
     void loadTable();
-  }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory]);
+  }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory, stockKind]);
 
   const visibleRows = useMemo(() => {
     if (!table) {
@@ -565,10 +574,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       'Вес упаковки, кг',
       'Срок годности, сут',
       'Цена в руб, с НДС',
-      ...DASHBOARD_COLUMNS.map((column) => {
+      ...(isInventory ? table.dates.map((date) => `Остаток (${date})`) : DASHBOARD_COLUMNS.map((column) => {
         const subtitle = dashboardColumnSubtitle(column).replace('\n', ' ');
         return subtitle ? `${column.title} (${subtitle})` : column.title;
-      }),
+      })),
     ];
     const dataRows = orderedRows.map((row) => {
       const values = dashboardRowValues(row);
@@ -580,12 +589,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         row.packWeightKg !== null ? String(row.packWeightKg) : '',
         row.shelfLifeDays !== null ? String(row.shelfLifeDays) : '',
         row.unitPriceRubVat !== null && row.unitPriceRubVat !== undefined ? String(row.unitPriceRubVat) : '',
-        ...DASHBOARD_COLUMNS.map((column) => values[column.key] ?? ''),
+        ...(isInventory ? table.dates.map((date) => row.values[date] ?? '') : DASHBOARD_COLUMNS.map((column) => values[column.key] ?? '')),
       ];
     });
 
     const csv = `\uFEFF${buildCsv([headerRow, ...dataRows])}`;
-    const fileName = safeFileName(`manager_dashboard_${table.shop.name}_${table.from}_${table.to}.csv`);
+    const fileName = safeFileName(`${isInventory ? 'inventory' : 'manager_dashboard'}_${table.shop.name}_${table.from}_${table.to}.csv`);
 
     if (Platform.OS === 'web') {
       const browser = globalThis as typeof globalThis & {
@@ -669,6 +678,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         productId: currentCell.productId,
         date: currentCell.date,
         value: nextValue,
+        kind: stockKind,
       });
 
       setTable((current) => {
@@ -1327,7 +1337,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
       <View style={styles.tableWrap}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
-          {canManage && isMilkTable
+          {isInventory
+            ? renderTable(orderedRows)
+            : canManage && isMilkTable
             ? renderDashboardTable(orderedRows)
             : canManage
               ? renderDailyManagerTable(orderedRows)
@@ -1431,6 +1443,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const tabs: Array<{ key: ScreenTab; label: string }> = canManage
     ? [
         { key: 'stock', label: 'Остатки' },
+        { key: 'inventory', label: 'Инвентаризация' },
         { key: 'orderSheet', label: 'Заказ' },
         { key: 'audioQc', label: 'AI QC' },
         { key: 'tasks', label: 'Задачи' },
@@ -1439,6 +1452,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       ]
     : [
         { key: 'stock', label: 'Остатки' },
+        { key: 'inventory', label: 'Инвентаризация' },
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
@@ -1636,7 +1650,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
               value={editingValue}
               onChangeText={(value) => setEditingValue(sanitizeStockValue(value))}
               style={styles.modalInput}
-              placeholder="0-15"
+              placeholder="0-50"
               placeholderTextColor="#7a8b7f"
               keyboardType="number-pad"
               maxLength={2}

@@ -222,6 +222,26 @@ test('Dubai stock schemas validate operational fields', () => {
     date: '2026-02-31',
     value: '12',
   }));
+  assert.equal(upsertStockValueSchema.parse({
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    date: '2026-05-06',
+    value: '12',
+  }).kind, 'stock');
+  assert.equal(upsertStockValueSchema.parse({
+    kind: 'inventory',
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    date: '2026-05-06',
+    value: '12',
+  }).kind, 'inventory');
+  assert.throws(() => upsertStockValueSchema.parse({
+    kind: 'orders',
+    shopId: 'shop_main',
+    productId: 'prod_1',
+    date: '2026-05-06',
+    value: '12',
+  }));
   assert.equal(updateProductMetaSchema.parse({ unitsInPack: 6 }).unitsInPack, 6);
   assert.equal(updateProductSchema.parse({
     name: 'Updated apples',

@@ -34,12 +34,15 @@ export type CreateProductPayload = {
   maxStockUnits: number;
 };
 
+export type StockValueKind = 'stock' | 'inventory';
+
 type StockListQuery = {
   shopId?: string;
   businessCategory?: BusinessCategory;
   from?: string;
   to?: string;
   range?: 'week' | 'year';
+  kind?: StockValueKind;
 };
 
 const toQueryString = (query: StockListQuery): string => {
@@ -58,6 +61,9 @@ const toQueryString = (query: StockListQuery): string => {
   }
   if (query.range) {
     params.set('range', query.range);
+  }
+  if (query.kind && query.kind !== 'stock') {
+    params.set('kind', query.kind);
   }
   const serialized = params.toString();
   return serialized ? `?${serialized}` : '';
@@ -143,6 +149,7 @@ export const stockApi = {
       productId: string;
       date: string;
       value: string;
+      kind?: StockValueKind;
     },
   ): Promise<void> => {
     await request<{}>('/api/stock/value', {

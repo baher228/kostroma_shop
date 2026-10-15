@@ -57,6 +57,8 @@ export type DashboardColumn = {
   dateKind?: 'none' | 'day' | 'range';
   dateWeek?: DashboardWeekRef;
   dateDay?: WeekSlot;
+  // Shifts only the header date, not the stock date the column reads.
+  dateOffsetDays?: number;
   dateFrom?: WeekSlot;
   dateTo?: WeekSlot;
   dateToWeek?: DashboardWeekRef;
@@ -84,8 +86,8 @@ export const DASHBOARD_COLUMNS: DashboardColumn[] = [
   { key: 'currentSun', title: 'Текущий остаток', subtitle: 'Воскрес', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
   { key: 'orderPackTue', title: 'Заказ упаковок на вторник', subtitle: 'Воскрес', kind: 'order', tone: 'order', dateKind: 'day', dateWeek: 'current', dateDay: 'sun' },
   { key: 'orderUnitsTue', title: 'Заказ штук', subtitle: '', kind: 'order', tone: 'neutral', dateKind: 'none' },
-  { key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon' },
+  { key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon', dateOffsetDays: WEEK_DAYS },
   { key: 'soldPrevFriMon', title: 'Продано на прошлой неделе', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'previous' },
-  { key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon' },
+  { key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon', dateOffsetDays: WEEK_DAYS },
   { key: 'soldFriMon', title: 'Продано', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
 ];

@@ -623,6 +623,13 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [now, setNow] = useState(() => Date.now());
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(() => new Set());
+  const toggleCard = (key: string) => setExpandedCards((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
   const taskCards = toTaskCards(tasks);
   const openCount = taskCards.filter((card) => card.status === 'open').length;
   const overdueCount = taskCards.filter((card) => card.members.some((member) => member.overdue)).length;
@@ -874,6 +881,9 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                   const due = taskDueLabel(card, now);
                   const single = card.members.length === 1 ? card.members[0] : null;
                   const doneCount = card.members.filter((member) => member.status === 'done').length;
+                  const reviewCount = card.members.filter((member) => member.photoReviewStatus === 'pending').length;
+                  const expanded = expandedCards.has(card.key);
+                  const shopListId = `task-shops-${card.key}`;
                   const activeSeries = card.seriesId ? seriesById[card.seriesId] : undefined;
                   return (
                     <li key={card.key} className={`task-row task-row-${group.key}`} aria-busy={card.members.some((member) => pendingId === member.id)}>
@@ -899,8 +909,19 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                             <div className="task-row-meta">
                               <span className="task-shop">Магазинов: {card.members.length}</span>
                               <span>Выполнено {doneCount} из {card.members.length}</span>
+                              {reviewCount > 0 && <span className="task-review-count">На проверке: {reviewCount}</span>}
+                              <button
+                                type="button"
+                                className="task-shops-toggle"
+                                aria-expanded={expanded}
+                                aria-controls={shopListId}
+                                onClick={() => toggleCard(card.key)}
+                              >
+                                {expanded ? 'Скрыть магазины' : 'Показать магазины'}
+                                <span aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+                              </button>
                             </div>
-                            <ul className="task-shop-list">
+                            {expanded && <ul className="task-shop-list" id={shopListId}>
                               {[...card.members]
                                 .sort((a, b) => taskShopLabel(a, tabletsById, shopsById).localeCompare(taskShopLabel(b, tabletsById, shopsById), 'ru'))
                                 .map((member) => (
@@ -913,7 +934,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                                     <span className="actions">{renderActions(member, true)}</span>
                                   </li>
                                 ))}
-                            </ul>
+                            </ul>}
                           </>
                         )}
                       </div>

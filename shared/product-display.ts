@@ -5,6 +5,7 @@ const BUTTER_LABELS: Array<[RegExp, string]> = [
 
 const BREAD_SECTION_BREAK_PRODUCTS = new Set([
   'Батон Зерновой 0.350 нарезка',
+  'Хлеб Тостовый Бородинский 0.430 нарезка',
   'Багет простой 0.250',
 ]);
 

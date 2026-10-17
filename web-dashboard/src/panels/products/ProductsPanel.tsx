@@ -17,7 +17,6 @@ import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
   computeDashboardSold,
-  computeSold,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
   type DashboardWeeks,
@@ -761,27 +760,11 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     </section>
   );
 
-  const stockFor = (row: Product, date: string): number | null => {
-    const raw = row.values[date];
-    if (!raw) return null;
-    const parsed = Number.parseInt(raw, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
+  // Хлеб's formula for every daily category: Остаток вечер (D-1) + Заказ на D − Остаток вечер D, blanks count as 0.
   const soldFor = (row: Product, date: string): string => {
-    if (activeBusinessCategory === 'Хлеб') {
-      const previousDate = addDays(date, -1);
-      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previousDate), row.unitsInPack ?? 1);
-      return computeDashboardSold(row.values[previousDate], deliveryUnits, row.values[date]);
-    }
-    if (activeBusinessCategory === 'Деликатесы') {
-      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, date), row.unitsInPack ?? 1);
-      return computeSold(row.values[addDays(date, -1)], deliveryUnits, row.values[date]);
-    }
-    const previous = stockFor(row, addDays(date, -1));
-    const current = stockFor(row, date);
-    if (previous === null || current === null) return '';
-    return String(Math.max(0, previous - current));
+    const previousDate = addDays(date, -1);
+    const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previousDate), row.unitsInPack ?? 1);
+    return computeDashboardSold(row.values[previousDate], deliveryUnits, row.values[date]);
   };
 
   const renderInventoryTable = (rows: Product[]) => (

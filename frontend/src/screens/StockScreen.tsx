@@ -50,7 +50,6 @@ import { sortStockTableRowsLikeImage } from '../constants/productOrdering';
 import {
   buildDashboardRowValues,
   computeDashboardSold,
-  computeSold,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
   isManualOrderKey,
@@ -938,31 +937,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     </View>
   );
 
-  const stockNumberFor = (row: StockTableRow, date: string): number | null => {
-    const raw = row.values[date];
-    if (!raw) {
-      return null;
-    }
-    const parsed = Number.parseInt(raw, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
+  // Хлеб's formula for every daily category: Остаток вечер (D-1) + Заказ на D − Остаток вечер D, blanks count as 0.
   const soldForDate = (row: StockTableRow, date: string): string => {
-    if (activeBusinessCategory === 'Хлеб') {
-      const previousDate = shiftDateKey(date, -1);
-      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previousDate), row.unitsInPack ?? 1);
-      return computeDashboardSold(row.values[previousDate], deliveryUnits, row.values[date]);
-    }
-    if (activeBusinessCategory === 'Деликатесы') {
-      const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, date), row.unitsInPack ?? 1);
-      return computeSold(row.values[shiftDateKey(date, -1)], deliveryUnits, row.values[date]);
-    }
-    const previous = stockNumberFor(row, shiftDateKey(date, -1));
-    const current = stockNumberFor(row, date);
-    if (previous === null || current === null) {
-      return '';
-    }
-    return String(Math.max(0, previous - current));
+    const previousDate = shiftDateKey(date, -1);
+    const deliveryUnits = orderUnitsFromPacks(orderPacksForDate(row.productId, previousDate), row.unitsInPack ?? 1);
+    return computeDashboardSold(row.values[previousDate], deliveryUnits, row.values[date]);
   };
 
   const setDailyOrderValue = (productId: string, orderDate: string, value: string) => {

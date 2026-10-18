@@ -181,7 +181,14 @@ export class GigaChatAnalysisProvider implements LlmAnalysisProvider {
       for (const segment of source.slice(0, 30)) {
         const entry = { speaker: segment.speaker, text: segment.text };
         const size = JSON.stringify(entry).length + 1;
-        if (used + size > neighborBudget) break;
+        if (used + size > neighborBudget) {
+          // Plain-text STT may put the entire recording in one segment. Keep
+          // its relevant edge instead of dropping an otherwise ready neighbor.
+          // Six serialized characters per UTF-16 unit covers JSON escaping.
+          const chars = Math.floor((neighborBudget - used - JSON.stringify({ ...entry, text: '' }).length - 1) / 6);
+          if (chars > 0) segments.push({ ...entry, text: tail ? entry.text.slice(-chars) : entry.text.slice(0, chars) });
+          break;
+        }
         segments.push(entry); used += size;
       }
       if (!segments.length) return null;

@@ -2784,6 +2784,33 @@ td.sticky {
   border-bottom: 4px solid #526557;
 }
 
+.manager-stock-table .week-end-col {
+  border-right: 4px solid #526557;
+}
+
+.weekday-header-table col.dashboard-col-stock-width,
+.weekday-header-table col.dashboard-col-order-width,
+.weekday-header-table col.dashboard-col-metric-width {
+  width: 85px;
+}
+
+.manager-dashboard-table.weekday-header-table thead th:not(:first-child) {
+  padding: 4px 2px;
+  font-size: 13px;
+}
+
+.manager-dashboard-table.weekday-header-table thead th:not(:first-child) * {
+  font-size: inherit;
+}
+
+.manager-dashboard-table.weekday-header-table th small {
+  white-space: pre-line;
+}
+
+.manager-stock-table .week-stock-col {
+  font-weight: 700;
+}
+
 .manager-stock-table th {
   background: #f0f4f1;
   color: #233228;

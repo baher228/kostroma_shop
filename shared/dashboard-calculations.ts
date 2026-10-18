@@ -83,6 +83,13 @@ export const computeSold = (startRaw?: string, deliveryRaw?: string, endRaw?: st
   return String(Math.max(0, start + delivery - end));
 };
 
+export const computeStockWithOrder = (stockRaw?: string, orderUnitsRaw?: string): string => {
+  if (!hasValue(stockRaw) && !hasValue(orderUnitsRaw)) {
+    return '';
+  }
+  return String((parseStockNumber(stockRaw) ?? 0) + (parseStockNumber(orderUnitsRaw) ?? 0));
+};
+
 export const computeDashboardSold = (startRaw?: string, deliveryRaw?: string, endRaw?: string): string => {
   if (!hasValue(startRaw) && !hasValue(deliveryRaw) && !hasValue(endRaw)) {
     return '';

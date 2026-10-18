@@ -270,6 +270,19 @@ test('QC unavailable neighbors cannot be claimed as a confirmed continuation', a
   assert.equal(result.analysis.quality.criteria.closing.status, 'not_applicable');
 });
 
+test('QC keeps context edges when plain-text STT returns one oversized utterance', async () => {
+  let payload;
+  const provider = new GigaChatAnalysisProvider({credentials:'test',maxTranscriptChars:3000},()=>({
+    chat:async request=>{payload=request;return completion();},
+  }));
+  const neighbor={language:'ru',gapSeconds:10,segments:[{speaker:'unknown',text:`head ${'x'.repeat(20000)} tail`}]};
+  await provider.analyzeDialog(transcript,{previous:neighbor,next:neighbor});
+  assert.ok(payload.messages[1].content.length<=3000);
+  const context=JSON.parse(payload.messages[1].content).context;
+  assert.ok(context.previous.segments[0].text.endsWith(' tail'));
+  assert.ok(context.next.segments[0].text.startsWith('head '));
+});
+
 test('QC incomplete boundaries exclude missing greeting and closing from the score', () => {
   const analysis = validAnalysis(8);
   analysis.boundaries.start = 'continues_previous';

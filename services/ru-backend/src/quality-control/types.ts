@@ -24,6 +24,10 @@ export type TranscriptSegment = {
 export type DialogTranscript = {
   sessionId: string; language: string | null; duration: number | null; segments: TranscriptSegment[];
 };
+export type DialogNeighbor = {
+  language: string | null; gapSeconds: number; segments: Array<Pick<TranscriptSegment, 'speaker' | 'text'>>;
+};
+export type DialogContext = { previous: DialogNeighbor | null; next: DialogNeighbor | null };
 export type ProviderMetadata = {
   provider: string; model: string | null; latencyMs?: number;
   inputTokens?: number; outputTokens?: number; totalTokens?: number;
@@ -36,7 +40,7 @@ export type AnalysisResult = {
   analysis: DialogAnalysis; metadata: ProviderMetadata;
   promptVersion: string; scorecardVersion: string; schemaVersion: string;
 };
-export interface LlmAnalysisProvider { analyzeDialog(transcript: DialogTranscript): Promise<AnalysisResult> }
+export interface LlmAnalysisProvider { analyzeDialog(transcript: DialogTranscript, context?: DialogContext): Promise<AnalysisResult> }
 export interface QcStorage {
   put(key: string, audio: Buffer, mimeType: string): Promise<void>;
   get(key: string, bucket?: string): Promise<Buffer>;

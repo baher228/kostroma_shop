@@ -20,7 +20,7 @@ const harness=(options={})=>{
     messageImportsComplete:async()=>options.importsComplete!==false,
     updateGmailDelivery:async(id,patch)=>{stages.push(patch.status||'update');if(patch.status==='sent'&&options.commitError){options.commitError=false;throw Error('lost DB commit response');}Object.assign(jobs.find(j=>j.id===id),patch);}};
   const run=createGmailDeliveryProcessor({repository:repo,withLock:async fn=>fn(new AbortController().signal),getConnection:async()=>connection,
-    rowsForMessage:async()=>[{...row}],build:options.build||(async()=>({files:[{name:'price-tags.pdf',body:Buffer.from('%PDF-tag')}],manifest})),
+    rowsForMessage:async()=>options.tableRows??[{...row}],build:options.build||(async()=>({files:[{name:'price-tags.pdf',body:Buffer.from('%PDF-tag')}],manifest})),
     upload:async({key,body})=>objects.set(key,body),download:async key=>({body:objects.get(key),contentType:'application/zip',contentLength:3}),downloadUrl:async()=> 'https://private.example/package?signature=secret'});
   return {run,jobs,sends,stages,settings,connection,objects,setFoundSent:id=>{foundSent=id;}};
 };
@@ -92,6 +92,18 @@ test('full outbox builds once, fences before send and never sends terminal deliv
   const body=Buffer.from(mime.split('Content-Transfer-Encoding: base64\r\n\r\n')[1].split('\r\n--')[0],'base64').toString();
   assert.equal(body,'');
   assert.deepEqual(h.jobs[0].manifest.missingPosters,['Сервелат']);
+});
+
+test('automatic preparation rereads the consolidated table after a retry, while manual sends preserve their snapshot',async()=>{
+  const oldRows=[row,{...row,startDate:'2026-10-21',endDate:'2026-10-30'}];
+  const tableRows=[{...row,endDate:'2026-10-30'}];
+  const snapshots=[];
+  const build=async rows=>{snapshots.push(rows);return {files:[{name:'one.pdf',body:Buffer.from('%PDF')}],manifest};};
+  const automatic=harness({job:{...job(),rows_snapshot:oldRows},tableRows,build});
+  await automatic.run();assert.deepEqual(automatic.jobs[0].rows_snapshot,tableRows);
+  const manual=harness({job:{...job(),message_id:null,manual:true,rows_snapshot:oldRows},tableRows,build});
+  await manual.run();assert.deepEqual(manual.jobs[0].rows_snapshot,oldRows);
+  assert.deepEqual(snapshots,[tableRows,oldRows]);
 });
 test('packages wait for all message imports, recipient, send consent and original mailbox; manual send bypasses only auto toggle',async()=>{
   const incomplete=harness({importsComplete:false});await incomplete.run();assert.equal(incomplete.jobs[0].status,'queued');assert.equal(incomplete.objects.size,0);

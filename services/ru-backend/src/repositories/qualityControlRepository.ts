@@ -6,7 +6,7 @@ import type { SessionUser } from '../domain/types';
 import { classifyQuality, validateAnalysis } from '../quality-control/analysis';
 import { qcConfig } from '../quality-control/config';
 import { retentionForAnalysis } from '../quality-control/retention';
-import { AnalysisResult, CreateSessionInput, DialogTranscript, ProviderMetadata, QcError, QcFilters, QcJob, QcMedia, QcSession, SttResult } from '../quality-control/types';
+import { AnalysisResult, CreateSessionInput, DialogContext, DialogTranscript, ProviderMetadata, QcError, QcFilters, QcJob, QcMedia, QcSession, SttResult } from '../quality-control/types';
 
 type Row = Record<string, any>;
 type Queryable = Pick<Database, 'query'>;
@@ -209,6 +209,59 @@ export class QualityControlRepository {
     const result = await this.db.query('SELECT * FROM qc_transcripts WHERE session_id=$1 ORDER BY created_at DESC LIMIT 1', [sessionId]);
     const r = result.rows[0];
     return r ? { id: r.id, transcript: await this.readTranscript(r.id), metadata: r.technical_metadata, createdAt: iso(r.created_at) } : null;
+  }
+
+  async readDialogContext(sessionId: string): Promise<{ context: DialogContext; waiting: boolean }> {
+    const current = (await this.db.query(`SELECT s.*,r.device_id FROM qc_sessions s
+      LEFT JOIN audio_qc_recordings r ON r.local_recording_id=s.external_session_id AND r.shop_id=s.shop_id
+      WHERE s.id=$1`, [sessionId])).rows[0];
+    if (!current) throw new QcError('SESSION_NOT_FOUND', 'QC session not found.', 404);
+    const context: DialogContext = { previous: null, next: null };
+    // The existing tablet recording registry supplies stable device identity.
+    // An uploader account alone is insufficient when several tablets share it.
+    if (!current.device_id) return { context, waiting: true };
+    let waiting = false;
+    for (const direction of ['previous', 'next'] as const) {
+      const previous = direction === 'previous';
+      // Select the immediate recording first. Never skip an untranscribed or
+      // incompatible neighbor to borrow a more distant conversation instead.
+      const result = await this.db.query(`SELECT s.*,r.device_id AS context_device_id,
+        (SELECT t.id FROM qc_transcripts t WHERE t.session_id=s.id ORDER BY t.created_at DESC,t.id DESC LIMIT 1) AS transcript_id
+        FROM qc_sessions s LEFT JOIN audio_qc_recordings r
+          ON r.local_recording_id=s.external_session_id AND r.shop_id=s.shop_id
+        WHERE s.shop_id=$1 AND s.created_by=$2
+          AND (r.device_id=$5 OR r.device_id IS NULL)
+          AND (s.started_at,s.id) ${previous ? '<' : '>'} ($3::timestamptz,$4::text)
+        ORDER BY s.started_at ${previous ? 'DESC' : 'ASC'},s.id ${previous ? 'DESC' : 'ASC'} LIMIT 1`,
+      [current.shop_id, current.created_by, current.started_at, current.id, current.device_id]);
+      const neighbor = result.rows[0];
+      if (!neighbor) { if (!previous) waiting = true; continue; }
+      if (!neighbor.context_device_id) { waiting = true; continue; }
+      if (neighbor.seller_id !== current.seller_id || neighbor.shift_id !== current.shift_id) continue;
+      const end = previous ? neighbor.ended_at : current.ended_at;
+      if (!end) continue;
+      const gapSeconds = (new Date(previous ? current.started_at : neighbor.started_at).getTime() - new Date(end).getTime()) / 1000;
+      // Permit the standard pre-roll overlap but never borrow distant audio.
+      if (gapSeconds < -10 || gapSeconds > 120) continue;
+      if (!neighbor.transcript_id) {
+        if (!['transcription_failed','analysis_failed'].includes(neighbor.status)) waiting = true;
+        continue;
+      }
+      const transcript = await this.readTranscript(neighbor.transcript_id);
+      context[direction] = { language: transcript.language, gapSeconds, segments: transcript.segments };
+    }
+    return { context, waiting };
+  }
+
+  async deferAnalysisForContext(job: QcJob, delayMs: number): Promise<boolean> {
+    return this.transaction(async client => {
+      if (!await this.ownedJob(client, job)) return false;
+      await client.query(`UPDATE qc_processing_jobs SET status='queued',attempt=GREATEST(0,attempt-1),
+        available_at=NOW()+($2 * INTERVAL '1 millisecond'),lease_token=NULL,lease_expires_at=NULL,updated_at=NOW()
+        WHERE id=$1`, [job.id, delayMs]);
+      await client.query("UPDATE qc_sessions SET status='analysis_queued',updated_at=NOW() WHERE id=$1", [job.sessionId]);
+      return true;
+    });
   }
 
   async getAnalysis(user: SessionUser, sessionId: string, history = false) {

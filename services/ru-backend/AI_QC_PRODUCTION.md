@@ -1,5 +1,39 @@
 # AI QC production release
 
+## Dialog boundaries (2026-10-18)
+
+Migration `018_qc_dialog_context.sql` raises the silence default from 3 to 10
+seconds and upgrades policies still set to 3; other configured values remain.
+Existing tablets fetch the policy without an APK rebuild. The native VAD
+algorithm and its safety limits are unchanged.
+
+Analysis prompt/schema 1.2 receives the tail of the previous recording and the
+head of the next (up to 30 utterances / 6000 serialized characters per neighbor,
+further reduced to fit the configured input limit). Only immediate recordings
+from the same shop, tablet device, uploader, seller and shift qualify. Device
+identity comes from the existing `audio_qc_recordings` registry. Allowed gaps
+are -10 to 120 seconds, covering pre-roll overlap. Missing registry metadata or
+transcripts never cause the worker to substitute a different conversation.
+
+Production waits up to six minutes from analysis-job creation for missing
+context, releasing the lease between checks without consuming failure retries.
+This covers a normal five-minute following recording plus upload/STT time.
+Afterward analysis completes with available context; a manager can reanalyze
+later if an offline tablet uploads the neighbor after that deadline.
+
+Results expose `boundaries` (start/end relationship, confidence, explanation)
+in the dashboard. Uncertain or external start/end boundaries exclude the
+greeting/closing criteria from scoring. Neighbor excerpts cannot support
+evidence against the current recording; evidence still refers only to its own
+segments. Speaker labels are local to each recording. Results remain per
+recording; this release does not merge audio files or turn several recordings
+into one analytics row. Historical schema 1.0/1.1 results remain viewable.
+
+Both embedded and Docker PostgreSQL integration tests cover context selection,
+device isolation, overlap, missing STT, lease fencing and bounded waiting.
+These checks use fake AI providers and do not measure real-world boundary
+accuracy; validate representative live recordings separately.
+
 ## Configuration and deployment
 
 Production RU Compose includes MinIO with the `qc` profile and a persistent

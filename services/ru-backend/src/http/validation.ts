@@ -286,7 +286,7 @@ export const audioQcPolicySchema = z.object({
   enabled: z.boolean(),
   mode: z.enum(['manual', 'vad_auto']),
   maxSegmentDurationSec: z.number().int().min(30).max(1800).default(300),
-  silenceToStopSec: z.number().int().min(1).max(30).default(3),
+  silenceToStopSec: z.number().int().min(1).max(30).default(10),
   preRollSec: z.number().int().min(0).max(30).default(5),
   uploadImmediately: z.boolean().default(true),
 }).strict();

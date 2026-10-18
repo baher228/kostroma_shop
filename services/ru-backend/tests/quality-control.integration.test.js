@@ -23,7 +23,7 @@ test('all Russia migrations apply and the existing migration runner is repeatabl
   const first = await db.query('SELECT name FROM schema_migrations ORDER BY name');
   const migrationCount = readdirSync(path.resolve(__dirname, '../migrations')).filter(name => name.endsWith('.sql')).length;
   assert.equal(first.rows.length, migrationCount);
-  assert.equal(first.rows.at(-1).name, '017_task_series_weekday_sets.sql');
+  assert.equal(first.rows.at(-1).name, '018_qc_dialog_context.sql');
   await migrate();
   assert.deepEqual((await db.query('SELECT name FROM schema_migrations ORDER BY name')).rows, first.rows);
   const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'qc_%'");
@@ -52,7 +52,8 @@ const manager = { id: 'u_manager_01', username: 'manager', firstName: 'Main', la
 const workerUser = { id: 'u_worker_01', username: 'worker', firstName: 'Store', lastName: 'Worker', fullName: 'Store Worker', role: 'worker', shopId: 'shop_main', shopName: null };
 const otherWorker = { ...workerUser, id: 'other-worker' };
 const makeAnalysis = (score, sentiment = 'negative') => ({
-  schemaVersion: '1.1',
+  schemaVersion: '1.2',
+  boundaries: { start: 'starts_here', end: 'ends_here', confidence: 'high', explanation: 'Explicit greeting and goodbye.' },
   summary: { short: 'Клиент выбрал товар.', customerIntent: 'Подобрать товар.', outcome: 'Товар подобран.' },
   quality: { overallScore: 0, criteria: Object.fromEntries(criterionKeys.map(key => [key, {
     score, maxScore: 10, status: score >= 8 ? 'good' : score >= 6 ? 'neutral' : 'needs_improvement', comment: 'Проверено по диалогу.',
@@ -128,7 +129,7 @@ test('QC audio MVP runs asynchronously end-to-end, preserves history and aggrega
     analysis: { async analyzeDialog(transcript) {
       assert.equal(transcript.sessionId, session.id);
       return { analysis: makeAnalysis(analysisScore), metadata: { provider: 'gigachat', model: 'test-model', latencyMs: 8 },
-        promptVersion: '1.1', scorecardVersion: '1.0', schemaVersion: '1.1' };
+        promptVersion: '1.2', scorecardVersion: '1.0', schemaVersion: '1.2' };
     } },
     maxAttempts: 3, retryBaseMs: 1, leaseMs: 60_000, pollIntervalMs: 50,
   });
@@ -197,7 +198,7 @@ test('QC unpin restores critical-problem retention from the canonical analysis',
     stt: { async transcribe({ sessionId }) { return { transcript: { sessionId, language: 'ru', duration: 1,
       segments: [{ start: null, end: null, speaker: 'unknown', text: 'Тест.' }] }, metadata: { provider: 'nexara', model: 'test' } }; } },
     analysis: { async analyzeDialog() { return { analysis, metadata: { provider: 'gigachat', model: 'test' },
-      promptVersion: '1.1', scorecardVersion: '1.0', schemaVersion: '1.1' }; } },
+      promptVersion: '1.2', scorecardVersion: '1.0', schemaVersion: '1.2' }; } },
     maxAttempts: 2, retryBaseMs: 1, leaseMs: 60000, pollIntervalMs: 50 });
   await worker.runOnce();
   await worker.runOnce();
@@ -321,4 +322,106 @@ test('QC MinIO adapter uses the existing private bucket with bounded S3 operatio
   timeout.client = { send(_command, options) { return new Promise((_resolve, reject) => options.abortSignal.addEventListener('abort',
     () => reject(Object.assign(new Error('private'), { name: 'AbortError' })), { once: true })); } };
   await assert.rejects(timeout.get('slow.wav'), { code: 'STORAGE_TIMEOUT', retryable: true });
+});
+
+async function contextRecording(label, startedAt, endedAt, options = {}) {
+  const repository = new QualityControlRepository(db);
+  const session = await repository.createSession(options.creator ?? manager, {
+    shopId:'shop_main',sellerId:options.sellerId === undefined ? workerUser.id : options.sellerId,
+    externalSessionId:`context-${label}`,startedAt,endedAt,
+  });
+  if (options.device !== null) await db.query(`INSERT INTO audio_qc_recordings
+    (local_recording_id,shop_id,device_id,started_at,ended_at,app_version,timezone,recording_mode,status)
+    VALUES($1,'shop_main',$2,$3,$4,'test','Europe/Moscow','vad_auto','completed')`,
+  [session.externalSessionId,options.device ?? 'context-tablet',startedAt,endedAt]);
+  if (options.transcribed !== false) {
+    await db.query(`INSERT INTO qc_media(id,session_id,type,storage_key,storage_bucket,original_filename,mime_type,size,sha256)
+      VALUES($1,$2,'audio',$1,'test','test.wav','audio/wav',64,'test')`,[`media-${label}`,session.id]);
+    await db.query(`INSERT INTO qc_transcripts(id,session_id,media_id,provider,language,duration)
+      VALUES($1,$2,$3,'test','ru',60)`,[`transcript-${label}`,session.id,`media-${label}`]);
+    await db.query(`INSERT INTO qc_transcript_segments(id,transcript_id,position,speaker,text)
+      VALUES($1,$2,0,'speaker_0',$3)`,[`segment-${label}`,`transcript-${label}`,label]);
+  }
+  return session;
+}
+
+test('QC context uses two immediate recordings from the same tablet, uploader and seller', async () => {
+  const repository = new QualityControlRepository(db);
+  await contextRecording('before','2027-01-01T10:00:00Z','2027-01-01T10:01:00Z');
+  const current = await contextRecording('current','2027-01-01T10:01:10Z','2027-01-01T10:02:10Z');
+  await contextRecording('other-tablet','2027-01-01T10:02:11Z','2027-01-01T10:02:19Z',{device:'another-tablet'});
+  await contextRecording('other-uploader','2027-01-01T10:02:12Z','2027-01-01T10:02:19Z',{creator:workerUser});
+  const after = await contextRecording('after','2027-01-01T10:02:20Z','2027-01-01T10:03:00Z');
+  const result = await repository.readDialogContext(current.id);
+  assert.equal(result.waiting,false);
+  assert.equal(result.context.previous.segments[0].text,'before');
+  assert.equal(result.context.next.segments[0].text,'after');
+  assert.equal(result.context.previous.gapSeconds,10);
+  assert.equal(result.context.next.gapSeconds,10);
+  const unregistered=await contextRecording('pending-device','2027-01-01T10:02:15Z','2027-01-01T10:02:19Z',{device:null});
+  assert.equal((await repository.readDialogContext(current.id)).context.next,null);
+  assert.equal((await repository.readDialogContext(current.id)).waiting,true);
+  // Keep this fixture isolated after proving it blocks substitution.
+  await db.query("UPDATE qc_sessions SET started_at='2028-01-01T10:00:00Z',ended_at='2028-01-01T10:01:00Z' WHERE id=$1",[unregistered.id]);
+  await db.query('UPDATE qc_sessions SET seller_id=NULL WHERE id=$1',[after.id]);
+  assert.equal((await repository.readDialogContext(current.id)).context.next,null);
+  const noDevice = await contextRecording('no-device','2027-01-02T10:00:00Z','2027-01-02T10:01:00Z',{device:null});
+  assert.deepEqual((await repository.readDialogContext(noDevice.id)).context,{previous:null,next:null});
+});
+
+test('QC pause migration raises the old default and preserves a custom silence threshold', async () => {
+  const {readFileSync}=require('node:fs');
+  await db.query(`INSERT INTO audio_qc_policies(id,shop_id,silence_to_stop_sec)
+    VALUES('pause-old','pause-old',3),('pause-custom','pause-custom',15)`);
+  await db.query(readFileSync(path.resolve(__dirname,'../migrations/018_qc_dialog_context.sql'),'utf8'));
+  const rows=(await db.query("SELECT id,silence_to_stop_sec FROM audio_qc_policies WHERE id LIKE 'pause-%' ORDER BY id")).rows;
+  assert.deepEqual(rows,[{id:'pause-custom',silence_to_stop_sec:15},{id:'pause-old',silence_to_stop_sec:10}]);
+});
+
+test('QC context allows pre-roll overlap, rejects distant recordings and never skips an untranscribed neighbor', async () => {
+  const repository = new QualityControlRepository(db);
+  await contextRecording('older-ready','2027-02-01T09:59:00Z','2027-02-01T10:00:00Z',{device:'overlap-tablet'});
+  const previous = await contextRecording('pending-neighbor','2027-02-01T10:00:00Z','2027-02-01T10:01:15Z',{device:'overlap-tablet',transcribed:false});
+  const current = await contextRecording('overlap-current','2027-02-01T10:01:10Z','2027-02-01T10:02:10Z',{device:'overlap-tablet'});
+  const next = await contextRecording('overlap-next','2027-02-01T10:02:05Z','2027-02-01T10:03:00Z',{device:'overlap-tablet'});
+  const result = await repository.readDialogContext(current.id);
+  assert.equal(result.context.previous,null);
+  assert.equal(result.waiting,true);
+  assert.equal(result.context.next.gapSeconds,-5);
+  await db.query("UPDATE qc_sessions SET started_at='2027-02-01T10:10:00Z',ended_at='2027-02-01T10:11:00Z' WHERE id=$1",[next.id]);
+  assert.equal((await repository.readDialogContext(current.id)).context.next,null);
+  await db.query("UPDATE qc_sessions SET status='transcription_failed' WHERE id=$1",[previous.id]);
+  assert.equal((await repository.readDialogContext(current.id)).waiting,false);
+});
+
+test('QC waits for neighbor STT without spending retries, fences stale workers and completes after the bounded wait', async () => {
+  const repository = new QualityControlRepository(db);
+  // Keep unrelated fixtures out of this worker's polling window.
+  await db.query("UPDATE qc_processing_jobs SET available_at=NOW()+INTERVAL '1 day' WHERE status='queued'");
+  const current = await contextRecording('wait-current','2027-03-01T10:00:00Z','2027-03-01T10:01:00Z',{device:'wait-tablet'});
+  await db.query(`INSERT INTO qc_processing_jobs(id,session_id,stage,transcript_id,idempotency_key)
+    VALUES('context-wait-job',$1,'analysis','transcript-wait-current','context-test')`,[current.id]);
+  let calls=0;
+  const worker = new QualityControlWorker({repository,storage:{},stt:{},
+    analysis:{async analyzeDialog(_transcript,context){
+      calls++;assert.deepEqual(context,{previous:null,next:null});
+      const analysis=makeAnalysis(8);analysis.boundaries={start:'unknown',end:'unknown',confidence:'low',explanation:'No adjacent audio available.'};
+      return {analysis,metadata:{provider:'test',model:'test'},promptVersion:'1.2',scorecardVersion:'1.0',schemaVersion:'1.2'};
+    }},maxAttempts:1,retryBaseMs:1,leaseMs:60000,pollIntervalMs:10,contextWaitMs:360000});
+  await worker.runOnce();
+  let status=await repository.getStatus(manager,current.id);
+  assert.equal(status.status,'analysis_queued');assert.equal(status.latestJob.attempt,0);assert.equal(calls,0);
+  await db.query("UPDATE qc_processing_jobs SET available_at=NOW() WHERE id='context-wait-job'");
+  const stale=await repository.claimJob(2,60000);
+  await db.query("UPDATE qc_processing_jobs SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE id=$1",[stale.id]);
+  const replacement=await repository.claimJob(2,60000);
+  assert.equal(await repository.deferAnalysisForContext(stale,10000),false);
+  assert.equal(await repository.deferAnalysisForContext(replacement,10000),true);
+  await db.query("UPDATE qc_processing_jobs SET created_at=NOW()-INTERVAL '7 minutes',available_at=NOW(),attempt=0 WHERE id='context-wait-job'");
+  await worker.runOnce();
+  status=await repository.getStatus(manager,current.id);
+  assert.equal(calls,1);assert.equal(status.status,'completed');
+  const result=await repository.getAnalysis(manager,current.id);
+  assert.equal(result.structuredResult.boundaries.confidence,'low');
+  assert.equal(result.structuredResult.quality.criteria.closing.status,'not_applicable');
 });

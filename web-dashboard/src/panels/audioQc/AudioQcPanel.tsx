@@ -72,7 +72,7 @@ const defaultPolicy = (shopId: string): AudioQcPolicyWithHeartbeat => ({
   shopId,
   targetRole: 'store_tablet',
   maxSegmentDurationSec: 300,
-  silenceToStopSec: 3,
+  silenceToStopSec: 10,
   preRollSec: 5,
   uploadImmediately: true,
   updatedAt: new Date(0).toISOString(),

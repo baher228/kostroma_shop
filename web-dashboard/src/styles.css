@@ -2791,7 +2791,11 @@ td.sticky {
 .weekday-header-table col.dashboard-col-stock-width,
 .weekday-header-table col.dashboard-col-order-width,
 .weekday-header-table col.dashboard-col-metric-width {
-  width: 112px;
+  width: 128px;
+}
+
+.manager-dashboard-table.weekday-header-table th {
+  white-space: nowrap;
 }
 
 .manager-dashboard-table.weekday-header-table th small {

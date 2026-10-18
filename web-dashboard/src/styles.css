@@ -2788,6 +2788,12 @@ td.sticky {
   border-right: 4px solid #526557;
 }
 
+.weekday-header-table col.dashboard-col-stock-width,
+.weekday-header-table col.dashboard-col-order-width,
+.weekday-header-table col.dashboard-col-metric-width {
+  width: 104px;
+}
+
 .manager-stock-table .week-stock-col {
   font-weight: 700;
 }

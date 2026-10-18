@@ -70,11 +70,9 @@ export const formatDateShort = (iso: string): string => {
   return `${day}.${month}`;
 };
 
-const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const WEEKDAY_NAMES = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
 
-export const formatWeekdayShort = (iso: string): string => WEEKDAY_SHORT[parseDateKey(iso).getDay()];
-
-export const formatWeekdayDateShort = (iso: string): string => `${formatWeekdayShort(iso)} ${formatDateShort(iso)}`;
+export const formatWeekdayDateShort = (iso: string): string => `${WEEKDAY_NAMES[parseDateKey(iso).getDay()]} ${formatDateShort(iso)}`;
 
 export const formatWeekdayLabel = (iso: string): string =>
   parseDateKey(iso).toLocaleDateString('ru-RU', { weekday: 'long' });

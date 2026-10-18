@@ -13,6 +13,7 @@ export {
   buildDashboardRowValues,
   computeDashboardSold,
   computeSold,
+  computeStockWithOrder,
   dashboardDateFor,
   dashboardHeaderSubtitle,
   dashboardRangeLabel,

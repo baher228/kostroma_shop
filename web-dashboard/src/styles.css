@@ -2784,6 +2784,14 @@ td.sticky {
   border-bottom: 4px solid #526557;
 }
 
+.manager-stock-table .week-end-col {
+  border-right: 4px solid #526557;
+}
+
+.manager-stock-table .week-stock-col {
+  font-weight: 700;
+}
+
 .manager-stock-table th {
   background: #f0f4f1;
   color: #233228;

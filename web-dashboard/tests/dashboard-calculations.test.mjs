@@ -116,3 +116,15 @@ test('bread daily sold treats blank stock as zero in dashboard and tablet app', 
     );
   }
 });
+
+test('Хлеб adds a weekly «Остаток» column (Saturday stock + order on Sunday) after Saturday «Продано»', async () => {
+  const source = await readFile(new URL('../src/panels/products/ProductsPanel.tsx', import.meta.url), 'utf8');
+  const shared = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /const isWeekStockDate = \(date: string\) => isBreadTable && parseDateKey\(date\)\.getDay\(\) === 6;/);
+  assert.match(source, /orderUnitsFromPacks\(orderPacksForDate\(row\.productId, dailyOrderDateForStockDate\(date, activeBusinessCategory\)\), row\.unitsInPack \?\? 1\);\n    return computeStockWithOrder\(row\.values\[date\], orderUnits\);/);
+  assert.match(source, /\{isWeekStockDate\(date\) && <td className="week-stock-col">\{weekStockFor\(row, date\) \|\| '-'\}<\/td>\}/);
+  assert.match(source, /isWeekStockDate\(date\) \? 'week-end-col' : ''/);
+  assert.match(source, /isBreadTable \? formatWeekdayDateShort\(date\) : formatDateShort\(date\)/);
+  assert.match(shared, /return String\(\(parseStockNumber\(stockRaw\) \?\? 0\) \+ \(parseStockNumber\(orderUnitsRaw\) \?\? 0\)\);/);
+});

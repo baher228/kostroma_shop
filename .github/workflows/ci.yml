@@ -68,6 +68,21 @@ jobs:
           PROMOTION_SMOKE_DATABASE_URL: postgresql://email_ci:ci-email-password@127.0.0.1:5432/analitika_email_pipeline_test
         run: node services/dubai-backend/tests/promotion-pipeline.postgres-smoke.js
 
+      - name: Verify QC dialog context on PostgreSQL
+        env:
+          QC_TEST_DATABASE_URL: postgresql://email_ci:ci-email-password@127.0.0.1:5432/analitika_qc_context_test
+        run: |
+          node - <<'NODE'
+          const { Client } = require('./services/ru-backend/node_modules/pg');
+          (async () => {
+            const client = new Client({connectionString: process.env.QC_TEST_DATABASE_URL.replace('/analitika_qc_context_test','/postgres')});
+            await client.connect();
+            try { await client.query('CREATE DATABASE analitika_qc_context_test'); }
+            finally { await client.end(); }
+          })().catch(error => { console.error(error); process.exitCode=1; });
+          NODE
+          node --test services/ru-backend/tests/quality-control.integration.test.js
+
       - name: Check Expo app config safety
         run: npm run security:check-app-config
 

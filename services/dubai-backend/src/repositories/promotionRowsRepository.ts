@@ -135,28 +135,22 @@ const mapRow = (row: PromotionTableRowDb): PromotionTableRow => {
   };
 };
 
-// Preserve the invoice's own prices and exact period when the common table
-// consolidates adjacent promotions from several source documents.
-type GmailInvoiceRow = PromotionTableRowDb & {invoice_start:Date|string|null;invoice_end:Date|string|null;invoice_promo:string|number|null;invoice_regular:string|number|null;invoice_id:string;invoice_name:string};
-export const listPromotionRowsForGmailMessage = async (mailbox:string,messageId:string):Promise<PromotionTableRow[]> => {
-  const result=await opsDb.query<GmailInvoiceRow>(`SELECT aggregate.*, interval.start_date::text AS invoice_start,interval.end_date::text AS invoice_end,
-    interval.promo_price AS invoice_promo,COALESCE(interval.regular_price,price.regular_price) AS invoice_regular,
-    interval.source_document_id AS invoice_id,interval.source_document_file_name AS invoice_name
-    FROM gmail_imports gmail JOIN promotion_storage_documents document ON document.id=gmail.promotion_document_id
-    JOIN promotion_row_intervals interval ON interval.source_document_id=document.id
-    JOIN promotion_table_rows aggregate ON aggregate.id=interval.promotion_row_id
-    LEFT JOIN promotion_price_list_items price ON price.id=interval.price_list_item_id
-    WHERE gmail.mailbox=$1 AND gmail.message_id=$2 AND gmail.status='success' AND document.document_type='invoice'
-    ORDER BY aggregate.row_number,interval.start_date,interval.id;`,[mailbox,messageId]);
-  const seen=new Set<string>();
-  return result.rows.map((row:GmailInvoiceRow)=>{
-    const promo=num(row.invoice_promo),regular=num(row.invoice_regular);
-    const percent=regular!==null&&regular>0&&promo!==null?(regular-promo)/regular*100:null;
-    return {...mapRow(row),startDate:dateOnly(row.invoice_start),endDate:dateOnly(row.invoice_end),promoPrice:promo,regularPrice:regular,
-      priceDifference:regular!==null&&promo!==null?regular-promo:null,realDiscountPercent:percent===null?null:Math.round(percent*100)/100,
-      advertisingDiscountPercent:percent===null?null:Math.min(100,Math.max(0,Math.ceil(percent/10)*10)),
-      sourceDocumentId:row.invoice_id,sourceDocumentFileName:row.invoice_name,invoiceDocumentId:row.invoice_id,invoiceDocumentFileName:row.invoice_name};
-  }).filter((row:PromotionTableRow)=>{const key=JSON.stringify([row.productName,row.startDate,row.endDate,row.promoPrice,row.regularPrice]);if(seen.has(key))return false;seen.add(key);return true;});
+// Import owns consolidation. Email selects the resulting table rows exactly
+// once; source intervals only establish which rows belong to this message.
+export const listPromotionRowsForGmailMessage = async (mailbox: string, messageId: string): Promise<PromotionTableRow[]> => {
+  const result = await opsDb.query<PromotionTableRowDb>(`SELECT aggregate.*,
+    aggregate.start_date::text AS start_date, aggregate.end_date::text AS end_date
+    FROM promotion_table_rows aggregate
+    WHERE EXISTS (
+      SELECT 1 FROM promotion_row_intervals interval
+      JOIN promotion_storage_documents document ON document.id=interval.source_document_id
+      JOIN gmail_imports gmail ON gmail.promotion_document_id=document.id
+      WHERE interval.promotion_row_id=aggregate.id
+        AND gmail.mailbox=$1 AND gmail.message_id=$2 AND gmail.status='success'
+        AND document.document_type='invoice'
+    )
+    ORDER BY aggregate.row_number,aggregate.id;`, [mailbox, messageId]);
+  return result.rows.map(mapRow);
 };
 
 const id = () => `promo_row_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

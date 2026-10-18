@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { QcError, type DialogTranscript, type QualityClass } from './types';
+import { QcError, type DialogContext, type DialogTranscript, type QualityClass } from './types';
 
-export const ANALYSIS_SCHEMA_VERSION = '1.1';
+export const ANALYSIS_SCHEMA_VERSION = '1.2';
 export const SCORECARD_VERSION = '1.0';
 export const criterionKeys = ['greeting', 'politeness', 'needsDiscovery', 'productKnowledge', 'objectionHandling', 'closing', 'scriptCompliance'] as const;
 
@@ -26,6 +26,12 @@ const findingSchema = z.strictObject({
 // The same schema drives provider JSON constraints and server-side validation.
 export const dialogAnalysisSchema = z.strictObject({
   schemaVersion: z.literal(ANALYSIS_SCHEMA_VERSION),
+  boundaries: z.strictObject({
+    start: z.enum(['starts_here', 'continues_previous', 'unknown']),
+    end: z.enum(['ends_here', 'continues_next', 'unknown']),
+    confidence: z.enum(['high', 'medium', 'low']),
+    explanation: text,
+  }),
   summary: z.strictObject({ short: z.string().trim().min(1).max(1500), customerIntent: text, outcome: text }),
   quality: z.strictObject({
     overallScore: z.number().min(0).max(100),
@@ -100,10 +106,28 @@ function trimAddedOuterQuotes(value: string): string {
   return result;
 }
 
-export function validateAnalysis(value: unknown, transcript?: DialogTranscript): DialogAnalysis {
+export function validateAnalysis(value: unknown, transcript?: DialogTranscript, context?: DialogContext): DialogAnalysis {
   const parsed = dialogAnalysisSchema.safeParse(value);
   if (!parsed.success) throw new QcError('ANALYSIS_SCHEMA_INVALID', 'The analysis did not match the required response schema.', 502, true);
   const analysis = parsed.data;
+  if (context && ((!context.previous && analysis.boundaries.start === 'continues_previous') ||
+      (!context.next && analysis.boundaries.end === 'continues_next'))) {
+    if (!context.previous && analysis.boundaries.start === 'continues_previous') analysis.boundaries.start = 'unknown';
+    if (!context.next && analysis.boundaries.end === 'continues_next') analysis.boundaries.end = 'unknown';
+    analysis.boundaries.confidence = 'low';
+    analysis.boundaries.explanation = `Соседняя расшифровка недоступна; продолжение диалога не подтверждено. ${analysis.boundaries.explanation}`.slice(0, 4000);
+  }
+  // A technical segment boundary is not evidence that a seller failed to
+  // greet/close. Exclude unobservable criteria even if the model scores them.
+  for (const [key, observable] of [
+    ['greeting', analysis.boundaries.start === 'starts_here'],
+    ['closing', analysis.boundaries.end === 'ends_here'],
+  ] as const) {
+    if (!observable) {
+      analysis.quality.criteria[key] = { score: 0, maxScore: 10, status: 'not_applicable',
+        comment: `Граница диалога вне записи или не определена. ${analysis.boundaries.explanation}`.slice(0, 4000) };
+    }
+  }
   if (transcript) {
     for (const finding of [...analysis.problems, ...analysis.violations]) {
       for (const evidence of finding.evidence) {

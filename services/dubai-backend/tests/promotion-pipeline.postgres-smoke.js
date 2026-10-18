@@ -13,7 +13,7 @@ const ExcelJS = require('exceljs');
 const { opsDb } = require('../dist/db/opsDb');
 const { runMigrations } = require('../dist/db/migrate');
 const repository = require('../dist/repositories/gmailImportsRepository');
-const { listPromotionRows } = require('../dist/repositories/promotionRowsRepository');
+const { listPromotionRows, listPromotionRowsForGmailMessage } = require('../dist/repositories/promotionRowsRepository');
 const { listPromotionDocuments } = require('../dist/repositories/promotionDocumentsRepository');
 const { createPromotionDocumentImporter } = require('../dist/services/promotionDocumentImportService');
 const { importPromotionPriceList } = require('../dist/services/promotionPriceListImportService');
@@ -103,8 +103,8 @@ const main = async () => {
   }
   assert.equal((await opsDb.query("SELECT COUNT(*)::int AS count FROM gmail_imports WHERE message_id=$1 AND status='success';", [messageId])).rows[0].count, 3);
 
-  // Adjacent invoice periods consolidate in the table. The queued email must
-  // still use the original message's own period and prices, not the new ones.
+  // Email must use the consolidated table, including its latest authoritative
+  // price and full period, rather than reconstructing source invoice intervals.
   await importer({documentType:'invoice',fileName:'adjacent.pdf',contentType:'application/pdf',uploadedBy:'smoke-adjacent',buffer:textPdf([
     'Период акции: 11.10.2026 - 20.10.2026','Рекомендованные розничные цены:',`${product} - 70 р/кг`])});
   const queued=(await opsDb.query('SELECT * FROM gmail_deliveries WHERE mailbox=$1 AND message_id=$2;',['smoke@example.com',messageId])).rows;
@@ -120,8 +120,8 @@ const main = async () => {
   await processor();await processor();assert.equal(sent.length,1);
   const delivered=(await opsDb.query('SELECT * FROM gmail_deliveries WHERE id=$1;',[queued[0].id])).rows[0];
     assert.equal(delivered.status,'sent');assert.equal(delivered.recipient,deliveryRecipient);
-  assert.equal(delivered.rows_snapshot.length,1);assert.equal(delivered.rows_snapshot[0].promoPrice,80);
-  assert.equal(delivered.rows_snapshot[0].startDate,'2026-10-04');assert.equal(delivered.rows_snapshot[0].endDate,'2026-10-10');
+  assert.equal(delivered.rows_snapshot.length,1);assert.equal(delivered.rows_snapshot[0].promoPrice,70);
+  assert.equal(delivered.rows_snapshot[0].startDate,'2026-10-04');assert.equal(delivered.rows_snapshot[0].endDate,'2026-10-20');
   const download=async key=>({body:mailObjects.get(key)});
   const packageFiles=await readPackageFileIndex(delivered.storage_key,download);
   assert.equal(packageFiles.length,1);assert.ok(packageFiles[0].name.includes('Ценник'));
@@ -228,9 +228,62 @@ const main = async () => {
   await repository.completeGmailImport(claimOne.id,'skipped');
   assert.equal(await repository.claimGmailImport({ ...metadata,mailbox: 'first@example.com' },3),null);
   assert.ok(await repository.claimGmailImport({ ...metadata,mailbox: 'second@example.com' },3));
+  // Reproduce the reported six attachments: three products, each occurring in
+  // two consecutive periods in the same email. The import table is the only
+  // consolidation mechanism. Unrelated messages/mailboxes must stay excluded.
+  const duplicateMessage=`adjacent-six-${suffix}`;
+  const names=[product,`Колбаса ${suffix}`,`Сосиски ${suffix}`];
+  const duplicatePrices=new ExcelJS.Workbook();
+  const duplicateSheet=duplicatePrices.addWorksheet('Прайс');
+  duplicateSheet.addRow(['','Наименование','Чистое наименование','Розничная цена']);
+  for (const name of names) duplicateSheet.addRow(['',name,name,120]);
+  await importer({documentType:'retail_price_list',fileName:'six-prices.xlsx',contentType:'application/octet-stream',
+    uploadedBy:'smoke-six',buffer:Buffer.from(await duplicatePrices.xlsx.writeBuffer())});
+  for (const name of names) for (const period of ['01.11.2026 - 05.11.2026','06.11.2026 - 10.11.2026']) {
+    const attachment=randomUUID();
+    const claim=await repository.claimGmailImport({mailbox:'smoke@example.com',messageId:duplicateMessage,
+      attachmentId:attachment,attachmentKey:attachment,filename:'invoice.pdf',mimeType:'application/pdf',
+      sender:'allowed@example.com',subject:'',receivedAt:null},3);
+    await importer({documentType:'invoice',fileName:'invoice.pdf',contentType:'application/pdf',uploadedBy:'smoke-six',
+      buffer:textPdf([`Период акции: ${period}`,'Рекомендованные розничные цены:',`${name} - 80 р/кг`]),
+      gmailImportId:claim.id,gmailImportAttempt:claim.attemptCount});
+  }
+  const consolidated=await listPromotionRowsForGmailMessage('smoke@example.com',duplicateMessage);
+  assert.equal(consolidated.length,3);
+  assert.deepEqual(new Set(consolidated.map(r=>r.productName)),new Set(names));
+  for (const row of consolidated) { assert.equal(row.startDate,'2026-11-01');assert.equal(row.endDate,'2026-11-10'); }
+  assert.equal((await listPromotionRowsForGmailMessage('another@example.com',duplicateMessage)).length,0);
+  assert.equal((await listPromotionRowsForGmailMessage('smoke@example.com','missing-message')).length,0);
+  const duplicatePackage=await createPromotionPackageBuilder({findPoster:async()=>({best:null,candidates:[]})})(consolidated);
+  assert.equal(duplicatePackage.manifest.priceTags,3);assert.equal(duplicatePackage.files.length,3);
+  const duplicateJob=(await opsDb.query('SELECT * FROM gmail_deliveries WHERE mailbox=$1 AND message_id=$2',['smoke@example.com',duplicateMessage])).rows[0];
+  const duplicateSent=[];
+  await createGmailDeliveryProcessor({repository:{...deliveryRepository,
+    readGmailDeliverySettings:async()=>({recipient:`six-${suffix}@example.com`,allowedSenders:['allowed@example.com'],autoSend:true}),
+    pendingGmailDeliveries:async()=>[duplicateJob]},
+    getConnection:async()=>({mailbox:'smoke@example.com',canSend:true,client:{sendMessage:async raw=>{duplicateSent.push(raw);return 'six-sent';}}}),
+    build:createPromotionPackageBuilder({findPoster:async()=>({best:null,candidates:[]})}),
+    upload:async({key,body})=>mailObjects.set(key,body),download:async key=>({body:mailObjects.get(key)})})();
+  assert.equal(duplicateSent.length,1);
+  assert.equal(Buffer.from(duplicateSent[0],'base64url').toString().match(/Content-Type: application\/pdf/g).length,3);
+  await opsDb.withClient(async client=>{
+    await client.query('BEGIN');
+    try {
+      for (const [status,manual,message] of [['ready',false,'automatic'],['sending',false,'uncertain'],['sent',false,'sent'],['ready',true,null]]) {
+        await client.query(`INSERT INTO gmail_deliveries(id,mailbox,source_key,message_id,status,manual,rows_snapshot,storage_key,manifest,attempts,send_message_id)
+          VALUES($1,'migration-test',$1,$2,$3,$4,'[]','old/package.json','{}',2,$1)`,[`migration-${status}-${manual}-${suffix}`,message,status,manual]);
+      }
+      await client.query(require('node:fs').readFileSync(require('node:path').resolve(__dirname,'../migrations/033_gmail_table_packages.sql'),'utf8'));
+      const states=(await client.query("SELECT status,manual,rows_snapshot,storage_key,attempts FROM gmail_deliveries WHERE mailbox='migration-test' ORDER BY source_key")).rows;
+      assert.deepEqual(states.map(r=>r.status),['queued','ready','sending','sent']);
+      assert.equal(states[0].rows_snapshot,null);assert.equal(states[0].storage_key,null);assert.equal(states[0].attempts,0);
+      assert.ok(states.slice(1).every(r=>r.storage_key==='old/package.json'&&r.attempts===2));
+    } finally { await client.query('ROLLBACK'); }
+  });
+  console.log('Adjacent promotion regression PASS: six imported invoice positions → three consolidated table rows → three individual price tags.');
   console.log('PostgreSQL smoke PASS: migrations, PDF recognition, priority, Gmail→document→parsers→row→A4 PDF, restart dedupe, terminal success, nested rollback, R2 compensation, poll locking.');
   console.log('OAuth PostgreSQL smoke PASS: expiring browser-bound one-time states, persistent single mailbox, disconnect and mailbox-scoped import claims.');
-  console.log('Email PostgreSQL smoke PASS: atomic invoice/outbox rollback, exact source snapshot, separate PDF files/MIME/fake-send, quota, restart dedupe and idempotent resend queue.');
+  console.log('Email PostgreSQL smoke PASS: atomic invoice/outbox rollback, consolidated table snapshot, separate PDF files/MIME/fake-send, quota, restart dedupe and idempotent resend queue.');
 };
 
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => opsDb.close());

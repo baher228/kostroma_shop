@@ -52,7 +52,7 @@ export const AudioQcSettings = ({ saved, draft, dirty, saving, onChange, onSave 
               <input type="number" min="30" max="1800" value={draft.maxSegmentDurationSec} onChange={(event) => onChange({ ...draft, maxSegmentDurationSec: numberValue(event.target.value, 300) })} />
             </label>
             <label>Тишина до остановки, сек
-              <input type="number" min="1" max="30" value={draft.silenceToStopSec} onChange={(event) => onChange({ ...draft, silenceToStopSec: numberValue(event.target.value, 3) })} />
+              <input type="number" min="1" max="30" value={draft.silenceToStopSec} onChange={(event) => onChange({ ...draft, silenceToStopSec: numberValue(event.target.value, 10) })} />
             </label>
             <label>Запас перед речью, сек
               <input type="number" min="0" max="30" value={draft.preRollSec} onChange={(event) => onChange({ ...draft, preRollSec: numberValue(event.target.value, 5) })} />

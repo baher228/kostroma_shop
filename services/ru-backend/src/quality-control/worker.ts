@@ -13,6 +13,7 @@ export type QualityControlWorkerOptions = {
   retryBaseMs: number;
   leaseMs: number;
   pollIntervalMs: number;
+  contextWaitMs?: number;
 };
 
 const normalizeProcessingError = (error: unknown): QcError => {
@@ -45,7 +46,13 @@ export class QualityControlWorker {
       } else {
         if (!job.transcriptId) throw new QcError('PROCESSING_INTERNAL_ERROR', 'Analysis job has no transcript.', 500);
         const transcript = await this.options.repository.readTranscript(job.transcriptId);
-        const result = await this.options.analysis.analyzeDialog(transcript);
+        const { context, waiting } = await this.options.repository.readDialogContext(job.sessionId);
+        const remaining = (this.options.contextWaitMs ?? 0) - (Date.now() - new Date(job.createdAt).getTime());
+        if (waiting && remaining > 0) {
+          await this.options.repository.deferAnalysisForContext(job, Math.min(10000, remaining));
+          return true;
+        }
+        const result = await this.options.analysis.analyzeDialog(transcript, context);
         await this.options.repository.completeAnalysis(job, result);
       }
     } catch (error) {
@@ -121,5 +128,6 @@ export const createQualityControlWorker = () => {
     retryBaseMs: qcConfig.retryBaseMs,
     leaseMs: qcConfig.leaseMs,
     pollIntervalMs: qcConfig.pollIntervalMs,
+    contextWaitMs: 360000,
   });
 };

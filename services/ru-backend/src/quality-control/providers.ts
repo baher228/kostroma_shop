@@ -5,7 +5,7 @@ import GigaChat, { type GigaChatClientConfig } from 'gigachat';
 import { z } from 'zod';
 import { ANALYSIS_SCHEMA_VERSION, SCORECARD_VERSION, dialogAnalysisJsonSchema, validateAnalysis } from './analysis';
 import { DIALOG_ANALYSIS_PROMPT, PROMPT_VERSION } from './prompts/dialog-analysis';
-import { QcError, type AnalysisResult, type DialogTranscript, type LlmAnalysisProvider, type SttProvider, type SttResult, type TranscriptSegment } from './types';
+import { QcError, type AnalysisResult, type DialogContext, type DialogNeighbor, type DialogTranscript, type LlmAnalysisProvider, type SttProvider, type SttResult, type TranscriptSegment } from './types';
 
 export type NexaraConfig = { apiKey?: string; baseUrl?: string; model?: string; language?: string; timeoutMs?: number; diarization?: boolean; maxResponseBytes?: number };
 export type GigaChatConfig = { credentials?: string; scope?: string; baseUrl?: string; authUrl?: string; model?: string; timeoutMs?: number; caBundlePath?: string; maxTranscriptChars?: number; maxTokens?: number };
@@ -166,13 +166,33 @@ export class GigaChatAnalysisProvider implements LlmAnalysisProvider {
     return this.client;
   }
 
-  async analyzeDialog(transcript: DialogTranscript): Promise<AnalysisResult> {
+  async analyzeDialog(transcript: DialogTranscript, context?: DialogContext): Promise<AnalysisResult> {
     // Deliberately construct the outbound projection; sessionId and any future
     // database/storage fields on the domain object cannot cross this boundary.
     const dialog = { language: transcript.language, segments: transcript.segments.map(({ speaker, text }, segmentIndex) => ({ segmentIndex, speaker, text })) };
-    const content = JSON.stringify(dialog);
+    const maxChars = this.config.maxTranscriptChars ?? 100000;
+    const mainContent = JSON.stringify(dialog);
+    const neighborBudget = Math.min(6000, Math.max(0, Math.floor((maxChars - mainContent.length - 200) / 2)));
+    const projectNeighbor = (neighbor: DialogNeighbor | null, tail: boolean) => {
+      if (!neighbor || neighborBudget < 200) return null;
+      const segments = [];
+      const source = tail ? [...neighbor.segments].reverse() : neighbor.segments;
+      let used = 100;
+      for (const segment of source.slice(0, 30)) {
+        const entry = { speaker: segment.speaker, text: segment.text };
+        const size = JSON.stringify(entry).length + 1;
+        if (used + size > neighborBudget) break;
+        segments.push(entry); used += size;
+      }
+      if (!segments.length) return null;
+      if (tail) segments.reverse();
+      return { language: neighbor.language, gapSeconds: neighbor.gapSeconds, segments };
+    };
+    const projectedContext = context && maxChars - mainContent.length >= 60
+      ? { previous: projectNeighbor(context.previous, true), next: projectNeighbor(context.next, false) } : undefined;
+    const content = JSON.stringify({ ...dialog, ...(projectedContext ? { context: projectedContext } : {}) });
     if (!transcript.segments.some((segment) => segment.text.trim())) throw new QcError('ANALYSIS_EMPTY_TRANSCRIPT', 'An empty transcript cannot be analyzed.', 422);
-    if (content.length > (this.config.maxTranscriptChars ?? 100000)) throw new QcError('ANALYSIS_INPUT_TOO_LARGE', 'The transcript exceeds the configured model input limit.', 422);
+    if (content.length > maxChars) throw new QcError('ANALYSIS_INPUT_TOO_LARGE', 'The transcript exceeds the configured model input limit.', 422);
     const started = Date.now();
     try {
       const response = await this.getClient().chat({
@@ -191,7 +211,7 @@ export class GigaChatAnalysisProvider implements LlmAnalysisProvider {
       let data: unknown;
       try { data = JSON.parse(choice.message.content); }
       catch { throw new QcError('GIGACHAT_JSON_INVALID', 'GigaChat returned invalid structured JSON.', 502, true); }
-      const analysis = validateAnalysis(data, transcript);
+      const analysis = validateAnalysis(data, transcript, projectedContext ?? { previous: null, next: null });
       const usage = parsed.data.usage;
       return {
         analysis,

@@ -2,7 +2,7 @@ import { AudioQcPolicy, AudioQcRecordingMode } from './audioQcTypes';
 
 export const AUDIO_QC_DEFAULTS = {
   maxSegmentDurationSec: 300,
-  silenceToStopSec: 3,
+  silenceToStopSec: 10,
   preRollSec: 5,
   uploadImmediately: true,
 };

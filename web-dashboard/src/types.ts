@@ -182,7 +182,13 @@ export type QcFinding = {
 };
 
 export type QcStructuredResult = {
-  schemaVersion: '1.0' | '1.1';
+  schemaVersion: '1.0' | '1.1' | '1.2';
+  boundaries?: {
+    start: 'starts_here' | 'continues_previous' | 'unknown';
+    end: 'ends_here' | 'continues_next' | 'unknown';
+    confidence: 'high' | 'medium' | 'low';
+    explanation: string;
+  };
   summary: { short: string; customerIntent: string; outcome: string };
   quality: {
     overallScore: number;

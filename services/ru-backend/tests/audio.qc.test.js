@@ -27,7 +27,7 @@ test('Audio QC default tablet policy is disabled and bounded', async () => {
   assert.equal(policy.mode, 'manual');
   assert.equal(policy.targetRole, 'store_tablet');
   assert.equal(policy.maxSegmentDurationSec, 300);
-  assert.equal(policy.silenceToStopSec, 3);
+  assert.equal(policy.silenceToStopSec, 10);
   assert.equal(policy.preRollSec, 5);
 });
 

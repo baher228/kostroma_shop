@@ -35,7 +35,7 @@ export const createGmailDeliveryProcessor=(overrides:Partial<typeof defaults>={}
         }
         try{
           if(job.attempts>=3)throw new Error('Preparation attempts exhausted.');
-          const rows=job.rows_snapshot??(job.message_id?await deps.rowsForMessage(job.mailbox,job.message_id):[]);
+          const rows=job.message_id?await deps.rowsForMessage(job.mailbox,job.message_id):(job.rows_snapshot??[]);
           await patch({status:'preparing',rows_snapshot:rows,attempts:job.attempts+1,error:null});
           const result=await deps.build(rows,signal);
           signal.throwIfAborted();

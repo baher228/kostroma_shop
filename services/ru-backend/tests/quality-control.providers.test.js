@@ -54,7 +54,8 @@ const input = { sessionId: transcript.sessionId, audio: Buffer.from('fake audio'
 
 function validAnalysis(score = 8) {
   return {
-    schemaVersion: '1.1',
+    schemaVersion: '1.2',
+  boundaries: { start: 'starts_here', end: 'ends_here', confidence: 'high', explanation: 'Explicit greeting and goodbye.' },
     summary: { short: 'Клиент обратился за возвратом.', customerIntent: 'Оформить возврат.', outcome: 'Результат в записи отсутствует.' },
     quality: { overallScore: 42, criteria: Object.fromEntries(criterionKeys.map((key) => [key, { score, maxScore: 10, status: 'good', comment: 'Оценка по записи.' }])) },
     customer: { sentiment: 'negative', satisfaction: 'unknown' },
@@ -148,7 +149,7 @@ test('QC GigaChat uses strict native JSON schema, verified TLS and excludes inte
   assert.equal(result.analysis.customer.sentiment, 'negative');
   assert.equal(result.metadata.model, 'GigaChat-2-Max:revision');
   assert.equal(result.metadata.totalTokens, 300);
-  assert.deepEqual([result.promptVersion, result.scorecardVersion, result.schemaVersion], ['1.1', '1.0', '1.1']);
+  assert.deepEqual([result.promptVersion, result.scorecardVersion, result.schemaVersion], ['1.2', '1.0', '1.2']);
 });
 
 test('QC GigaChat rejects invalid JSON, schema violations and incomplete responses', async () => {
@@ -239,4 +240,51 @@ test('QC actual official GigaChat SDK gets credentials token and renews rejected
   await provider.analyzeDialog(transcript);
   assert.equal(authCalls, 2);
   assert.equal(chatCalls, 3);
+});
+
+test('QC sends the tail/head of two neighbors without identifiers, within the model budget', async () => {
+  let payload;
+  const provider = new GigaChatAnalysisProvider({ credentials: 'test', maxTranscriptChars: 3000 }, () => ({
+    chat: async request => { payload = request; return completion(); },
+  }));
+  const segments = Array.from({length: 80}, (_, i) => ({speaker: 'speaker_0', text: `utterance-${i} ${'x'.repeat(80)}`}));
+  const neighbor = { sessionId: 'private-neighbor', sellerId: 'private-seller', language: 'ru', gapSeconds: 10, segments };
+  await provider.analyzeDialog(transcript, { previous: neighbor, next: neighbor });
+  const content = payload.messages[1].content;
+  assert.ok(content.length <= 3000);
+  assert.ok(!content.includes('private-'));
+  const input = JSON.parse(content);
+  assert.ok(input.context.previous.segments.at(-1).text.startsWith('utterance-79 '));
+  assert.ok(input.context.next.segments[0].text.startsWith('utterance-0 '));
+  assert.deepEqual(input.segments, transcript.segments.map(({speaker,text},segmentIndex)=>({speaker,text,segmentIndex})));
+});
+
+test('QC unavailable neighbors cannot be claimed as a confirmed continuation', async () => {
+  const analysis = validAnalysis();
+  analysis.boundaries = { start: 'continues_previous', end: 'continues_next', confidence: 'high', explanation: 'Possible continuation.' };
+  const result = await fakeGiga(completion(analysis)).analyzeDialog(transcript, { previous: null, next: null });
+  assert.equal(result.analysis.boundaries.start, 'unknown');
+  assert.equal(result.analysis.boundaries.end, 'unknown');
+  assert.equal(result.analysis.boundaries.confidence, 'low');
+  assert.equal(result.analysis.quality.criteria.greeting.status, 'not_applicable');
+  assert.equal(result.analysis.quality.criteria.closing.status, 'not_applicable');
+});
+
+test('QC incomplete boundaries exclude missing greeting and closing from the score', () => {
+  const analysis = validAnalysis(8);
+  analysis.boundaries.start = 'continues_previous';
+  analysis.boundaries.end = 'unknown';
+  analysis.quality.criteria.greeting.score = 0;
+  analysis.quality.criteria.closing.score = 0;
+  const result = validateAnalysis(analysis, transcript);
+  assert.equal(result.quality.overallScore, 80);
+  assert.equal(result.quality.criteria.greeting.status, 'not_applicable');
+  assert.equal(result.quality.criteria.closing.status, 'not_applicable');
+});
+
+test('QC neighbor context cannot supply evidence for the current recording', async () => {
+  const analysis = validAnalysis();
+  analysis.violations = [{type:'rudeness',severity:'high',description:'Only in the neighbor',evidence:[{segmentIndex:0,quote:'neighbor-only phrase'}]}];
+  const neighbor = { language:'ru',gapSeconds:10,segments:[{speaker:'speaker_0',text:'neighbor-only phrase'}] };
+  await assert.rejects(fakeGiga(completion(analysis)).analyzeDialog(transcript,{previous:neighbor,next:neighbor}),{code:'ANALYSIS_EVIDENCE_INVALID'});
 });

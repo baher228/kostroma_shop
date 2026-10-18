@@ -230,6 +230,12 @@ export const AudioQcRecordingDetails = ({ recording, session, shopName, onClose,
                 {result ? (
                   <div className="qc-summary-box">
                     <p>{result.summary.short}</p>
+                    {result.boundaries && <div className="qc-summary-box">
+                      <strong>Границы диалога</strong>
+                      <p>Начало: {{ starts_here: 'в этой записи', continues_previous: 'в предыдущей записи', unknown: 'не определено' }[result.boundaries.start]}.
+                        {' '}Окончание: {{ ends_here: 'в этой записи', continues_next: 'в следующей записи', unknown: 'не определено' }[result.boundaries.end]}.</p>
+                      <p>Уверенность: {{ high: 'высокая', medium: 'средняя', low: 'низкая' }[result.boundaries.confidence]}. {result.boundaries.explanation}</p>
+                    </div>}
                     <dl>
                       <div><dt>Цель клиента</dt><dd>{result.summary.customerIntent || 'Не определена'}</dd></div>
                       <div><dt>Результат</dt><dd>{result.summary.outcome || 'Не определён'}</dd></div>

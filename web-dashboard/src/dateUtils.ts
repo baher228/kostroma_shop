@@ -70,7 +70,7 @@ export const formatDateShort = (iso: string): string => {
   return `${day}.${month}`;
 };
 
-const WEEKDAY_NAMES = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+const WEEKDAY_NAMES = ['Воскресен', 'Понедел', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
 
 export const formatWeekdayName = (iso: string): string => WEEKDAY_NAMES[parseDateKey(iso).getDay()];
 

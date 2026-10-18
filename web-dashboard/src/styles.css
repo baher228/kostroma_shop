@@ -2791,7 +2791,12 @@ td.sticky {
 .weekday-header-table col.dashboard-col-stock-width,
 .weekday-header-table col.dashboard-col-order-width,
 .weekday-header-table col.dashboard-col-metric-width {
-  width: 104px;
+  width: 112px;
+}
+
+.manager-dashboard-table.weekday-header-table th small {
+  font-size: inherit;
+  white-space: pre-line;
 }
 
 .manager-stock-table .week-stock-col {

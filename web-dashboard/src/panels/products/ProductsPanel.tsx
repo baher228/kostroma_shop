@@ -843,7 +843,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     <section className="manager-category-block">
       {renderTopScrollbar()}
       <div className="manager-table-scroll" onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)} ref={tableScrollRef}>
-        <table className={`manager-stock-table manager-dashboard-table${isBreadTable ? ' weekday-header-table' : ''}`}>
+        <table lang="ru" className={`manager-stock-table manager-dashboard-table${isBreadTable ? ' weekday-header-table' : ''}`}>
           <colgroup>
             <col className="manager-name-col-width" />
             {loadedDates.flatMap((date) => (

@@ -2791,19 +2791,19 @@ td.sticky {
 .weekday-header-table col.dashboard-col-stock-width,
 .weekday-header-table col.dashboard-col-order-width,
 .weekday-header-table col.dashboard-col-metric-width {
-  width: 85px;
+  width: 68px;
 }
 
 .manager-dashboard-table.weekday-header-table thead th:not(:first-child) {
-  padding: 4px 2px;
-  font-size: 13px;
-}
-
-.manager-dashboard-table.weekday-header-table thead th:not(:first-child) * {
-  font-size: inherit;
+  padding: 2px 0;
+  font-size: 15px;
+  hyphens: auto;
+  overflow-wrap: anywhere;
 }
 
 .manager-dashboard-table.weekday-header-table th small {
+  margin-top: 2px;
+  font-size: 14px;
   white-space: pre-line;
 }
 

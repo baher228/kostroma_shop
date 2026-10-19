@@ -4788,6 +4788,29 @@ input[type='datetime-local'] {
   color: #c62828;
 }
 
+.task-row-side .actions .task-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #f0c7c7;
+  background: #ffffff;
+  color: #c62828;
+}
+
+.task-row-side .actions .task-delete:hover:not(:disabled) {
+  border-color: #c62828;
+  background: #fdecec;
+}
+
+.task-row-side .actions .task-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .task-instruction-row {
   grid-column: 1 / -1;
 }

@@ -138,6 +138,16 @@ const TaskInstructionPreview = ({ token, task }: { token: string; task: Task }) 
   );
 };
 
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 6h18" />
+    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+  </svg>
+);
+
 const MAX_INSTRUCTION_SIDE = 1600;
 
 const readInstructionPhoto = (file: File) =>
@@ -773,6 +783,31 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     }
   };
 
+  const deleteCard = async (card: TaskCard) => {
+    const count = card.members.length;
+    const question = count === 1
+      ? `Удалить задачу «${card.title}»?`
+      : `Удалить задачу «${card.title}» во всех магазинах (${count})?`;
+    const repeatNote = card.seriesId && seriesById[card.seriesId]
+      ? '\n\nПовтор при этом не остановится: новые задачи продолжат создаваться. Чтобы прекратить, нажмите «Остановить повтор».'
+      : '';
+    if (!window.confirm(question + repeatNote)) return;
+    setError('');
+    setNotice('');
+    const ids = card.members.map((member) => member.id);
+    try {
+      setPendingId(ids[0]);
+      const results = await Promise.allSettled(ids.map((id) => api.tasks.delete(session.token, id)));
+      const deleted = new Set(ids.filter((_, index) => results[index].status === 'fulfilled'));
+      setTasks((current) => current.filter((item) => !deleted.has(item.id)));
+      const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (failure) setError(messageOf(failure.reason));
+      else setNotice('Задача удалена.');
+    } finally {
+      setPendingId(null);
+    }
+  };
+
   const updateStatus = async (task: Task) => {
     try {
       setPendingId(task.id);
@@ -972,7 +1007,19 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                       </div>
                       <div className="task-row-side">
                         {due && <span className={`task-due task-due-${group.key}`}>{due}</span>}
-                        {single && <div className="actions">{renderActions(single, false)}</div>}
+                        <div className="actions">
+                          {single && renderActions(single, false)}
+                          <button
+                            type="button"
+                            className="task-delete"
+                            aria-label="Удалить задачу"
+                            title="Удалить задачу"
+                            onClick={() => void deleteCard(card)}
+                            disabled={card.members.some((member) => pendingId === member.id)}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
                         {activeSeries && (
                           <button type="button" className="task-stop-repeat" onClick={() => void stopSeries(activeSeries.id)} disabled={pendingId === activeSeries.id}>
                             Остановить повтор

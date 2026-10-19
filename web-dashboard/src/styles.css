@@ -3565,7 +3565,7 @@ td.sticky {
   z-index: 12;
   top: calc(100% + 8px);
   right: 0;
-  width: 286px;
+  width: 220px;
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
   background: var(--color-surface);
@@ -3593,28 +3593,44 @@ td.sticky {
   text-align: right;
 }
 
-.deadline-time-options {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  max-height: 254px;
-  gap: 4px;
-  margin-top: 10px;
-  overflow-y: auto;
-  padding-right: 2px;
+.deadline-calendar-footer.deadline-time-footer {
+  justify-content: flex-end;
 }
 
-.deadline-time-options button {
-  min-height: 34px;
+.deadline-time-carousel {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.deadline-time-carousel-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 214px;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.deadline-time-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+.deadline-time-carousel-track button {
+  flex: 0 0 38px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  padding: 6px;
+  padding: 0;
+  scroll-snap-align: center;
 }
 
-.deadline-time-options button:hover:not(:disabled) {
+.deadline-time-carousel-track button:hover:not(:disabled) {
   border-color: #c6d8cc;
   background: var(--color-primary-soft);
   color: var(--color-primary-hover);
@@ -3622,11 +3638,21 @@ td.sticky {
   transform: none;
 }
 
-.deadline-time-options button.selected,
-.deadline-time-options button.selected:hover:not(:disabled) {
+.deadline-time-carousel-track button.selected,
+.deadline-time-carousel-track button.selected:hover:not(:disabled) {
   border-color: var(--color-primary);
   background: var(--color-primary);
   color: #fff;
+}
+
+.deadline-time-carousel-nav {
+  min-height: 28px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
 }
 
 .deadline-calendar {

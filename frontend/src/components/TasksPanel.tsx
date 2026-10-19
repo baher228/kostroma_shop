@@ -37,11 +37,63 @@ type CalendarCell = {
 
 const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-const timeOptions = Array.from({ length: 48 }, (_, index) => {
-  const hour = Math.floor(index / 2);
-  const minute = index % 2 === 0 ? "00" : "30";
-  return `${String(hour).padStart(2, "0")}:${minute}`;
+const timeStepMinutes = 5;
+const timeOptions = Array.from({ length: (24 * 60) / timeStepMinutes }, (_, index) => {
+  const totalMinutes = index * timeStepMinutes;
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 });
+
+const TimeCarousel = ({
+  value,
+  onSelect,
+}: {
+  value: string;
+  onSelect: (value: string) => void;
+}) => {
+  const scrollRef = useRef<ScrollView>(null);
+  const viewportHeightRef = useRef(0);
+
+  return (
+    <ScrollView
+      ref={scrollRef}
+      style={styles.timeCarousel}
+      contentContainerStyle={styles.timeCarouselTrack}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator={false}
+      onLayout={(event) => {
+        viewportHeightRef.current = event.nativeEvent.layout.height;
+      }}
+    >
+      {timeOptions.map((option) => {
+        const active = option === value;
+        return (
+          <Pressable
+            key={option}
+            style={[styles.timeCarouselItem, active && styles.dropdownItemActive]}
+            onLayout={
+              active
+                ? (event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    scrollRef.current?.scrollTo({
+                      y: Math.max(0, y - (viewportHeightRef.current - height) / 2),
+                      animated: false,
+                    });
+                  }
+                : undefined
+            }
+            onPress={() => onSelect(option)}
+          >
+            <Text style={[styles.timeCarouselText, active && styles.dropdownItemTextActive]}>
+              {option}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+};
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Ошибка сервера.";
@@ -482,28 +534,16 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
       )}
 
       {showTimeDropdown && (
-        <View style={styles.dropdownMenu}>
-          <ScrollView style={styles.timeMenuScroll} nestedScrollEnabled>
-            {timeOptions.map((time) => {
-              const active = time === deadlineTime;
-              return (
-                <Pressable
-                  key={time}
-                  style={[styles.dropdownItem, active && styles.dropdownItemActive]}
-                  onPress={() => {
-                    setDeadlineTime(time);
-                    setShowTimeDropdown(false);
-                  }}
-                >
-                  <Text
-                    style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}
-                  >
-                    {time}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+        <View style={[styles.dropdownMenu, styles.timeMenu]}>
+          <TimeCarousel value={deadlineTime} onSelect={setDeadlineTime} />
+          <View style={styles.timeCarouselFooter}>
+            <Pressable
+              style={styles.calendarConfirmButton}
+              onPress={() => setShowTimeDropdown(false)}
+            >
+              <Text style={styles.calendarConfirmButtonText}>Готово</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -785,8 +825,31 @@ const styles = StyleSheet.create({
   dropdownScroll: {
     maxHeight: 180,
   },
-  timeMenuScroll: {
-    maxHeight: 210,
+  timeMenu: {
+    padding: 10,
+    gap: 10,
+  },
+  timeCarousel: {
+    maxHeight: 230,
+  },
+  timeCarouselTrack: {
+    gap: 6,
+  },
+  timeCarouselItem: {
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d7e2d9",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  timeCarouselText: {
+    color: "#2f4437",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  timeCarouselFooter: {
+    alignItems: "flex-end",
   },
   dropdownItem: {
     paddingHorizontal: 12,

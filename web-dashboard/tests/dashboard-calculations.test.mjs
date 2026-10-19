@@ -125,6 +125,7 @@ test('Хлеб adds a weekly «Остаток» column (Saturday stock + order o
   assert.match(source, /orderUnitsFromPacks\(orderPacksForDate\(row\.productId, dailyOrderDateForStockDate\(date, activeBusinessCategory\)\), row\.unitsInPack \?\? 1\);\n    return computeStockWithOrder\(row\.values\[date\], orderUnits\);/);
   assert.match(source, /\{isWeekStockDate\(date\) && <td className="week-stock-col">\{weekStockFor\(row, date\) \|\| '-'\}<\/td>\}/);
   assert.match(source, /isWeekStockDate\(date\) \? 'week-end-col' : ''/);
-  assert.match(source, /isBreadTable \? formatWeekdayDateShort\(date\) : formatDateShort\(date\)/);
+  assert.match(source, /const usesWeekdayHeaders = usesMilkTones;/);
+  assert.match(source, /usesWeekdayHeaders \? formatWeekdayDateShort\(date\) : formatDateShort\(date\)/);
   assert.match(shared, /return String\(\(parseStockNumber\(stockRaw\) \?\? 0\) \+ \(parseStockNumber\(orderUnitsRaw\) \?\? 0\)\);/);
 });

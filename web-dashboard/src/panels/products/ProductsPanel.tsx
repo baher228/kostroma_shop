@@ -363,8 +363,9 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   const isBreadTable = activeBusinessCategory === 'Хлеб';
   // Хлеб: after every Saturday's «Продано» a thick line and an «Остаток» column (Saturday stock + order on Sunday).
   const isWeekStockDate = (date: string) => isBreadTable && parseDateKey(date).getDay() === 6;
-  const eveningHeaderDate = (date: string) => isBreadTable ? formatWeekdayDateShort(date) : formatDateShort(date);
-  const eveningHeaderLines = (date: string) => isBreadTable ? `${formatWeekdayName(date)}\n${formatDateShort(date)}` : formatDateShort(date);
+  const usesWeekdayHeaders = usesMilkTones;
+  const eveningHeaderDate = (date: string) => usesWeekdayHeaders ? formatWeekdayDateShort(date) : formatDateShort(date);
+  const eveningHeaderLines = (date: string) => usesWeekdayHeaders ? `${formatWeekdayName(date)}\n${formatDateShort(date)}` : formatDateShort(date);
 
   const dashboardWeeks: DashboardWeeks = useMemo(
     () => (table ? deriveDashboardWeeks(activeViewDates) : { current: {}, previous: null, currentStart: undefined, previousStart: undefined }),
@@ -574,11 +575,10 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
           });
         })
         : loadedDates.flatMap((date) => {
-          const stockDateLabel = usesEveningStockHeaders ? eveningHeaderDate(date) : formatDateLabel(date);
-          const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
-          const orderDateLabel = usesEveningStockHeaders
-            ? eveningHeaderDate(orderHeaderDateForStockDate(date, activeBusinessCategory))
-            : formatDateLabel(orderDate);
+          const stockDateLabel = eveningHeaderDate(date);
+          const orderDateLabel = eveningHeaderDate(usesEveningStockHeaders
+            ? orderHeaderDateForStockDate(date, activeBusinessCategory)
+            : dailyOrderDateForStockDate(date, activeBusinessCategory));
           return [
             `${usesEveningStockHeaders ? 'Остаток вечер' : 'Остаток'} (${stockDateLabel})`,
             `${usesEveningStockHeaders ? 'Заказ на' : 'Заказ'} (${orderDateLabel})`,
@@ -843,7 +843,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     <section className="manager-category-block">
       {renderTopScrollbar()}
       <div className="manager-table-scroll" onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)} ref={tableScrollRef}>
-        <table lang="ru" className={`manager-stock-table manager-dashboard-table${isBreadTable ? ' weekday-header-table' : ''}`}>
+        <table lang="ru" className={`manager-stock-table manager-dashboard-table${usesWeekdayHeaders ? ' weekday-header-table' : ''}`}>
           <colgroup>
             <col className="manager-name-col-width" />
             {loadedDates.flatMap((date) => (
@@ -861,16 +861,16 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
               {loadedDates.map((date) => (
                 <React.Fragment key={date}>
                   <th data-week-start={date === windowStart ? windowStart : undefined}>
-                    {usesEveningStockHeaders ? 'Остаток вечер' : formatDateLabel(date)}
-                    <small>{usesEveningStockHeaders ? eveningHeaderLines(date) : 'Остаток'}</small>
+                    {usesEveningStockHeaders ? 'Остаток вечер' : 'Остаток'}
+                    <small>{eveningHeaderLines(date)}</small>
                   </th>
                   <th className={usesMilkTones ? 'dashboard-tone-order' : undefined}>
-                    {usesEveningStockHeaders ? 'Заказ на' : formatDateLabel(dailyOrderDateForStockDate(date, activeBusinessCategory))}
-                    <small>{usesEveningStockHeaders ? eveningHeaderLines(orderHeaderDateForStockDate(date, activeBusinessCategory)) : 'Заказ'}</small>
+                    {usesEveningStockHeaders ? 'Заказ на' : 'Заказ'}
+                    <small>{eveningHeaderLines(usesEveningStockHeaders ? orderHeaderDateForStockDate(date, activeBusinessCategory) : dailyOrderDateForStockDate(date, activeBusinessCategory))}</small>
                   </th>
                   <th className={[usesMilkTones ? 'dashboard-tone-yellow' : '', isWeekStockDate(date) ? 'week-end-col' : ''].filter(Boolean).join(' ') || undefined}>
-                    {usesEveningStockHeaders ? 'Продано' : formatDateLabel(date)}
-                    <small>{usesEveningStockHeaders ? eveningHeaderLines(date) : 'Продано'}</small>
+                    Продано
+                    <small>{eveningHeaderLines(date)}</small>
                   </th>
                   {isWeekStockDate(date) && (
                     <th className="week-stock-col">

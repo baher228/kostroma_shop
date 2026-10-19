@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { AudioPlayer, createAudioPlayer } from 'expo-audio';
 import * as Notifications from 'expo-notifications';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -27,6 +28,8 @@ const deadlineChannelId = hasDeadlineAlarmSound ? DEADLINE_ALARM_CHANNEL_ID : 't
 const LOCAL_REMINDER_PREFIX = 'local-deadline:';
 const LOCAL_REMINDER_REFRESH_MS = 30_000;
 const LOCAL_NEW_TASK_PREFIX = 'local-new-task:';
+const SILENT_TASKS_CHANNEL_ID = 'tasks-silent';
+const NEW_TASK_CHIME = require('../../../assets/sounds/new_task_chime.wav');
 const HOUR_MS = 60 * 60 * 1000;
 const localReminderTitles = {
   hour_before: 'Через 1 час срок задачи',
@@ -108,26 +111,48 @@ const readKnownTaskIds = async (storageKey: string) => {
   }
 };
 
+let newTaskChime: AudioPlayer | null = null;
+
+// Played by the app itself, so it is heard even where the system mutes app notifications (e.g. kids mode).
+const playNewTaskChime = () => {
+  try {
+    newTaskChime ??= createAudioPlayer(NEW_TASK_CHIME);
+    const player = newTaskChime;
+    void player
+      .seekTo(0)
+      .catch(() => undefined)
+      .then(() => player.play());
+  } catch (error) {
+    console.warn('Failed to play new task chime', error);
+  }
+};
+
 // Without FCM the server's «Новая задача» push never arrives, so the tablet announces new tasks itself.
-const announceNewTasks = async (tasks: Task[], userId: string) => {
+const announceNewTasks = async (tasks: Task[], userId: string, canNotify: boolean) => {
   const storageKey = knownTasksStorageKey(userId);
   const knownTaskIds = await readKnownTaskIds(storageKey);
   await AsyncStorage.setItem(storageKey, JSON.stringify(tasks.map((task) => task.id)));
   // First run on this tablet: remember the existing tasks without ringing for all of them.
-  if (!knownTaskIds) return;
-  for (const task of newTasksToAnnounce(tasks, knownTaskIds, userId)) {
-    await Notifications.scheduleNotificationAsync({
-      identifier: `${LOCAL_NEW_TASK_PREFIX}${task.id}`,
-      content: {
-        title: 'Новая задача',
-        body: task.title,
-        sound: 'default',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-        data: { type: 'task_assigned', taskId: task.id },
-      },
-      trigger: { channelId: 'tasks' },
-    });
+  if (!knownTaskIds) return [];
+  const newTasks = newTasksToAnnounce(tasks, knownTaskIds, userId);
+  // In the foreground the chime is the sound, so the banner goes to a silent channel.
+  const foreground = AppState.currentState === 'active';
+  if (canNotify) {
+    for (const task of newTasks) {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${LOCAL_NEW_TASK_PREFIX}${task.id}`,
+        content: {
+          title: 'Новая задача',
+          body: task.title,
+          sound: foreground ? false : 'default',
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          data: { type: 'task_assigned', taskId: task.id },
+        },
+        trigger: { channelId: foreground ? SILENT_TASKS_CHANNEL_ID : 'tasks' },
+      });
+    }
   }
+  return newTasks;
 };
 
 const cancelLocalDeadlineReminders = async () => {
@@ -153,6 +178,12 @@ const createAndroidChannels = async () => {
     importance: Notifications.AndroidImportance.MAX,
     sound: 'default',
     vibrationPattern: [0, 250, 150, 250],
+  });
+  await Notifications.setNotificationChannelAsync(SILENT_TASKS_CHANNEL_ID, {
+    name: 'Задачи (без звука)',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: null,
+    enableVibrate: false,
   });
   await Notifications.setNotificationChannelAsync('task-deadlines', {
     name: 'Сроки задач',
@@ -303,11 +334,14 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
       running = true;
       try {
         await ensureAndroidChannels();
-        if (!(await Notifications.getPermissionsAsync()).granted) return;
+        const canNotify = (await Notifications.getPermissionsAsync()).granted;
         const tasks = await tasksApi.list(session.token);
         if (!active) return;
-        await syncLocalDeadlineReminders(tasks);
-        await announceNewTasks(tasks, session.user.id);
+        if (canNotify) await syncLocalDeadlineReminders(tasks);
+        const newTasks = await announceNewTasks(tasks, session.user.id, canNotify);
+        if (!active || newTasks.length === 0) return;
+        markUnreadTasks();
+        if (AppState.currentState === 'active') playNewTaskChime();
       } catch (error) {
         console.warn('Failed to schedule task notifications', error);
       } finally {
@@ -325,7 +359,7 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
       clearInterval(interval);
       appStateSubscription.remove();
     };
-  }, [isTaskAssignee, session.token, session.user.id]);
+  }, [isTaskAssignee, markUnreadTasks, session.token, session.user.id]);
 
   useEffect(() => {
     if (!isTaskAssignee || Platform.OS === 'web') return;

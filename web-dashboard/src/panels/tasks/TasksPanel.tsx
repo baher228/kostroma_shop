@@ -773,6 +773,31 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     }
   };
 
+  const deleteCard = async (card: TaskCard) => {
+    const count = card.members.length;
+    const question = count === 1
+      ? `Удалить задачу «${card.title}»?`
+      : `Удалить задачу «${card.title}» во всех магазинах (${count})?`;
+    const repeatNote = card.seriesId && seriesById[card.seriesId]
+      ? '\n\nПовтор при этом не остановится: новые задачи продолжат создаваться. Чтобы прекратить, нажмите «Остановить повтор».'
+      : '';
+    if (!window.confirm(question + repeatNote)) return;
+    setError('');
+    setNotice('');
+    const ids = card.members.map((member) => member.id);
+    try {
+      setPendingId(ids[0]);
+      const results = await Promise.allSettled(ids.map((id) => api.tasks.delete(session.token, id)));
+      const deleted = new Set(ids.filter((_, index) => results[index].status === 'fulfilled'));
+      setTasks((current) => current.filter((item) => !deleted.has(item.id)));
+      const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (failure) setError(messageOf(failure.reason));
+      else setNotice('Задача удалена.');
+    } finally {
+      setPendingId(null);
+    }
+  };
+
   const updateStatus = async (task: Task) => {
     try {
       setPendingId(task.id);
@@ -978,6 +1003,14 @@ export const TasksPanel = ({ session }: { session: Session }) => {
                             Остановить повтор
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="task-delete"
+                          onClick={() => void deleteCard(card)}
+                          disabled={card.members.some((member) => pendingId === member.id)}
+                        >
+                          Удалить
+                        </button>
                       </div>
                     </li>
                   );

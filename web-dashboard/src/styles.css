@@ -4788,6 +4788,27 @@ input[type='datetime-local'] {
   color: #c62828;
 }
 
+.task-delete {
+  border: 1px solid #f0c7c7;
+  border-radius: 8px;
+  background: #fff;
+  color: #c62828;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.task-delete:hover:not(:disabled) {
+  background: #fdecec;
+  border-color: #c62828;
+}
+
+.task-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .task-instruction-row {
   grid-column: 1 / -1;
 }

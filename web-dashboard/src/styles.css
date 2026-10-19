@@ -4788,23 +4788,25 @@ input[type='datetime-local'] {
   color: #c62828;
 }
 
-.task-delete {
+.task-row-side .actions .task-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
   border: 1px solid #f0c7c7;
-  border-radius: 8px;
-  background: #fff;
+  background: #ffffff;
   color: #c62828;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 10px;
-  cursor: pointer;
 }
 
-.task-delete:hover:not(:disabled) {
-  background: #fdecec;
+.task-row-side .actions .task-delete:hover:not(:disabled) {
   border-color: #c62828;
+  background: #fdecec;
 }
 
-.task-delete:disabled {
+.task-row-side .actions .task-delete:disabled {
   opacity: 0.5;
   cursor: default;
 }

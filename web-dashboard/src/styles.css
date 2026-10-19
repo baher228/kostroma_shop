@@ -1379,10 +1379,6 @@ td.sticky {
   width: 64px;
 }
 
-.dashboard-tuesday-separator-width {
-  width: 76px;
-}
-
 .manager-action-col-width {
   width: 76px;
 }
@@ -1501,14 +1497,6 @@ td.sticky {
   width: 64px;
   min-width: 64px;
   max-width: 64px;
-}
-
-.dashboard-tuesday-separator {
-  width: 76px;
-  min-width: 76px;
-  max-width: 76px;
-  padding: 0 !important;
-  background: #ffffff !important;
 }
 
 .dashboard-tone-neutral {
@@ -2786,6 +2774,10 @@ td.sticky {
 
 .manager-stock-table .week-end-col {
   border-right: 4px solid #526557;
+}
+
+.manager-stock-table .week-start-col {
+  border-left: 4px solid #526557;
 }
 
 .weekday-header-table col.dashboard-col-stock-width,

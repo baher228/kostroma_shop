@@ -662,7 +662,6 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
             <col className="manager-name-col-width" />
             {dashboardWeekStarts.map((weekStart) => (
               <React.Fragment key={weekStart}>
-                <col className="dashboard-tuesday-separator-width" />
                 {DASHBOARD_COLUMNS.map((column) => (
                   <col key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind}-width`} />
                 ))}
@@ -674,29 +673,22 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
               <th className="manager-name-col dashboard-name-header">Товар</th>
               {dashboardWeekStarts.flatMap((weekStart) => {
                 const weeks = dashboardWeeksForStart(weekStart);
-                return [
-                  <th
-                    key={`${weekStart}:tuesday-separator`}
-                    aria-hidden="true"
-                    className="dashboard-tuesday-separator"
-                    data-week-start={weekStart}
-                  />,
-                  ...DASHBOARD_COLUMNS.map((column) => (
+                return DASHBOARD_COLUMNS.map((column, columnIndex) => (
                     <th
                       key={`${weekStart}:${column.key}`}
-                      className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}`}
+                      className={`dashboard-col-${column.kind} dashboard-tone-${column.tone}${columnIndex === 0 ? ' week-start-col' : ''}`}
+                      data-week-start={columnIndex === 0 ? weekStart : undefined}
                     >
                       <span className={column.kind === 'stock' ? 'dashboard-title-stock' : ''}>{column.title}</span>
                       {dashboardHeaderSubtitle(weeks, column) && <small>{dashboardHeaderSubtitle(weeks, column)}</small>}
                     </th>
-                  )),
-                ];
+                  ));
               })}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={dashboardWeekStarts.length * (DASHBOARD_COLUMNS.length + 1) + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={dashboardWeekStarts.length * DASHBOARD_COLUMNS.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => {
               return (
                 <tr
@@ -715,14 +707,13 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                   {dashboardWeekStarts.flatMap((weekStart) => {
                     const weeks = dashboardWeeksForStart(weekStart);
                     const values = rowValuesFor(row, weeks);
-                    return [
-                      <td key={`${weekStart}:tuesday-separator`} aria-hidden="true" className="dashboard-tuesday-separator" />,
-                      ...DASHBOARD_COLUMNS.map((column) => {
+                    return DASHBOARD_COLUMNS.map((column, columnIndex) => {
                     const value = values[column.key] ?? '';
+                    const cellClassName = `dashboard-col-${column.kind} dashboard-value-${column.tone}${columnIndex === 0 ? ' week-start-col' : ''}`;
                     if (column.kind === 'order' && isManualOrderKey(column.key)) {
                       const manualOrderKey = column.key;
                       return (
-                        <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                        <td key={`${weekStart}:${column.key}`} className={cellClassName}>
                           <input
                             className="dashboard-order-input"
                             data-grid-col={`${weekStart}:${column.key}`}
@@ -739,7 +730,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                     if (column.kind === 'stock' && isManualStockKey(column.key)) {
                       const date = currentStockDateForColumn(column.key, weeks);
                       return (
-                        <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                        <td key={`${weekStart}:${column.key}`} className={cellClassName}>
                           {date ? (
                             <StockCellInput
                               value={value}
@@ -754,14 +745,13 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                       );
                     }
                     return (
-                      <td key={`${weekStart}:${column.key}`} className={`dashboard-col-${column.kind} dashboard-value-${column.tone}`}>
+                      <td key={`${weekStart}:${column.key}`} className={cellClassName}>
                         <span className={`dashboard-cell-value ${column.kind === 'stock' ? 'dashboard-stock-value' : column.kind === 'order' ? 'dashboard-order-value' : ''}`}>
                           {value || '-'}
                         </span>
                       </td>
                     );
-                    }),
-                    ];
+                    });
                   })}
                 </tr>
               );

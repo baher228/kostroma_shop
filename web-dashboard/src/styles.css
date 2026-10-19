@@ -3593,7 +3593,7 @@ td.sticky {
   text-align: right;
 }
 
-.deadline-time-footer {
+.deadline-calendar-footer.deadline-time-footer {
   justify-content: flex-end;
 }
 

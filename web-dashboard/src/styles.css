@@ -3565,7 +3565,7 @@ td.sticky {
   z-index: 12;
   top: calc(100% + 8px);
   right: 0;
-  width: 320px;
+  width: 220px;
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
   background: var(--color-surface);
@@ -3598,32 +3598,20 @@ td.sticky {
 }
 
 .deadline-time-carousel {
-  margin-top: 10px;
-}
-
-.deadline-time-carousel-label {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.deadline-time-carousel-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 28px;
-  align-items: center;
   gap: 4px;
+  margin-top: 10px;
 }
 
 .deadline-time-carousel-track {
   position: relative;
   display: flex;
+  flex-direction: column;
   gap: 4px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
+  height: 214px;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
   scrollbar-width: none;
-  padding: 2px 0;
 }
 
 .deadline-time-carousel-track::-webkit-scrollbar {
@@ -3631,15 +3619,14 @@ td.sticky {
 }
 
 .deadline-time-carousel-track button {
-  flex: 0 0 44px;
-  min-height: 38px;
+  flex: 0 0 38px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--color-text);
-  font-size: 15px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  padding: 6px 0;
+  padding: 0;
   scroll-snap-align: center;
 }
 
@@ -3659,12 +3646,11 @@ td.sticky {
 }
 
 .deadline-time-carousel-nav {
-  width: 28px;
-  min-height: 38px;
+  min-height: 28px;
   border: 1px solid var(--color-border-strong);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 18px;
+  font-size: 12px;
   line-height: 1;
   padding: 0;
 }

@@ -169,10 +169,12 @@ const readInstructionPhoto = (file: File) =>
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const TIME_STEP_MINUTES = 5;
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
-const MINUTE_OPTIONS = Array.from({ length: 60 / TIME_STEP_MINUTES }, (_, index) =>
-  String(index * TIME_STEP_MINUTES).padStart(2, '0'),
-);
+const TIME_OPTIONS = Array.from({ length: (24 * 60) / TIME_STEP_MINUTES }, (_, index) => {
+  const totalMinutes = index * TIME_STEP_MINUTES;
+  const hour = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const minute = String(totalMinutes % 60).padStart(2, '0');
+  return `${hour}:${minute}`;
+});
 
 const toDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -217,17 +219,7 @@ const dateLabel = (key: string) => dateFromKey(key).toLocaleDateString('ru-RU', 
   year: 'numeric',
 });
 
-const TimeCarousel = ({
-  label,
-  options,
-  value,
-  onSelect,
-}: {
-  label: string;
-  options: string[];
-  value: string;
-  onSelect: (value: string) => void;
-}) => {
+const TimeCarousel = ({ value, onSelect }: { value: string; onSelect: (value: string) => void }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
 
@@ -236,7 +228,7 @@ const TimeCarousel = ({
     const selected = track?.querySelector<HTMLElement>('button.selected');
     if (!track || !selected) return;
     track.scrollTo({
-      left: selected.offsetLeft - (track.clientWidth - selected.offsetWidth) / 2,
+      top: selected.offsetTop - (track.clientHeight - selected.offsetHeight) / 2,
       behavior: hasScrolledRef.current ? 'smooth' : 'auto',
     });
     hasScrolledRef.current = true;
@@ -244,29 +236,26 @@ const TimeCarousel = ({
 
   const scrollPage = (direction: -1 | 1) => {
     const track = trackRef.current;
-    track?.scrollBy({ left: direction * track.clientWidth * 0.8, behavior: 'smooth' });
+    track?.scrollBy({ top: direction * track.clientHeight * 0.8, behavior: 'smooth' });
   };
 
   return (
     <div className="deadline-time-carousel">
-      <span className="deadline-time-carousel-label">{label}</span>
-      <div className="deadline-time-carousel-row">
-        <button type="button" className="deadline-time-carousel-nav" aria-label={`${label}: назад`} onClick={() => scrollPage(-1)}>‹</button>
-        <div className="deadline-time-carousel-track" ref={trackRef}>
-          {options.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={option === value ? 'selected' : ''}
-              aria-pressed={option === value}
-              onClick={() => onSelect(option)}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="deadline-time-carousel-nav" aria-label={`${label}: вперёд`} onClick={() => scrollPage(1)}>›</button>
+      <button type="button" className="deadline-time-carousel-nav" aria-label="Раньше" onClick={() => scrollPage(-1)}>▲</button>
+      <div className="deadline-time-carousel-track" ref={trackRef}>
+        {TIME_OPTIONS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            className={option === value ? 'selected' : ''}
+            aria-pressed={option === value}
+            onClick={() => onSelect(option)}
+          >
+            {option}
+          </button>
+        ))}
       </div>
+      <button type="button" className="deadline-time-carousel-nav" aria-label="Позже" onClick={() => scrollPage(1)}>▼</button>
     </div>
   );
 };
@@ -302,9 +291,6 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
     setOpen(null);
     triggerRef.current?.focus();
   };
-
-  const [selectedHour, selectedMinute] = selectedTime.split(':');
-  const chooseTime = (hour: string, minute: string) => onChange(`${selectedDateKey}T${hour}:${minute}`);
 
   const chooseDate = (key: string) => {
     onChange(`${key}T${selectedTime}`);
@@ -378,8 +364,7 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
             <strong>Время</strong>
             <span>{dateLabel(selectedDateKey)}</span>
           </header>
-          <TimeCarousel label="Часы" options={HOUR_OPTIONS} value={selectedHour} onSelect={(hour) => chooseTime(hour, selectedMinute)} />
-          <TimeCarousel label="Минуты" options={MINUTE_OPTIONS} value={selectedMinute} onSelect={(minute) => chooseTime(selectedHour, minute)} />
+          <TimeCarousel value={selectedTime} onSelect={(time) => onChange(`${selectedDateKey}T${time}`)} />
           <div className="deadline-calendar-footer deadline-time-footer">
             <button type="button" className="secondary" onClick={close}>Готово</button>
           </div>

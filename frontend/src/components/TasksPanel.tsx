@@ -38,65 +38,60 @@ type CalendarCell = {
 const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 const timeStepMinutes = 5;
-const hourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
-const minuteOptions = Array.from({ length: 60 / timeStepMinutes }, (_, index) =>
-  String(index * timeStepMinutes).padStart(2, "0"),
-);
+const timeOptions = Array.from({ length: (24 * 60) / timeStepMinutes }, (_, index) => {
+  const totalMinutes = index * timeStepMinutes;
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+});
 
 const TimeCarousel = ({
-  label,
-  options,
   value,
   onSelect,
 }: {
-  label: string;
-  options: string[];
   value: string;
   onSelect: (value: string) => void;
 }) => {
   const scrollRef = useRef<ScrollView>(null);
-  const viewportWidthRef = useRef(0);
+  const viewportHeightRef = useRef(0);
 
   return (
-    <View style={styles.timeCarousel}>
-      <Text style={styles.selectorLabel}>{label}</Text>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.timeCarouselTrack}
-        onLayout={(event) => {
-          viewportWidthRef.current = event.nativeEvent.layout.width;
-        }}
-      >
-        {options.map((option) => {
-          const active = option === value;
-          return (
-            <Pressable
-              key={option}
-              style={[styles.timeCarouselItem, active && styles.dropdownItemActive]}
-              onLayout={
-                active
-                  ? (event) => {
-                      const { x, width } = event.nativeEvent.layout;
-                      scrollRef.current?.scrollTo({
-                        x: Math.max(0, x - (viewportWidthRef.current - width) / 2),
-                        animated: false,
-                      });
-                    }
-                  : undefined
-              }
-              onPress={() => onSelect(option)}
-            >
-              <Text style={[styles.timeCarouselText, active && styles.dropdownItemTextActive]}>
-                {option}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.timeCarousel}
+      contentContainerStyle={styles.timeCarouselTrack}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator={false}
+      onLayout={(event) => {
+        viewportHeightRef.current = event.nativeEvent.layout.height;
+      }}
+    >
+      {timeOptions.map((option) => {
+        const active = option === value;
+        return (
+          <Pressable
+            key={option}
+            style={[styles.timeCarouselItem, active && styles.dropdownItemActive]}
+            onLayout={
+              active
+                ? (event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    scrollRef.current?.scrollTo({
+                      y: Math.max(0, y - (viewportHeightRef.current - height) / 2),
+                      animated: false,
+                    });
+                  }
+                : undefined
+            }
+            onPress={() => onSelect(option)}
+          >
+            <Text style={[styles.timeCarouselText, active && styles.dropdownItemTextActive]}>
+              {option}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 };
 
@@ -540,18 +535,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
 
       {showTimeDropdown && (
         <View style={[styles.dropdownMenu, styles.timeMenu]}>
-          <TimeCarousel
-            label="Часы"
-            options={hourOptions}
-            value={deadlineTime.slice(0, 2)}
-            onSelect={(hour) => setDeadlineTime(`${hour}:${deadlineTime.slice(3, 5)}`)}
-          />
-          <TimeCarousel
-            label="Минуты"
-            options={minuteOptions}
-            value={deadlineTime.slice(3, 5)}
-            onSelect={(minute) => setDeadlineTime(`${deadlineTime.slice(0, 2)}:${minute}`)}
-          />
+          <TimeCarousel value={deadlineTime} onSelect={setDeadlineTime} />
           <View style={styles.timeCarouselFooter}>
             <Pressable
               style={styles.calendarConfirmButton}
@@ -846,13 +830,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   timeCarousel: {
-    gap: 6,
+    maxHeight: 230,
   },
   timeCarouselTrack: {
     gap: 6,
   },
   timeCarouselItem: {
-    minWidth: 52,
     alignItems: "center",
     borderRadius: 8,
     borderWidth: 1,

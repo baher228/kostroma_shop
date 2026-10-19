@@ -136,6 +136,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
   const [calendarMonthCursor, setCalendarMonthCursor] = useState(() => new Date());
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
+  const timeMenuScrollRef = useRef<ScrollView>(null);
   const [requiresPhotoConfirmation, setRequiresPhotoConfirmation] = useState(false);
   const [instructionTask, setInstructionTask] = useState<Task | null>(null);
   const [pendingTaskIds, setPendingTaskIds] = useState<Record<string, boolean>>({});
@@ -485,13 +486,22 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
 
       {showTimeDropdown && (
         <View style={styles.dropdownMenu}>
-          <ScrollView style={styles.timeMenuScroll} nestedScrollEnabled>
+          <ScrollView ref={timeMenuScrollRef} style={styles.timeMenuScroll} nestedScrollEnabled>
             {timeOptions.map((time) => {
               const active = time === deadlineTime;
               return (
                 <Pressable
                   key={time}
                   style={[styles.dropdownItem, active && styles.dropdownItemActive]}
+                  onLayout={
+                    active
+                      ? (event) =>
+                          timeMenuScrollRef.current?.scrollTo({
+                            y: Math.max(0, event.nativeEvent.layout.y - 80),
+                            animated: false,
+                          })
+                      : undefined
+                  }
                   onPress={() => {
                     setDeadlineTime(time);
                     setShowTimeDropdown(false);

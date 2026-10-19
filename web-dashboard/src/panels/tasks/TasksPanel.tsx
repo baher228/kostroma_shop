@@ -246,6 +246,16 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
     };
   }, [open]);
 
+  useEffect(() => {
+    if (open !== 'time') return;
+    const options = pickerRef.current?.querySelector<HTMLElement>('.deadline-time-options');
+    const selected = options?.querySelector<HTMLElement>('button.selected');
+    if (!options || !selected) return;
+    const optionsRect = options.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    options.scrollTop += selectedRect.top - optionsRect.top - (optionsRect.height - selectedRect.height) / 2;
+  }, [open]);
+
   const close = () => {
     setOpen(null);
     triggerRef.current?.focus();

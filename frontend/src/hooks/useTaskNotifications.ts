@@ -25,7 +25,8 @@ const deadlineChannelId = hasDeadlineAlarmSound ? DEADLINE_ALARM_CHANNEL_ID : 't
 
 // The APKs have no FCM config, so remote pushes never arrive; deadline reminders are scheduled on the device.
 const LOCAL_REMINDER_PREFIX = 'local-deadline:';
-const LOCAL_REMINDER_REFRESH_MS = 60_000;
+const LOCAL_REMINDER_REFRESH_MS = 30_000;
+const LOCAL_NEW_TASK_PREFIX = 'local-new-task:';
 const HOUR_MS = 60 * 60 * 1000;
 const localReminderTitles = {
   hour_before: 'Через 1 час срок задачи',
@@ -87,6 +88,44 @@ const syncLocalDeadlineReminders = async (tasks: Task[]) => {
         date: reminder.at,
         channelId: deadlineChannelId,
       },
+    });
+  }
+};
+
+export const newTasksToAnnounce = (tasks: Task[], knownTaskIds: Set<string>, userId: string) =>
+  tasks.filter((task) => task.status === 'open' && task.createdById !== userId && !knownTaskIds.has(task.id));
+
+const knownTasksStorageKey = (userId: string) => `known_task_ids:${userId}`;
+
+const readKnownTaskIds = async (storageKey: string) => {
+  const stored = await AsyncStorage.getItem(storageKey);
+  if (stored === null) return null;
+  try {
+    const ids: unknown = JSON.parse(stored);
+    return new Set(Array.isArray(ids) ? ids.map(String) : []);
+  } catch {
+    return new Set<string>();
+  }
+};
+
+// Without FCM the server's «Новая задача» push never arrives, so the tablet announces new tasks itself.
+const announceNewTasks = async (tasks: Task[], userId: string) => {
+  const storageKey = knownTasksStorageKey(userId);
+  const knownTaskIds = await readKnownTaskIds(storageKey);
+  await AsyncStorage.setItem(storageKey, JSON.stringify(tasks.map((task) => task.id)));
+  // First run on this tablet: remember the existing tasks without ringing for all of them.
+  if (!knownTaskIds) return;
+  for (const task of newTasksToAnnounce(tasks, knownTaskIds, userId)) {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `${LOCAL_NEW_TASK_PREFIX}${task.id}`,
+      content: {
+        title: 'Новая задача',
+        body: task.title,
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority.MAX,
+        data: { type: 'task_assigned', taskId: task.id },
+      },
+      trigger: { channelId: 'tasks' },
     });
   }
 };
@@ -266,9 +305,11 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
         await ensureAndroidChannels();
         if (!(await Notifications.getPermissionsAsync()).granted) return;
         const tasks = await tasksApi.list(session.token);
-        if (active) await syncLocalDeadlineReminders(tasks);
+        if (!active) return;
+        await syncLocalDeadlineReminders(tasks);
+        await announceNewTasks(tasks, session.user.id);
       } catch (error) {
-        console.warn('Failed to schedule task deadline reminders', error);
+        console.warn('Failed to schedule task notifications', error);
       } finally {
         running = false;
       }
@@ -284,7 +325,7 @@ export const useTaskNotifications = (session: Session, onOpenTasks: () => void) 
       clearInterval(interval);
       appStateSubscription.remove();
     };
-  }, [isTaskAssignee, session.token]);
+  }, [isTaskAssignee, session.token, session.user.id]);
 
   useEffect(() => {
     if (!isTaskAssignee || Platform.OS === 'web') return;

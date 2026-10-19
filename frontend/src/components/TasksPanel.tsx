@@ -38,12 +38,67 @@ type CalendarCell = {
 const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 const timeStepMinutes = 5;
-const timeOptions = Array.from({ length: (24 * 60) / timeStepMinutes }, (_, index) => {
-  const totalMinutes = index * timeStepMinutes;
-  const hour = Math.floor(totalMinutes / 60);
-  const minute = totalMinutes % 60;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-});
+const hourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const minuteOptions = Array.from({ length: 60 / timeStepMinutes }, (_, index) =>
+  String(index * timeStepMinutes).padStart(2, "0"),
+);
+
+const TimeCarousel = ({
+  label,
+  options,
+  value,
+  onSelect,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onSelect: (value: string) => void;
+}) => {
+  const scrollRef = useRef<ScrollView>(null);
+  const viewportWidthRef = useRef(0);
+
+  return (
+    <View style={styles.timeCarousel}>
+      <Text style={styles.selectorLabel}>{label}</Text>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.timeCarouselTrack}
+        onLayout={(event) => {
+          viewportWidthRef.current = event.nativeEvent.layout.width;
+        }}
+      >
+        {options.map((option) => {
+          const active = option === value;
+          return (
+            <Pressable
+              key={option}
+              style={[styles.timeCarouselItem, active && styles.dropdownItemActive]}
+              onLayout={
+                active
+                  ? (event) => {
+                      const { x, width } = event.nativeEvent.layout;
+                      scrollRef.current?.scrollTo({
+                        x: Math.max(0, x - (viewportWidthRef.current - width) / 2),
+                        animated: false,
+                      });
+                    }
+                  : undefined
+              }
+              onPress={() => onSelect(option)}
+            >
+              <Text style={[styles.timeCarouselText, active && styles.dropdownItemTextActive]}>
+                {option}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Ошибка сервера.";
@@ -136,7 +191,6 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
   const [calendarMonthCursor, setCalendarMonthCursor] = useState(() => new Date());
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
-  const timeMenuScrollRef = useRef<ScrollView>(null);
   const [requiresPhotoConfirmation, setRequiresPhotoConfirmation] = useState(false);
   const [instructionTask, setInstructionTask] = useState<Task | null>(null);
   const [pendingTaskIds, setPendingTaskIds] = useState<Record<string, boolean>>({});
@@ -485,37 +539,27 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
       )}
 
       {showTimeDropdown && (
-        <View style={styles.dropdownMenu}>
-          <ScrollView ref={timeMenuScrollRef} style={styles.timeMenuScroll} nestedScrollEnabled>
-            {timeOptions.map((time) => {
-              const active = time === deadlineTime;
-              return (
-                <Pressable
-                  key={time}
-                  style={[styles.dropdownItem, active && styles.dropdownItemActive]}
-                  onLayout={
-                    active
-                      ? (event) =>
-                          timeMenuScrollRef.current?.scrollTo({
-                            y: Math.max(0, event.nativeEvent.layout.y - 80),
-                            animated: false,
-                          })
-                      : undefined
-                  }
-                  onPress={() => {
-                    setDeadlineTime(time);
-                    setShowTimeDropdown(false);
-                  }}
-                >
-                  <Text
-                    style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}
-                  >
-                    {time}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+        <View style={[styles.dropdownMenu, styles.timeMenu]}>
+          <TimeCarousel
+            label="Часы"
+            options={hourOptions}
+            value={deadlineTime.slice(0, 2)}
+            onSelect={(hour) => setDeadlineTime(`${hour}:${deadlineTime.slice(3, 5)}`)}
+          />
+          <TimeCarousel
+            label="Минуты"
+            options={minuteOptions}
+            value={deadlineTime.slice(3, 5)}
+            onSelect={(minute) => setDeadlineTime(`${deadlineTime.slice(0, 2)}:${minute}`)}
+          />
+          <View style={styles.timeCarouselFooter}>
+            <Pressable
+              style={styles.calendarConfirmButton}
+              onPress={() => setShowTimeDropdown(false)}
+            >
+              <Text style={styles.calendarConfirmButtonText}>Готово</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -797,8 +841,32 @@ const styles = StyleSheet.create({
   dropdownScroll: {
     maxHeight: 180,
   },
-  timeMenuScroll: {
-    maxHeight: 210,
+  timeMenu: {
+    padding: 10,
+    gap: 10,
+  },
+  timeCarousel: {
+    gap: 6,
+  },
+  timeCarouselTrack: {
+    gap: 6,
+  },
+  timeCarouselItem: {
+    minWidth: 52,
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d7e2d9",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  timeCarouselText: {
+    color: "#2f4437",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  timeCarouselFooter: {
+    alignItems: "flex-end",
   },
   dropdownItem: {
     paddingHorizontal: 12,

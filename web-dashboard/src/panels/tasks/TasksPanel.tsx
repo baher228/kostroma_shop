@@ -169,12 +169,10 @@ const readInstructionPhoto = (file: File) =>
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const TIME_STEP_MINUTES = 5;
-const TIME_OPTIONS = Array.from({ length: (24 * 60) / TIME_STEP_MINUTES }, (_, index) => {
-  const totalMinutes = index * TIME_STEP_MINUTES;
-  const hour = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
-  const minute = String(totalMinutes % 60).padStart(2, '0');
-  return `${hour}:${minute}`;
-});
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
+const MINUTE_OPTIONS = Array.from({ length: 60 / TIME_STEP_MINUTES }, (_, index) =>
+  String(index * TIME_STEP_MINUTES).padStart(2, '0'),
+);
 
 const toDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -219,6 +217,60 @@ const dateLabel = (key: string) => dateFromKey(key).toLocaleDateString('ru-RU', 
   year: 'numeric',
 });
 
+const TimeCarousel = ({
+  label,
+  options,
+  value,
+  onSelect,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onSelect: (value: string) => void;
+}) => {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const hasScrolledRef = useRef(false);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    const selected = track?.querySelector<HTMLElement>('button.selected');
+    if (!track || !selected) return;
+    track.scrollTo({
+      left: selected.offsetLeft - (track.clientWidth - selected.offsetWidth) / 2,
+      behavior: hasScrolledRef.current ? 'smooth' : 'auto',
+    });
+    hasScrolledRef.current = true;
+  }, [value]);
+
+  const scrollPage = (direction: -1 | 1) => {
+    const track = trackRef.current;
+    track?.scrollBy({ left: direction * track.clientWidth * 0.8, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="deadline-time-carousel">
+      <span className="deadline-time-carousel-label">{label}</span>
+      <div className="deadline-time-carousel-row">
+        <button type="button" className="deadline-time-carousel-nav" aria-label={`${label}: назад`} onClick={() => scrollPage(-1)}>‹</button>
+        <div className="deadline-time-carousel-track" ref={trackRef}>
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={option === value ? 'selected' : ''}
+              aria-pressed={option === value}
+              onClick={() => onSelect(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="deadline-time-carousel-nav" aria-label={`${label}: вперёд`} onClick={() => scrollPage(1)}>›</button>
+      </div>
+    </div>
+  );
+};
+
 const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
   const selectedDateKey = value.slice(0, 10);
   const selectedTime = value.slice(11, 16) || '09:00';
@@ -246,20 +298,13 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
     };
   }, [open]);
 
-  useEffect(() => {
-    if (open !== 'time') return;
-    const options = pickerRef.current?.querySelector<HTMLElement>('.deadline-time-options');
-    const selected = options?.querySelector<HTMLElement>('button.selected');
-    if (!options || !selected) return;
-    const optionsRect = options.getBoundingClientRect();
-    const selectedRect = selected.getBoundingClientRect();
-    options.scrollTop += selectedRect.top - optionsRect.top - (optionsRect.height - selectedRect.height) / 2;
-  }, [open]);
-
   const close = () => {
     setOpen(null);
     triggerRef.current?.focus();
   };
+
+  const [selectedHour, selectedMinute] = selectedTime.split(':');
+  const chooseTime = (hour: string, minute: string) => onChange(`${selectedDateKey}T${hour}:${minute}`);
 
   const chooseDate = (key: string) => {
     onChange(`${key}T${selectedTime}`);
@@ -333,20 +378,10 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
             <strong>Время</strong>
             <span>{dateLabel(selectedDateKey)}</span>
           </header>
-          <div className="deadline-time-options">
-            {TIME_OPTIONS.map((time) => (
-              <button
-                key={time}
-                type="button"
-                className={time === selectedTime ? 'selected' : ''}
-                onClick={() => {
-                  onChange(`${selectedDateKey}T${time}`);
-                  close();
-                }}
-              >
-                {time}
-              </button>
-            ))}
+          <TimeCarousel label="Часы" options={HOUR_OPTIONS} value={selectedHour} onSelect={(hour) => chooseTime(hour, selectedMinute)} />
+          <TimeCarousel label="Минуты" options={MINUTE_OPTIONS} value={selectedMinute} onSelect={(minute) => chooseTime(selectedHour, minute)} />
+          <div className="deadline-calendar-footer deadline-time-footer">
+            <button type="button" className="secondary" onClick={close}>Готово</button>
           </div>
         </section>
       )}

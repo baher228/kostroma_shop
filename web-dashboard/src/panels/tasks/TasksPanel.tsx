@@ -168,9 +168,11 @@ const readInstructionPhoto = (file: File) =>
   });
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const hour = String(Math.floor(index / 2)).padStart(2, '0');
-  const minute = index % 2 ? '30' : '00';
+const TIME_STEP_MINUTES = 5;
+const TIME_OPTIONS = Array.from({ length: (24 * 60) / TIME_STEP_MINUTES }, (_, index) => {
+  const totalMinutes = index * TIME_STEP_MINUTES;
+  const hour = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const minute = String(totalMinutes % 60).padStart(2, '0');
   return `${hour}:${minute}`;
 });
 

@@ -37,10 +37,12 @@ type CalendarCell = {
 
 const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-const timeOptions = Array.from({ length: 48 }, (_, index) => {
-  const hour = Math.floor(index / 2);
-  const minute = index % 2 === 0 ? "00" : "30";
-  return `${String(hour).padStart(2, "0")}:${minute}`;
+const timeStepMinutes = 5;
+const timeOptions = Array.from({ length: (24 * 60) / timeStepMinutes }, (_, index) => {
+  const totalMinutes = index * timeStepMinutes;
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 });
 
 const errorMessage = (error: unknown) =>

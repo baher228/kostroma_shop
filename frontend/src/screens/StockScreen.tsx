@@ -312,7 +312,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [newProductMinStockUnits, setNewProductMinStockUnits] = useState('');
   const [newProductMaxStockUnits, setNewProductMaxStockUnits] = useState('');
   const [addingProduct, setAddingProduct] = useState(false);
-  const { checkingUpdate, checkForAppUpdate } = useAppUpdate();
+  const { checkingUpdate, checkForAppUpdate, versionLabel } = useAppUpdate();
 
   const [stockKind, setStockKind] = useState<StockValueKind>('stock');
   const isInventory = stockKind === 'inventory';
@@ -1453,6 +1453,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           </Text>
         </View>
         <View style={styles.headerActions}>
+          {versionLabel && <Text style={styles.versionLabel}>{versionLabel}</Text>}
           <Pressable
             style={[styles.updateButton, checkingUpdate && styles.buttonDisabled]}
             onPress={() => void checkForAppUpdate()}
@@ -1754,6 +1755,11 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '800',
     fontSize: 13,
+  },
+  versionLabel: {
+    color: '#6b7a72',
+    fontSize: 11,
+    fontWeight: '600',
   },
   logoutButton: {
     borderRadius: 11,

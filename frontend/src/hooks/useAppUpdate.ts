@@ -2,6 +2,15 @@ import { useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import * as Updates from 'expo-updates';
 
+const pad = (value: number) => String(value).padStart(2, '0');
+
+const installedVersionLabel = () => {
+  if (Platform.OS === 'web' || !Updates.isEnabled) return null;
+  const createdAt = Updates.createdAt;
+  if (!createdAt || Updates.isEmbeddedLaunch) return 'Версия из APK';
+  return `Версия от ${pad(createdAt.getDate())}.${pad(createdAt.getMonth() + 1)} ${pad(createdAt.getHours())}:${pad(createdAt.getMinutes())}`;
+};
+
 export const useAppUpdate = () => {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
@@ -31,5 +40,5 @@ export const useAppUpdate = () => {
     }
   };
 
-  return { checkingUpdate, checkForAppUpdate };
+  return { checkingUpdate, checkForAppUpdate, versionLabel: installedVersionLabel() };
 };

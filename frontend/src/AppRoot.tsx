@@ -1,8 +1,9 @@
-import { ActivityIndicator, Platform, SafeAreaView, StatusBar as NativeStatusBar, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Platform, SafeAreaView, StatusBar as NativeStatusBar, StyleSheet, Text, View } from 'react-native';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AudioQcProvider } from './features/audioQc/AudioQcProvider';
 import { LoginScreen } from './screens/LoginScreen';
 import { StockScreen } from './screens/StockScreen';
+import { useAutoAppUpdate } from './hooks/useAutoAppUpdate';
 
 const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 12 : 0;
 
@@ -29,13 +30,21 @@ const AppContent = () => {
   );
 };
 
-export const AppRoot = () => (
-  <AuthProvider>
-    <AppContent />
-  </AuthProvider>
-);
+export const AppRoot = () => {
+  const markActivity = useAutoAppUpdate();
+  return (
+    <View style={styles.root} onTouchStart={markActivity}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   loadingScreen: {
     flex: 1,
     justifyContent: 'center',

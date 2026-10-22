@@ -4997,3 +4997,28 @@ input[type='datetime-local'] {
   color: #b45309;
   font-weight: 800;
 }
+
+.inventory-price-col-width {
+  width: 96px;
+}
+
+.inventory-sum-col-width {
+  width: 104px;
+}
+
+.inventory-history-table .inventory-date-start {
+  border-left: 3px solid #526557;
+}
+
+.inventory-history-table .inventory-value-cell {
+  text-align: center;
+  font-weight: 600;
+}
+
+.inventory-history-table .inventory-total-row td {
+  background: #ecf1ec;
+}
+
+.inventory-price-input {
+  width: 100%;
+}

@@ -280,6 +280,7 @@ export type Product = {
   unitPriceRubVat: number | null;
   minStockUnits: number | null;
   maxStockUnits: number | null;
+  inventoryPrice?: number | null;
   values: Record<string, string>;
   dashboardOverrides?: Record<string, string>;
 };
@@ -292,6 +293,7 @@ export type StockTable = {
   to: string;
   dates: string[];
   rows: Product[];
+  inventoryCounts?: Record<string, string>;
 };
 
 export type OrderValueEntry = {

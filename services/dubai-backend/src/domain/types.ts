@@ -90,6 +90,7 @@ export type StockTableRow = {
   unitPriceRubVat: number | null;
   minStockUnits: number | null;
   maxStockUnits: number | null;
+  inventoryPrice?: number | null;
   values: Record<string, string>;
   dashboardOverrides?: Record<string, string>;
 };
@@ -102,6 +103,7 @@ export type StockTable = {
   to: string;
   dates: string[];
   rows: StockTableRow[];
+  inventoryCounts?: Record<string, string>;
 };
 
 export type TaskStatus = 'open' | 'done';

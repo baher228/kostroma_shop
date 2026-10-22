@@ -366,6 +366,9 @@ export const api = {
       (await dxbRequest<{ product: unknown }>('/api/stock/products', { method: 'POST', token, body: payload })).product,
     updateProduct: async (token: string, productId: string, payload: Partial<ProductPayload>) =>
       (await dxbRequest<{ product: unknown }>(`/api/stock/products/${productId}`, { method: 'PATCH', token, body: payload })).product,
+    updateInventoryPrice: async (token: string, productId: string, inventoryPrice: number | null) => {
+      await dxbRequest<{ product: unknown }>(`/api/stock/products/${productId}/meta`, { method: 'PATCH', token, body: { inventoryPrice } });
+    },
     deleteProduct: async (token: string, productId: string) => {
       await dxbRequest<{}>(`/api/stock/products/${productId}`, { method: 'DELETE', token });
     },

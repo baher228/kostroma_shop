@@ -20,6 +20,7 @@ type ProductDbRow = {
   unit_price_rub_vat: number | string | null;
   min_stock_units: number | null;
   max_stock_units: number | null;
+  inventory_price_rub?: number | string | null;
 };
 
 type ValueDbRow = {
@@ -357,7 +358,7 @@ export const createProduct = async (input: CreateProductInput): Promise<StockPro
 
 export const updateProductMeta = async (
   productId: string,
-  patch: { unitsInPack?: number | null; minStockUnits?: number | null; maxStockUnits?: number | null },
+  patch: { unitsInPack?: number | null; minStockUnits?: number | null; maxStockUnits?: number | null; inventoryPrice?: number | null },
 ): Promise<StockProduct | null> => {
   const updates: string[] = [];
   const params: unknown[] = [];
@@ -374,6 +375,10 @@ export const updateProductMeta = async (
   if (Object.prototype.hasOwnProperty.call(patch, 'maxStockUnits')) {
     updates.push(`max_stock_units = $${index++}`);
     params.push(patch.maxStockUnits ?? null);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'inventoryPrice')) {
+    updates.push(`inventory_price_rub = $${index++}`);
+    params.push(patch.inventoryPrice ?? null);
   }
 
   if (!updates.length) {
@@ -492,9 +497,9 @@ export const deleteProduct = async (productId: string): Promise<boolean> => {
 
 const resolveRequestedRange = (
   viewer: OpsTokenClaims,
-  params: { from?: string; to?: string; range?: 'week' | 'year' },
+  params: { from?: string; to?: string; range?: 'week' | 'year'; kind?: StockValueKind },
 ): DateRange => {
-  if (viewer.role === 'worker') {
+  if (viewer.role === 'worker' && !(params.kind === 'inventory' && params.from && params.to)) {
     return currentWeekRange();
   }
   if (params.from && params.to) {
@@ -552,7 +557,7 @@ export const getStockTable = async (
     opsDb.query<ProductDbRow>(
       `
         SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat
-               , min_stock_units, max_stock_units
+               , min_stock_units, max_stock_units, inventory_price_rub
         FROM stock_products
         WHERE business_category = $1
         ORDER BY created_at ASC, name ASC;
@@ -592,7 +597,31 @@ export const getStockTable = async (
     ),
   ]);
 
-  const dates = buildDateRange(range.from, range.to);
+  const isInventory = params.kind === 'inventory';
+  const productIds = new Set(productsResult.rows.map((product: ProductDbRow) => product.id));
+  const inventoryCounts: Record<string, string> = {};
+  if (isInventory) {
+    const countsResult = await opsDb.query<{ day_date: string; counted_at: Date }>(
+      `
+        SELECT day_date::text AS day_date, counted_at
+        FROM inventory_counts
+        WHERE shop_id = $1
+          AND business_category = $2
+          AND day_date >= $3::date
+          AND day_date <= $4::date;
+      `,
+      [shop.id, businessCategory, range.from, range.to],
+    );
+    for (const item of countsResult.rows) {
+      inventoryCounts[item.day_date] = new Date(item.counted_at).toISOString();
+    }
+  }
+  const dates = isInventory && viewer.role === 'manager' && !(params.from && params.to && params.from === params.to)
+    ? [...new Set([
+        ...Object.keys(inventoryCounts),
+        ...valuesResult.rows.filter((item: ValueDbRow) => productIds.has(item.product_id)).map((item: ValueDbRow) => item.day_date),
+      ])].sort()
+    : buildDateRange(range.from, range.to);
   const byProductAndDate = new Map<string, string>();
   for (const item of valuesResult.rows) {
     byProductAndDate.set(`${item.product_id}:${item.day_date}`, String(item.value));
@@ -621,6 +650,7 @@ export const getStockTable = async (
       unitPriceRubVat: toNullableNumber(product.unit_price_rub_vat),
       minStockUnits: product.min_stock_units,
       maxStockUnits: product.max_stock_units,
+      ...(isInventory ? { inventoryPrice: toNullableNumber(product.inventory_price_rub ?? null) } : {}),
       values,
       dashboardOverrides: dashboardOverridesByProduct.get(product.id),
     };
@@ -634,12 +664,14 @@ export const getStockTable = async (
     to: range.to,
     dates,
     rows,
+    ...(isInventory ? { inventoryCounts } : {}),
   };
 };
 
 const MAX_STOCK_VALUE = 50;
+const MAX_INVENTORY_VALUE = 9999;
 
-const sanitizeStockValue = (raw: string): string => {
+const sanitizeStockValue = (raw: string, max = MAX_STOCK_VALUE): string => {
   const digits = raw.replace(/[^0-9]/g, '');
   if (!digits) {
     return '';
@@ -648,13 +680,14 @@ const sanitizeStockValue = (raw: string): string => {
   if (Number.isNaN(parsed)) {
     return '';
   }
-  return String(Math.min(MAX_STOCK_VALUE, Math.max(0, parsed)));
+  return String(Math.min(max, Math.max(0, parsed)));
 };
 
 export const upsertStockValue = async (
   viewer: OpsTokenClaims,
-  params: { shopId?: string; productId: string; date: string; value: string; kind?: StockValueKind },
+  params: { shopId?: string; productId: string; date: string; value: string; kind?: StockValueKind; countedAt?: string },
 ): Promise<boolean> => {
+  const isInventory = params.kind === 'inventory';
   const valuesTable = valuesTableFor(params.kind);
   if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
     return false;
@@ -669,27 +702,40 @@ export const upsertStockValue = async (
     return false;
   }
 
-  if (viewer.role === 'worker') {
+  if (viewer.role === 'worker' && !isInventory) {
     const workerWeek = currentWeekRange();
     if (params.date < workerWeek.from || params.date > workerWeek.to) {
       return false;
     }
   }
 
-  const productResult = await opsDb.query<{ id: string }>(
+  const productResult = await opsDb.query<{ id: string; business_category: BusinessCategory | null }>(
     `
-      SELECT id
+      SELECT id, business_category
       FROM stock_products
       WHERE id = $1
       LIMIT 1;
     `,
     [params.productId],
   );
-  if (!productResult.rows[0]) {
+  const product = productResult.rows[0];
+  if (!product) {
     return false;
   }
 
-  const sanitized = sanitizeStockValue(params.value);
+  if (isInventory) {
+    await opsDb.query(
+      `
+        INSERT INTO inventory_counts (shop_id, business_category, day_date, counted_at, updated_at)
+        VALUES ($1, $2, $3::date, $4::timestamptz, NOW())
+        ON CONFLICT (shop_id, business_category, day_date)
+        DO UPDATE SET counted_at = EXCLUDED.counted_at, updated_at = NOW();
+      `,
+      [targetShop.id, product.business_category ?? DEFAULT_BUSINESS_CATEGORY, params.date, params.countedAt ?? new Date().toISOString()],
+    );
+  }
+
+  const sanitized = sanitizeStockValue(params.value, isInventory ? MAX_INVENTORY_VALUE : MAX_STOCK_VALUE);
   if (!sanitized) {
     await opsDb.query(
       `
@@ -706,7 +752,7 @@ export const upsertStockValue = async (
   await opsDb.query(
     `
       INSERT INTO ${valuesTable} (shop_id, product_id, day_date, value, updated_at)
-      VALUES ($1, $2, $3::date, $4::smallint, NOW())
+      VALUES ($1, $2, $3::date, $4::integer, NOW())
       ON CONFLICT (shop_id, product_id, day_date)
       DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
     `,

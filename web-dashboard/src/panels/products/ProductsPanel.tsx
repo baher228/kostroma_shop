@@ -20,6 +20,7 @@ import {
   computeStockWithOrder,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
+  followingMonday,
   type DashboardWeeks,
   isManualOrderKey,
   isManualStockKey,
@@ -94,6 +95,7 @@ const dashboardFormulaStockRangeForWindowStart = (weekStart: string): LoadedWeek
       weeks.current.thu,
       weeks.current.fri,
       weeks.current.sun,
+      followingMonday(weeks.current),
     ];
   });
   return rangeFromDates(formulaDates, visibleRange);
@@ -467,7 +469,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     if (key === 'currentThu') return weeks.current.thu;
     if (key === 'currentFri') return weeks.current.fri;
     if (key === 'currentSun') return weeks.current.sun;
-    if (key === 'currentMon') return weeks.current.mon;
+    if (key === 'currentMon') return followingMonday(weeks.current);
     return undefined;
   };
 

@@ -52,6 +52,7 @@ import {
   computeDashboardSold,
   dashboardHeaderSubtitle,
   deriveDashboardWeeks,
+  followingMonday,
   isManualOrderKey,
   isManualStockKey,
   orderUnitsFromPacks,
@@ -202,6 +203,7 @@ const dashboardFormulaStockRangeForWindowStart = (weekStart: string): LoadedDate
     weeks.current.thu,
     weeks.current.fri,
     weeks.current.sun,
+    followingMonday(weeks.current),
   ], visibleRange);
 };
 
@@ -500,7 +502,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return dashboardWeeks.current.sun;
     }
     if (key === 'currentMon') {
-      return dashboardWeeks.current.mon;
+      return followingMonday(dashboardWeeks.current);
     }
     return undefined;
   };

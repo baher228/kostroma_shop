@@ -57,7 +57,7 @@ export type DashboardColumn = {
   dateKind?: 'none' | 'day' | 'range';
   dateWeek?: DashboardWeekRef;
   dateDay?: WeekSlot;
-  // Shifts only the header date, not the stock date the column reads.
+  // Monday columns close the week, so they show (and read) the Monday after it.
   dateOffsetDays?: number;
   dateFrom?: WeekSlot;
   dateTo?: WeekSlot;
@@ -89,5 +89,5 @@ export const DASHBOARD_COLUMNS: DashboardColumn[] = [
   { key: 'prevMon', title: 'Прошлый остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'previous', dateDay: 'mon', dateOffsetDays: WEEK_DAYS },
   { key: 'soldPrevFriMon', title: 'Продано на прошлой неделе', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'previous' },
   { key: 'currentMon', title: 'Текущий остаток', subtitle: 'Понедел', kind: 'stock', tone: 'neutral', dateKind: 'day', dateWeek: 'current', dateDay: 'mon', dateOffsetDays: WEEK_DAYS },
-  { key: 'soldFriMon', title: 'Продано', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'previous', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
+  { key: 'soldFriMon', title: 'Продано', subtitle: 'Пт-Пн', kind: 'metric', tone: 'blue', dateKind: 'range', dateWeek: 'current', dateFrom: 'fri', dateTo: 'mon', dateToWeek: 'current' },
 ];

@@ -19,6 +19,7 @@ export {
   dashboardRangeLabel,
   deriveDashboardWeeks,
   diffStocks,
+  followingMonday,
   isManualOrderKey,
   isManualStockKey,
   mapWeekDates,

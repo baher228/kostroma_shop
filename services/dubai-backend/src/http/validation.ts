@@ -179,25 +179,26 @@ export const upsertStockValueSchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
   productId: z.string().trim().min(1).max(100),
   date: dateKeySchema,
-  value: z
-    .string()
-    .regex(/^\d{0,2}$/)
-    .refine((raw) => raw === '' || Number.parseInt(raw, 10) <= 50, {
-      message: 'Stock must be in range 0-50.',
-    }),
-});
+  value: z.string().regex(/^\d{0,4}$/),
+  countedAt: z.string().datetime({ offset: true }).optional(),
+}).refine(
+  (payload) => payload.value === '' || payload.kind === 'inventory' || Number.parseInt(payload.value, 10) <= 50,
+  { message: 'Stock must be in range 0-50.', path: ['value'] },
+);
 
 export const updateProductMetaSchema = z
   .object({
     unitsInPack: nullablePositiveInt.optional(),
     minStockUnits: nullablePositiveInt.optional(),
     maxStockUnits: nullablePositiveInt.optional(),
+    inventoryPrice: z.union([z.number().min(0).max(10_000_000), z.null()]).optional(),
   })
   .refine(
     (payload) =>
       Object.prototype.hasOwnProperty.call(payload, 'unitsInPack') ||
       Object.prototype.hasOwnProperty.call(payload, 'minStockUnits') ||
-      Object.prototype.hasOwnProperty.call(payload, 'maxStockUnits'),
+      Object.prototype.hasOwnProperty.call(payload, 'maxStockUnits') ||
+      Object.prototype.hasOwnProperty.call(payload, 'inventoryPrice'),
     {
       message: 'Empty update payload.',
     },

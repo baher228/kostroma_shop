@@ -12,7 +12,7 @@ import {
   type DashboardColumnKey,
   type DashboardManualOrderKey,
 } from '../../dashboardConfig';
-import { addDays, formatDateLabel, formatDateShort, formatWeekdayDateShort, formatWeekdayName, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, parseDateKey, startOfWeek } from '../../dateUtils';
+import { addDays, toDateKey, formatDateLabel, formatDateShort, formatWeekdayDateShort, formatWeekdayName, getTwoWeeksEnd, isDelicaciesOrderDate, nearestDelicaciesOrderDate, parseDateKey, startOfWeek } from '../../dateUtils';
 import { buildCsv, safeFileName } from '../../export/csv';
 import {
   buildDashboardRowValues,
@@ -235,6 +235,63 @@ const StockCellInput = ({
   );
 };
 
+const INVENTORY_HISTORY_DAYS = 365;
+
+const inventoryFetchRange = () => {
+  const today = toDateKey(new Date());
+  return { from: addDays(today, -INVENTORY_HISTORY_DAYS), to: addDays(today, 31) };
+};
+
+const formatInventoryMoney = (value: number): string => {
+  const [whole, fraction] = (Math.round(value * 100) / 100).toFixed(2).split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return fraction === '00' ? grouped : `${grouped},${fraction}`;
+};
+
+const inventorySumFor = (price: number | null | undefined, quantity: string | undefined): number | null => {
+  if (price === null || price === undefined || !quantity) {
+    return null;
+  }
+  return price * Number.parseInt(quantity, 10);
+};
+
+const formatInventoryTime = (iso: string | undefined): string => {
+  if (!iso) {
+    return '';
+  }
+  const date = new Date(iso);
+  return Number.isNaN(date.valueOf()) ? '' : `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
+
+const priceToDraft = (price: number | null | undefined) =>
+  price === null || price === undefined ? '' : String(price).replace('.', ',');
+
+const InventoryPriceInput = ({ value, label, onCommit }: { value: number | null | undefined; label: string; onCommit: (raw: string) => void }) => {
+  const [draft, setDraft] = useState(priceToDraft(value));
+  useEffect(() => setDraft(priceToDraft(value)), [value]);
+
+  return (
+    <input
+      className="dashboard-order-input stock-cell-input inventory-price-input"
+      aria-label={label}
+      inputMode="decimal"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value.replace(/[^0-9.,]/g, '').slice(0, 12))}
+      onFocus={(event) => event.currentTarget.select()}
+      onBlur={() => {
+        if (draft !== priceToDraft(value)) onCommit(draft);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setDraft(priceToDraft(value));
+          return;
+        }
+        if (event.key === 'Enter') event.currentTarget.blur();
+      }}
+    />
+  );
+};
+
 export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; mode?: 'stock' | 'inventory' }) => {
   const isInventory = mode === 'inventory';
   const valueKind = isInventory ? 'inventory' : undefined;
@@ -273,7 +330,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   const load = async (shopId = selectedShopId, nextWindowStart = windowStart, force = false) => {
     const cachedShopId = shopId || shops[0]?.id || '';
     const cachedLoadedKey = cachedShopId ? `${cachedShopId}:${activeBusinessCategory}` : '';
-    const targetRange = stockFetchRangeForWindowStart(nextWindowStart, activeBusinessCategory);
+    const targetRange = isInventory ? inventoryFetchRange() : stockFetchRangeForWindowStart(nextWindowStart, activeBusinessCategory);
     if (!force && cachedLoadedKey && table && loadedKey === cachedLoadedKey && loadedRange && loadedRange.from === targetRange.from && loadedRange.to === targetRange.to) {
       return;
     }
@@ -344,6 +401,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     const range = visibleStockRangeForWindowStart(windowStart);
     return buildDateRange(range.from, range.to);
   }, [windowStart]);
+  const inventoryDates = useMemo(() => (isInventory ? [...(table?.dates ?? [])].sort().reverse() : []), [isInventory, table]);
   const dashboardWeekStarts = useMemo(() => bufferedWeekStartsFor(windowStart), [windowStart]);
   const activeViewDates = useMemo(() => viewDatesForWindowStart(windowStart), [windowStart]);
 
@@ -479,6 +537,25 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
       : current);
   };
 
+  const saveInventoryPrice = async (productId: string, raw: string) => {
+    const normalized = raw.trim().replace(',', '.');
+    const price = normalized === '' ? null : Number.parseFloat(normalized);
+    if (price !== null && (Number.isNaN(price) || price < 0)) {
+      setError('Цена должна быть числом.');
+      return;
+    }
+    const rounded = price === null ? null : Math.round(price * 100) / 100;
+    try {
+      await api.stock.updateInventoryPrice(session.token, productId, rounded);
+      setTable((current) => current
+        ? { ...current, rows: current.rows.map((row) => row.productId === productId ? { ...row, inventoryPrice: rounded } : row) }
+        : current);
+      setError('');
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  };
+
   const saveStockCell = async (productId: string, date: string, value: string) => {
     if (!selectedShopId) {
       return;
@@ -556,6 +633,36 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
 
   const exportDashboard = () => {
     if (!table) {
+      return;
+    }
+    if (isInventory) {
+      const inventoryHeaders = [
+        'Категория',
+        'Товар',
+        'Цена',
+        ...inventoryDates.flatMap((date) => {
+          const label = `Инвентаризация ${formatDateShort(date)} ${formatInventoryTime(table.inventoryCounts?.[date])}`.trim();
+          return [`${label}: Количество`, `${label}: Сумма`];
+        }),
+      ];
+      const inventoryRows = orderedRows.map((row) => [
+        row.category,
+        row.name,
+        row.inventoryPrice === null || row.inventoryPrice === undefined ? '' : String(row.inventoryPrice),
+        ...inventoryDates.flatMap((date) => {
+          const sum = inventorySumFor(row.inventoryPrice, row.values[date]);
+          return [row.values[date] ?? '', sum === null ? '' : String(Math.round(sum * 100) / 100)];
+        }),
+      ]);
+      const inventoryBlob = new Blob([`\uFEFF${buildCsv([inventoryHeaders, ...inventoryRows])}`], { type: 'text/csv;charset=utf-8;' });
+      const inventoryUrl = URL.createObjectURL(inventoryBlob);
+      const inventoryLink = document.createElement('a');
+      inventoryLink.href = inventoryUrl;
+      inventoryLink.download = `${safeFileName(`inventory_${table.shop.name}_${activeBusinessCategory}`)}.csv`;
+      document.body.appendChild(inventoryLink);
+      inventoryLink.click();
+      inventoryLink.remove();
+      URL.revokeObjectURL(inventoryUrl);
       return;
     }
     const headers = [
@@ -779,26 +886,45 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   const renderInventoryTable = (rows: Product[]) => (
     <section className="manager-category-block">
       {renderTopScrollbar()}
-      <div className="manager-table-scroll" onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)} ref={tableScrollRef}>
-        <table className="manager-stock-table manager-dashboard-table">
+      <div
+        className="manager-table-scroll"
+        onScroll={() => syncScrollLeft(tableScrollRef.current, topScrollRef.current)}
+        ref={tableScrollRef}
+      >
+        <table className="manager-stock-table manager-dashboard-table inventory-history-table">
           <colgroup>
             <col className="manager-name-col-width" />
-            {loadedDates.map((date) => <col key={date} className="dashboard-col-stock-width" />)}
+            <col className="inventory-price-col-width" />
+            {inventoryDates.map((date) => (
+              <React.Fragment key={date}>
+                <col className="dashboard-col-stock-width" />
+                <col className="inventory-sum-col-width" />
+              </React.Fragment>
+            ))}
           </colgroup>
           <thead>
             <tr>
-              <th className="manager-name-col dashboard-name-header">Товар</th>
-              {loadedDates.map((date) => (
-                <th key={date} data-week-start={date === windowStart ? windowStart : undefined}>
-                  Остаток
-                  <small>{formatDateShort(date)}</small>
+              <th className="manager-name-col dashboard-name-header" rowSpan={2}>Товар</th>
+              <th rowSpan={2}>Цена</th>
+              {inventoryDates.map((date) => (
+                <th key={date} colSpan={2} className="inventory-date-start">
+                  Инвентаризация {formatDateShort(date)}
+                  <small>{[formatWeekdayName(date), formatInventoryTime(table?.inventoryCounts?.[date])].filter(Boolean).join(', ')}</small>
                 </th>
+              ))}
+            </tr>
+            <tr>
+              {inventoryDates.map((date) => (
+                <React.Fragment key={date}>
+                  <th className="inventory-date-start">Количество</th>
+                  <th>Сумма</th>
+                </React.Fragment>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={loadedDates.length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={inventoryDates.length * 2 + 2} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => (
               <tr
                 key={row.productId}
@@ -808,26 +934,54 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                 ].filter(Boolean).join(' ') || undefined}
               >
                 <td className="manager-name-col">
-                  <button type="button" className="manager-name-button" title="Изменить или удалить товар" onClick={() => openEditProduct(row)}>
+                  <button
+                    type="button"
+                    className="manager-name-button"
+                    title="Изменить или удалить товар"
+                    onClick={() => openEditProduct(row)}
+                  >
                     <strong>{managerProductName(row.name)}</strong>
                     <small>{productReferenceLabel(row)}</small>
                   </button>
                 </td>
-                {loadedDates.map((date) => (
-                  <td key={`${row.productId}:${date}`}>
-                    <StockCellInput
-                      value={row.values[date] ?? ''}
-                      gridCol={`stock:${date}`}
-                      label={`${row.name}, ${formatDateLabel(date)}`}
-                      onCommit={(nextValue) => void saveStockCell(row.productId, date, nextValue)}
-                    />
-                  </td>
-                ))}
+                <td>
+                  <InventoryPriceInput
+                    value={row.inventoryPrice}
+                    label={`Цена: ${row.name}`}
+                    onCommit={(raw) => void saveInventoryPrice(row.productId, raw)}
+                  />
+                </td>
+                {inventoryDates.map((date) => {
+                  const sum = inventorySumFor(row.inventoryPrice, row.values[date]);
+                  return (
+                    <React.Fragment key={date}>
+                      <td className="inventory-date-start inventory-value-cell">{row.values[date] || ''}</td>
+                      <td className="inventory-value-cell">{sum === null ? '' : formatInventoryMoney(sum)}</td>
+                    </React.Fragment>
+                  );
+                })}
               </tr>
             ))}
+            {rows.length > 0 && inventoryDates.length > 0 && (
+              <tr className="inventory-total-row">
+                <td className="manager-name-col"><strong>Итого</strong></td>
+                <td />
+                {inventoryDates.map((date) => (
+                  <React.Fragment key={date}>
+                    <td className="inventory-date-start" />
+                    <td className="inventory-value-cell">
+                      <strong>{formatInventoryMoney(rows.reduce((total, row) => total + (inventorySumFor(row.inventoryPrice, row.values[date]) ?? 0), 0))}</strong>
+                    </td>
+                  </React.Fragment>
+                ))}
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+      {inventoryDates.length === 0 && (
+        <p className="manager-loading">Планшеты ещё не отправляли инвентаризацию по категории «{activeBusinessCategory}» в этом магазине.</p>
+      )}
     </section>
   );
 
@@ -942,7 +1096,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     <section className="page-section stock-page-section">
       <PageHeader
         title={isInventory ? 'Инвентаризация' : 'Остатки'}
-        subtitle={isInventory ? 'Инвентаризация по магазину: свои цифры, «Остатки» не меняются.' : 'Менеджерская таблица остатков, заказов и продаж по магазину.'}
+        subtitle={isInventory ? 'История инвентаризаций с планшетов по магазину и категории. Цену меняет только администратор.' : 'Менеджерская таблица остатков, заказов и продаж по магазину.'}
         action={<RefreshButton onClick={() => load(selectedShopId, windowStart, true)} />} />
       <Feedback error={error} />
 
@@ -966,9 +1120,13 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
           <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
             {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
           </select>
-          <button className="secondary" onClick={() => shiftWeek(-1)} disabled={loadingMore}>Прогрузить назад</button>
-          <button className="secondary" onClick={() => setWindowStart(startOfWeek())} disabled={loadingMore}>Текущая неделя</button>
-          <button className="secondary" onClick={() => shiftWeek(1)} disabled={loadingMore}>Прогрузить дальше</button>
+          {!isInventory && (
+            <>
+              <button className="secondary" onClick={() => shiftWeek(-1)} disabled={loadingMore}>Прогрузить назад</button>
+              <button className="secondary" onClick={() => setWindowStart(startOfWeek())} disabled={loadingMore}>Текущая неделя</button>
+              <button className="secondary" onClick={() => shiftWeek(1)} disabled={loadingMore}>Прогрузить дальше</button>
+            </>
+          )}
           <button onClick={() => setIsAddProductOpen(true)}>Добавить товар</button>
           <button className="secondary" onClick={exportDashboard}>Экспорт в Excel</button>
         </div>
@@ -976,7 +1134,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
 
       <div className="manager-meta-row">
         <strong>Позиций: {visibleRows.length}</strong>
-        <strong>{loadedRange ? `${activeBusinessCategory}: ${activeViewDates[0]} - ${activeViewDates[activeViewDates.length - 1]}` : ''}</strong>
+        <strong>{isInventory ? `${activeBusinessCategory}: инвентаризаций ${inventoryDates.length}` : loadedRange ? `${activeBusinessCategory}: ${activeViewDates[0]} - ${activeViewDates[activeViewDates.length - 1]}` : ''}</strong>
         {loadingMore && <strong>Подгружаем период...</strong>}
       </div>
 

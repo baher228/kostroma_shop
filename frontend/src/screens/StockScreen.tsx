@@ -61,6 +61,12 @@ import {
 import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/product-display';
 import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 import { BusinessCategoryTabs } from '../components/BusinessCategoryTabs';
+import {
+  InventoryDateTimeBar,
+  inventoryCountedAtIso,
+  roundedInventoryTime,
+  toInventoryDateKey,
+} from '../components/InventoryDateTimeBar';
 
 type ScreenTab = 'stock' | 'inventory' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
@@ -84,7 +90,23 @@ const topInset = Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Server error.');
 
-const sanitizeStockValue = (raw: string): string => {
+const MAX_STOCK_VALUE = 50;
+const MAX_INVENTORY_VALUE = 9999;
+
+const formatInventoryMoney = (value: number): string => {
+  const [whole, fraction] = (Math.round(value * 100) / 100).toFixed(2).split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return fraction === '00' ? grouped : `${grouped},${fraction}`;
+};
+
+const inventorySumFor = (price: number | null | undefined, quantity: string): number | null => {
+  if (price === null || price === undefined || quantity === '') {
+    return null;
+  }
+  return price * Number.parseInt(quantity, 10);
+};
+
+const sanitizeStockValue = (raw: string, max = MAX_STOCK_VALUE): string => {
   const digits = raw.replace(/[^0-9]/g, '');
   if (!digits) {
     return '';
@@ -93,7 +115,7 @@ const sanitizeStockValue = (raw: string): string => {
   if (Number.isNaN(parsed)) {
     return '';
   }
-  return String(Math.min(50, Math.max(0, parsed)));
+  return String(Math.min(max, Math.max(0, parsed)));
 };
 
 const sanitizeIntegerInput = (raw: string, maxLength = 6): string => raw.replace(/[^0-9]/g, '').slice(0, maxLength);
@@ -318,6 +340,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const [stockKind, setStockKind] = useState<StockValueKind>('stock');
   const isInventory = stockKind === 'inventory';
+  const maxCellValue = isInventory ? MAX_INVENTORY_VALUE : MAX_STOCK_VALUE;
+  const [inventoryDate, setInventoryDate] = useState(() => toInventoryDateKey(new Date()));
+  const [inventoryTime, setInventoryTime] = useState(() => roundedInventoryTime(new Date()));
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
@@ -363,17 +388,21 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       const visibleRange = visibleStockRangeForWindowStart(managerWindowStart);
       const stockRange = stockFetchRangeForWindowStart(managerWindowStart, activeBusinessCategory);
       const orderRange = orderFetchRangeForWindowStart(managerWindowStart, activeBusinessCategory);
-      const from = canManage ? stockRange.from : undefined;
-      const to = canManage ? stockRange.to : undefined;
+      const from = isInventory ? inventoryDate : canManage ? stockRange.from : undefined;
+      const to = isInventory ? inventoryDate : canManage ? stockRange.to : undefined;
       const nextTable = await stockApi.list(session.token, {
         shopId: canManage ? selectedShopId ?? undefined : undefined,
         businessCategory: activeBusinessCategory,
         from,
         to,
-        range: canManage ? undefined : 'week',
+        range: canManage || isInventory ? undefined : 'week',
         kind: stockKind,
       });
-      const visibleTable = canManage
+      const savedCountedAt = isInventory ? nextTable.inventoryCounts?.[inventoryDate] : undefined;
+      if (savedCountedAt) {
+        setInventoryTime(roundedInventoryTime(new Date(savedCountedAt)));
+      }
+      const visibleTable = canManage && !isInventory
         ? { ...nextTable, dates: nextTable.dates.filter((date) => date >= visibleRange.from && date <= visibleRange.to) }
         : nextTable;
       setTable(visibleTable);
@@ -417,7 +446,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return;
     }
     void loadTable();
-  }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory, stockKind]);
+  }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory, stockKind, inventoryDate]);
 
   const visibleRows = useMemo(() => {
     if (!table) {
@@ -668,7 +697,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
     const currentCell = editingCell;
     const key = `${currentCell.productId}:${currentCell.date}`;
-    const nextValue = sanitizeStockValue(editingValue);
+    const nextValue = sanitizeStockValue(editingValue, maxCellValue);
     const nextRow = continueToNext ? getNextRow(currentCell.productId) : null;
 
     try {
@@ -680,6 +709,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         date: currentCell.date,
         value: nextValue,
         kind: stockKind,
+        ...(isInventory ? { countedAt: inventoryCountedAtIso(currentCell.date, inventoryTime) } : {}),
       });
 
       setTable((current) => {
@@ -835,6 +865,81 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         },
       },
     ]);
+  };
+
+  const renderInventoryTable = (rows: StockTableRow[]) => {
+    const total = rows.reduce((sum, row) => sum + (inventorySumFor(row.inventoryPrice, row.values[inventoryDate] ?? '') ?? 0), 0);
+    return (
+      <View style={styles.categoryBlock}>
+        <View style={styles.headerRow}>
+          <View style={[styles.headerCell, styles.workerHeaderCell, styles.inventoryNameColumn]}>
+            <Text style={[styles.headerText, styles.workerHeaderText]}>Товар</Text>
+          </View>
+          {['Цена', 'Количество', 'Сумма'].map((title) => (
+            <View key={title} style={[styles.headerCell, styles.workerHeaderCell, styles.inventoryValueColumn]}>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.headerText, styles.workerHeaderText]}>{title}</Text>
+            </View>
+          ))}
+        </View>
+        {rows.length === 0 ? (
+          <View style={[styles.emptyRow, styles.workerEmptyRow]}>
+            <Text style={styles.emptyRowText}>Нет товаров в этой таблице</Text>
+          </View>
+        ) : (
+          rows.map((row, index) => {
+            const quantity = row.values[inventoryDate] ?? '';
+            const sum = inventorySumFor(row.inventoryPrice, quantity);
+            const pending = pendingKeys[`${row.productId}:${inventoryDate}`];
+            return (
+              <View
+                key={row.productId}
+                style={[
+                  styles.row,
+                  startsNewSubcategory(rows, index) && styles.subcategoryStartRow,
+                  isBreadSectionBreakProduct(row) && styles.breadSectionEndRow,
+                ]}
+              >
+                <View style={[styles.cell, styles.nameCell, styles.workerCell, styles.inventoryNameColumn]}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nameScroll}>
+                    <Text numberOfLines={1} style={[styles.nameText, styles.workerNameText]}>
+                      {row.name}
+                    </Text>
+                  </ScrollView>
+                </View>
+                <View style={[styles.cell, styles.workerCell, styles.inventoryValueColumn, styles.inventoryReadOnlyCell]}>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.valueText, styles.workerValueText]}>
+                    {row.inventoryPrice === null || row.inventoryPrice === undefined ? '' : formatInventoryMoney(row.inventoryPrice)}
+                  </Text>
+                </View>
+                <Pressable
+                  style={[styles.cell, styles.workerCell, styles.valueCell, styles.inventoryValueColumn, pending && styles.pendingCell]}
+                  onPress={() => openEditCell(row, inventoryDate)}
+                >
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.valueText, styles.workerValueText]}>{quantity || '-'}</Text>
+                </Pressable>
+                <View style={[styles.cell, styles.workerCell, styles.inventoryValueColumn, styles.inventoryReadOnlyCell]}>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.valueText, styles.workerValueText]}>
+                    {sum === null ? '' : formatInventoryMoney(sum)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })
+        )}
+        {rows.length > 0 && (
+          <View style={styles.row}>
+            <View style={[styles.cell, styles.workerCell, styles.inventoryNameColumn, styles.inventoryTotalCell]}>
+              <Text style={[styles.headerText, styles.workerHeaderText]}>Итого</Text>
+            </View>
+            <View style={[styles.cell, styles.workerCell, styles.inventoryValueColumn, styles.inventoryTotalCell]} />
+            <View style={[styles.cell, styles.workerCell, styles.inventoryValueColumn, styles.inventoryTotalCell]} />
+            <View style={[styles.cell, styles.workerCell, styles.inventoryValueColumn, styles.inventoryTotalCell]}>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.headerText, styles.workerHeaderText]}>{formatInventoryMoney(total)}</Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
   };
 
   const renderTable = (rows: StockTableRow[]) => (
@@ -1284,7 +1389,15 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           }}
         />
         <View style={styles.controlButtons}>
-          {canManage && (
+          {isInventory && (
+            <InventoryDateTimeBar
+              date={inventoryDate}
+              time={inventoryTime}
+              onChangeDate={setInventoryDate}
+              onChangeTime={setInventoryTime}
+            />
+          )}
+          {canManage && !isInventory && (
             <>
               <View style={styles.rangeButtons}>
                 <Pressable
@@ -1319,7 +1432,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       <View style={styles.tableWrap}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
           {isInventory
-            ? renderTable(orderedRows)
+            ? renderInventoryTable(orderedRows)
             : canManage && isMilkTable
             ? renderDashboardTable(orderedRows)
             : canManage
@@ -1624,18 +1737,18 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Изменить остаток</Text>
+            <Text style={styles.modalTitle}>{isInventory ? 'Количество' : 'Изменить остаток'}</Text>
             <Text style={styles.modalMeta}>
               {editingCell?.productName} · {editingCell ? `${formatWeekday(editingCell.date)}, ${formatDate(editingCell.date)}` : ''}
             </Text>
             <TextInput
               value={editingValue}
-              onChangeText={(value) => setEditingValue(sanitizeStockValue(value))}
+              onChangeText={(value) => setEditingValue(sanitizeStockValue(value, maxCellValue))}
               style={styles.modalInput}
-              placeholder="0-50"
+              placeholder={`0-${maxCellValue}`}
               placeholderTextColor="#7a8b7f"
               keyboardType="number-pad"
-              maxLength={2}
+              maxLength={String(maxCellValue).length}
               autoFocus
               returnKeyType="next"
               blurOnSubmit={false}
@@ -2092,6 +2205,23 @@ const styles = StyleSheet.create({
   workerCell: {
     minHeight: 52,
     height: 52,
+  },
+  inventoryNameColumn: {
+    flex: 3,
+    minWidth: 0,
+    alignItems: 'flex-start',
+    paddingHorizontal: 10,
+    backgroundColor: '#f7f7f7',
+  },
+  inventoryValueColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inventoryReadOnlyCell: {
+    backgroundColor: '#ffffff',
+  },
+  inventoryTotalCell: {
+    backgroundColor: '#ecf1ec',
   },
   workerEmptyRow: {
     flex: 1,

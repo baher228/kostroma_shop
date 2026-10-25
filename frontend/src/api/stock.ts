@@ -150,6 +150,7 @@ export const stockApi = {
       date: string;
       value: string;
       kind?: StockValueKind;
+      countedAt?: string;
     },
   ): Promise<void> => {
     await request<{}>('/api/stock/value', {

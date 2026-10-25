@@ -174,7 +174,8 @@ export const dashboardRangeLabel = (
   toWeek?: DashboardWeekRef,
 ): string => {
   const fromDate = dashboardDateFor(weeks, week, from);
-  const toDate = dashboardDateFor(weeks, toWeek ?? week, to);
+  const toWeekDate = dashboardDateFor(weeks, toWeek ?? week, to);
+  const toDate = to === 'mon' && toWeekDate ? addDays(toWeekDate, WEEK_DAYS) : toWeekDate;
   return fromDate && toDate ? `${formatDateShort(fromDate)}-${formatDateShort(toDate)}` : '';
 };
 
@@ -211,6 +212,9 @@ const applyDashboardOverrides = <T extends DashboardProductLike>(
   return next;
 };
 
+export const followingMonday = (week: WeekDateMap): string | undefined =>
+  week.mon ? addDays(week.mon, WEEK_DAYS) : undefined;
+
 const stockAt = <T extends DashboardProductLike>(row: T, date?: string): string =>
   date ? row.values[date] ?? '' : '';
 
@@ -240,7 +244,7 @@ const soldFriMonForWeek = <T extends DashboardProductLike>(
 ): string => {
   const orderSat = week.thu ? orderPacks(row.productId, addDays(week.thu, 2)) : '';
   const orderSatUnits = orderUnitsFromPacks(orderSat, row.unitsInPack);
-  return computeDashboardSold(stockAt(row, week.thu), orderSatUnits, stockAt(row, week.mon));
+  return computeDashboardSold(stockAt(row, week.thu), orderSatUnits, stockAt(row, followingMonday(week)));
 };
 
 const soldValuesForWeek = <T extends DashboardProductLike>(
@@ -303,10 +307,10 @@ export const buildDashboardRowValues = <T extends DashboardProductLike>({
     currentSun: stockAt(row, current.sun),
     orderPackTue,
     orderUnitsTue: orderUnitsFromPacks(orderPackTue, row.unitsInPack),
-    prevMon: previous ? stockAt(row, previous.mon) : '',
+    prevMon: previous ? stockAt(row, current.mon) : '',
     soldPrevFriMon: copiedSoldFriMonPrevious || previousSold?.soldFriMon || '',
     soldFriMon: currentSold.soldFriMon,
-    currentMon: stockAt(row, current.mon),
+    currentMon: stockAt(row, followingMonday(current)),
   };
   const withOverrides = applyDashboardOverrides(base, row, weeks.currentStart);
   return {

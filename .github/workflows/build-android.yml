@@ -14,6 +14,7 @@ on:
     branches: [main, master]
     paths:
       - '.github/workflows/build-android.yml'
+      - 'scripts/promote-dashboard-apks.sh'
       - 'App.tsx'
       - 'index.ts'
       - 'app.json'
@@ -30,42 +31,58 @@ on:
       - 'assets/**'
       - 'withCleartextTraffic.js'
 
+# Build and publish on one runner so deployment does not depend on artifact quota.
+concurrency:
+  group: analitika-dashboard-apks
+  cancel-in-progress: false
+
 jobs:
-  build:
+  configuration:
     runs-on: ubuntu-latest
     environment: expo-production
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - key: tablet
-            directory: .
-            lockfile: package-lock.json
-            apk_prefix: analitika-tablet
-            manifest_name: analitika-latest.json
-          - key: worker
-            directory: worker-app
-            lockfile: worker-app/package-lock.json
-            apk_prefix: analitika-fob
-            manifest_name: analitika-worker-latest.json
+    outputs:
+      worker_project_id: ${{ steps.config.outputs.worker_project_id }}
+    steps:
+      - name: Read worker project configuration
+        id: config
+        env:
+          WORKER_PROJECT_ID: ${{ vars.EXPO_WORKER_EAS_PROJECT_ID }}
+        run: |
+          if [[ ! "$WORKER_PROJECT_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::EXPO_WORKER_EAS_PROJECT_ID is missing or invalid in expo-production"
+            exit 1
+          fi
+          echo "worker_project_id=$WORKER_PROJECT_ID" >> "$GITHUB_OUTPUT"
+
+  build-and-publish:
+    needs: configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production-dashboard
     env:
-      EXPO_WORKER_EAS_PROJECT_ID: ${{ vars.EXPO_WORKER_EAS_PROJECT_ID }}
+      EXPO_WORKER_EAS_PROJECT_ID: ${{ needs.configuration.outputs.worker_project_id }}
       BUILD_PROFILE: ${{ inputs.profile || 'preview' }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      DASHBOARD_PATH: ${{ secrets.DASHBOARD_PATH }}
+      DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Preflight Android build config
-        shell: bash
+      - name: Preflight build and publish config
         run: |
-          if [ "${{ matrix.key }}" = "worker" ] && [ -z "$EXPO_WORKER_EAS_PROJECT_ID" ]; then
-            echo "::error::EXPO_WORKER_EAS_PROJECT_ID is not configured for the expo-production environment"
-            exit 1
-          fi
-          if [ "$BUILD_PROFILE" != "preview" ]; then
-            echo "::error::Only the preview profile produces dashboard-downloadable APK files"
-            exit 1
-          fi
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY DASHBOARD_PATH; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured for production-dashboard"
+              exit 1
+            fi
+          done
+          test "$BUILD_PROFILE" = preview
+          test -n "$EXPO_WORKER_EAS_PROJECT_ID"
 
       - name: Check Expo app config safety
         run: node scripts/check-app-config-clean.mjs
@@ -89,128 +106,80 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: ${{ matrix.lockfile }}
+          cache-dependency-path: |
+            package-lock.json
+            worker-app/package-lock.json
 
-      - name: Install dependencies
-        working-directory: ${{ matrix.directory }}
-        run: npm ci
-
-      - name: Typecheck app
-        working-directory: ${{ matrix.directory }}
-        shell: bash
+      - name: Install dependencies and typecheck both apps
         run: |
-          if [ "${{ matrix.key }}" = "worker" ]; then
-            npm run typecheck
-          else
-            npm run frontend:typecheck
-          fi
+          npm ci
+          npm --prefix worker-app ci
+          npm run frontend:typecheck
+          npm --prefix worker-app run typecheck
 
-      - name: Generate Android project
-        working-directory: ${{ matrix.directory }}
+      - name: Generate both Android projects
         env:
           EXPO_UPDATE_CHANNEL: ${{ env.BUILD_PROFILE }}
           EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
           EXPO_PUBLIC_DXB_API_URL: https://affera.co.uk/dxb
-        run: npx expo prebuild --platform android --no-install --clean
+        run: |
+          for app_dir in . worker-app; do
+            (cd "$app_dir" && npx expo prebuild --platform android --no-install --clean)
+          done
 
-      - name: Build Android APK with Gradle
-        working-directory: ${{ matrix.directory }}
+      - name: Build both Android APKs with Gradle
         env:
           EXPO_PUBLIC_RU_API_URL: https://affera.co.uk/ru
           EXPO_PUBLIC_DXB_API_URL: https://affera.co.uk/dxb
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -Dkotlin.daemon.jvm.options=-Xmx1g
         run: |
-          android/gradlew -p android :app:assembleRelease \
-            -x lintVitalRelease \
-            -x lintVitalAnalyzeRelease \
-            -x generateReleaseLintVitalReportModel \
-            -x lintVitalReportRelease \
-            --no-daemon \
-            --max-workers=2 \
-            --console=plain \
-            --stacktrace
+          for app_dir in . worker-app; do
+            (cd "$app_dir" && android/gradlew -p android :app:assembleRelease \
+              -x lintVitalRelease \
+              -x lintVitalAnalyzeRelease \
+              -x generateReleaseLintVitalReportModel \
+              -x lintVitalReportRelease \
+              --no-daemon --max-workers=2 --console=plain --stacktrace)
+          done
 
-      - name: Package APK for dashboard
-        env:
-          APP_KEY: ${{ matrix.key }}
-          APP_DIR: ${{ matrix.directory }}
-          APK_PREFIX: ${{ matrix.apk_prefix }}
-          MANIFEST_NAME: ${{ matrix.manifest_name }}
-        shell: bash
+      - name: Package and validate both APKs
         run: |
-          OUTPUT_DIR="apk-$APP_KEY"
-          mkdir -p "$OUTPUT_DIR"
-          APP_VERSION="$(node -p "require('./${APP_DIR}/app.json').expo.version")"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          APK_NAME="${APK_PREFIX}-v${APP_VERSION}-${SHORT_SHA}.apk"
-          APK_SOURCE="${APP_DIR}/android/app/build/outputs/apk/release/app-release.apk"
-          test -f "$APK_SOURCE"
-          cp "$APK_SOURCE" "$OUTPUT_DIR/$APK_NAME"
-          APP_VERSION="$APP_VERSION" APK_NAME="$APK_NAME" SHORT_SHA="$SHORT_SHA" \
-            MANIFEST_NAME="$MANIFEST_NAME" OUTPUT_DIR="$OUTPUT_DIR" node <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
+          mkdir -p apk
+          for app_key in tablet worker; do
+            if [ "$app_key" = tablet ]; then
+              APP_DIR=.
+              APK_PREFIX=analitika-tablet
+              MANIFEST_NAME=analitika-latest.json
+            else
+              APP_DIR=worker-app
+              APK_PREFIX=analitika-fob
+              MANIFEST_NAME=analitika-worker-latest.json
+            fi
+            APP_VERSION="$(node -p "require('./${APP_DIR}/app.json').expo.version")"
+            SHORT_SHA="${GITHUB_SHA::7}"
+            APK_NAME="${APK_PREFIX}-v${APP_VERSION}-${SHORT_SHA}.apk"
+            cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "apk/$APK_NAME"
+            APP_VERSION="$APP_VERSION" APK_NAME="$APK_NAME" SHORT_SHA="$SHORT_SHA" \
+              MANIFEST_NAME="$MANIFEST_NAME" node <<'NODE'
+          const fs = require('node:fs');
+          const name = process.env.APK_NAME;
+          if (!/^[a-zA-Z0-9_.-]+\.apk$/.test(name) || fs.statSync(`apk/${name}`).size === 0) {
+            throw new Error('Invalid or empty APK');
+          }
           const manifest = {
             version: process.env.APP_VERSION,
-            fileName: process.env.APK_NAME,
-            url: `/downloads/${process.env.APK_NAME}`,
+            fileName: name,
+            url: `/downloads/${name}`,
             buildSha: process.env.SHORT_SHA,
             updatedAt: new Date().toISOString(),
           };
-          fs.writeFileSync(
-            path.join(process.env.OUTPUT_DIR, process.env.MANIFEST_NAME),
-            `${JSON.stringify(manifest, null, 2)}\n`,
-          );
+          fs.writeFileSync(`apk/${process.env.MANIFEST_NAME}`, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
-
-      - name: Upload dashboard APK package
-        uses: actions/upload-artifact@v4
-        with:
-          name: dashboard-apk-${{ matrix.key }}
-          path: apk-${{ matrix.key }}/
-          if-no-files-found: error
-
-  publish-dashboard-apks:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: production-dashboard
-    env:
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_PORT: ${{ secrets.SSH_PORT }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-      DASHBOARD_PATH: ${{ secrets.DASHBOARD_PATH }}
-      DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
-    steps:
-      - name: Download both APK packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: dashboard-apk-*
-          path: apk
-          merge-multiple: true
-
-      - name: Validate combined package
-        shell: bash
-        run: |
-          test -f apk/analitika-latest.json
-          test -f apk/analitika-worker-latest.json
-          test "$(find apk -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 2
-
-      - name: Preflight dashboard publish config
-        shell: bash
-        run: |
-          missing=0
-          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY DASHBOARD_PATH; do
-            if [ -z "${!name}" ]; then
-              echo "::error::$name is not configured for the production-dashboard environment"
-              missing=1
-            fi
           done
-          exit "$missing"
+          test "$(find apk -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 2
+          (cd apk && sha256sum -- *.apk *.json > SHA256SUMS)
 
       - name: Setup SSH
-        shell: bash
         run: |
           PORT="${SSH_PORT:-22}"
           mkdir -p ~/.ssh
@@ -223,46 +192,45 @@ jobs:
               if ssh-keyscan -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts; then
                 break
               fi
-              echo "ssh-keyscan failed; retrying in 5s ($attempt/6)"
               sleep 5
             done
             test -s ~/.ssh/known_hosts
           fi
 
-      - name: Publish both APKs to dashboard downloads
-        shell: bash
+      - name: Stage and publish both APKs directly
         run: |
           PORT="${SSH_PORT:-22}"
           SSH_OPTS=(-p "$PORT" -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
-          printf -v REMOTE_DOWNLOADS '%q' "$DASHBOARD_PATH/downloads"
+          DOWNLOADS_DIR="${DASHBOARD_PATH%/}/downloads"
+          STAGING_DIR="$DOWNLOADS_DIR/.staging/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          printf -v REMOTE_STAGING '%q' "$STAGING_DIR"
+          uploaded=false
           for attempt in {1..6}; do
-            # shellcheck disable=SC2029
-            if ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "mkdir -p -- $REMOTE_DOWNLOADS" \
-              && rsync -az --delete -e "ssh ${SSH_OPTS[*]}" apk/ "$SSH_USER@$SSH_HOST:$DASHBOARD_PATH/downloads/"; then
-              exit 0
+            if ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "mkdir -p -- $REMOTE_STAGING" \
+              && rsync -az -e "ssh ${SSH_OPTS[*]}" apk/ "$SSH_USER@$SSH_HOST:$STAGING_DIR/"; then
+              uploaded=true
+              break
             fi
-            echo "APK publish failed; retrying in 15s ($attempt/6)"
             sleep 15
           done
-          echo "APK publish failed after 6 attempts" >&2
-          exit 1
+          test "$uploaded" = true
+          printf -v REMOTE_ARGS '%q ' "$STAGING_DIR" "$DOWNLOADS_DIR" "${GITHUB_SHA::7}"
+          ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "bash -s -- $REMOTE_ARGS" < scripts/promote-dashboard-apks.sh
 
-      - name: Smoke test both APK downloads
+      - name: Smoke test both published APK downloads
         if: ${{ vars.DASHBOARD_URL != '' }}
-        shell: bash
         run: |
           BASE_URL="${DASHBOARD_URL%/}"
           for manifest in analitika-latest.json analitika-worker-latest.json; do
             manifest_file="$RUNNER_TEMP/$manifest"
             curl --fail --silent --show-error --max-time 20 \
-              "$BASE_URL/downloads/$manifest" > "$manifest_file"
+              "$BASE_URL/downloads/$manifest?build=$GITHUB_SHA" > "$manifest_file"
             apk_path="$(node -e "
-              const fs = require('fs');
+              const fs = require('node:fs');
               const manifest = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-              if (typeof manifest.url !== 'string' || !manifest.url.startsWith('/downloads/') || !manifest.url.endsWith('.apk')) {
-                process.exit(1);
-              }
+              if (manifest.buildSha !== process.env.GITHUB_SHA.slice(0, 7) ||
+                  !/^\/downloads\/[a-zA-Z0-9_.-]+\.apk$/.test(manifest.url)) process.exit(1);
               process.stdout.write(manifest.url);
             " "$manifest_file")"
-            curl --fail --silent --show-error --max-time 60 "$BASE_URL$apk_path" > /dev/null
+            curl --fail --silent --show-error --max-time 90 "$BASE_URL$apk_path" > /dev/null
           done

@@ -35,7 +35,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     environment: production-backend
     env:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -119,24 +119,6 @@ jobs:
           node scripts/write-production-env.mjs "$RUNNER_TEMP/production.env"
           ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && umask 077 && cat > .env && chmod 600 .env" < "$RUNNER_TEMP/production.env"
 
-      - name: Deploy RU backend
-        if: env.REGION == 'all' || env.REGION == 'ru'
-        run: |
-          PORT="${SSH_PORT:-22}"
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/ru-backend/Dockerfile -t analitika-backend-ru . && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/preflight.js && DOCKER_BUILDKIT=0 timeout 900 docker build -f ops/minio/Dockerfile -t analitika-minio:RELEASE.2025-10-15T17-29-55Z . && timeout 180 docker compose -f docker-compose.ru.yml --profile qc up -d --no-build --wait minio && timeout 60 docker compose -f docker-compose.ru.yml --profile qc run --rm --no-deps minio-init && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/storagePreflight.js && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-deps --wait postgres-ru && timeout 30 bash scripts/rotate-ru-db-password.sh && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-build backend-ru"
-
-      - name: Smoke test RU backend
-        if: (env.REGION == 'all' || env.REGION == 'ru') && vars.RU_HEALTH_URL != ''
-        run: |
-          for attempt in {1..12}; do
-            if curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"; then
-              exit 0
-            fi
-            echo "RU health check failed; retrying in 5s ($attempt/12)"
-            sleep 5
-          done
-          curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"
-
       - name: Deploy Dubai backend
         if: env.REGION == 'all' || env.REGION == 'dubai'
         run: |
@@ -154,6 +136,39 @@ jobs:
             sleep 5
           done
           curl --fail --silent --show-error --max-time 20 "$DUBAI_HEALTH_URL"
+
+      - name: Ensure pinned MinIO image
+        if: env.REGION == 'all' || env.REGION == 'ru'
+        timeout-minutes: 25
+        run: |
+          PORT="${SSH_PORT:-22}"
+          IMAGE='analitika-minio:RELEASE.2025-10-15T17-29-55Z'
+          # Pinned storage images do not need rebuilding on every app release.
+          if ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "docker image inspect '$IMAGE' >/dev/null 2>&1"; then
+            echo "Pinned MinIO image is already installed"
+          else
+            # First installation builds on the hosted runner, not the production VPS.
+            docker build -f ops/minio/Dockerfile -t "$IMAGE" .
+            docker save "$IMAGE" | gzip -1 | ssh -p "$PORT" "$SSH_USER@$SSH_HOST" 'gunzip | docker load'
+          fi
+
+      - name: Deploy RU backend
+        if: env.REGION == 'all' || env.REGION == 'ru'
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "cd '$APP_PATH' && DOCKER_BUILDKIT=0 timeout 600 docker build -f services/ru-backend/Dockerfile -t analitika-backend-ru . && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/preflight.js && timeout 180 docker compose -f docker-compose.ru.yml --profile qc up -d --no-build --wait minio && timeout 60 docker compose -f docker-compose.ru.yml --profile qc run --rm --no-deps minio-init && timeout 60 docker compose -f docker-compose.ru.yml run --rm --no-deps backend-ru node dist/quality-control/storagePreflight.js && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-deps --wait postgres-ru && timeout 30 bash scripts/rotate-ru-db-password.sh && timeout 120 docker compose -f docker-compose.ru.yml up -d --no-build backend-ru"
+
+      - name: Smoke test RU backend
+        if: (env.REGION == 'all' || env.REGION == 'ru') && vars.RU_HEALTH_URL != ''
+        run: |
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"; then
+              exit 0
+            fi
+            echo "RU health check failed; retrying in 5s ($attempt/12)"
+            sleep 5
+          done
+          curl --fail --silent --show-error --max-time 20 "$RU_HEALTH_URL"
 
       - name: Prune old Docker images
         run: |

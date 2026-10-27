@@ -63,6 +63,9 @@ jobs:
       - name: Validate deployment env generation
         run: node --test scripts/write-production-env.test.mjs
 
+      - name: Verify complete APK release promotion
+        run: node --test scripts/promote-dashboard-apks.test.mjs
+
       - name: Verify Gmail import and OAuth persistence on PostgreSQL
         env:
           PROMOTION_SMOKE_DATABASE_URL: postgresql://email_ci:ci-email-password@127.0.0.1:5432/analitika_email_pipeline_test

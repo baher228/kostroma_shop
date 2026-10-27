@@ -122,7 +122,7 @@ test('Хлеб adds a weekly «Остаток» column (Saturday stock + order o
   const shared = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
 
   assert.match(source, /const isWeekStockDate = \(date: string\) => isBreadTable && parseDateKey\(date\)\.getDay\(\) === 6;/);
-  assert.match(source, /orderUnitsFromPacks\(orderPacksForDate\(row\.productId, dailyOrderDateForStockDate\(date, activeBusinessCategory\)\), row\.unitsInPack \?\? 1\);\n    return computeStockWithOrder\(row\.values\[date\], orderUnits\);/);
+  assert.match(source, /orderUnitsFromPacks\(orderPacksForDate\(row\.productId, dailyOrderDateForStockDate\(date, activeBusinessCategory\)\), row\.unitsInPack \?\? 1\);\r?\n    return computeStockWithOrder\(row\.values\[date\], orderUnits\);/);
   assert.match(source, /\{isWeekStockDate\(date\) && <td className="week-stock-col">\{weekStockFor\(row, date\) \|\| '-'\}<\/td>\}/);
   assert.match(source, /isWeekStockDate\(date\) \? 'week-end-col' : ''/);
   assert.match(source, /const usesWeekdayHeaders = usesMilkTones;/);

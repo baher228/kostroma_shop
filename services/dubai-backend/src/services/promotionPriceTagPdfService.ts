@@ -639,7 +639,7 @@ type PriceTagPdfPage = {
 // rasters (about 4.8 MB per tag) in memory.
 const buildPdf = (pages: PriceTagPdfPage[]) => {
   const objects = [
-    pdfObject(1, '<< /Type /Catalog /Pages 2 0 R >>\n'),
+    pdfObject(1, '<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None >> >>\n'),
     pdfObject(2, ''),
   ];
   const addObject = (body: string | Buffer) => {
@@ -678,7 +678,7 @@ const buildPdf = (pages: PriceTagPdfPage[]) => {
   }
   objects[1] = pdfObject(2, `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>\n`);
 
-  const chunks: Buffer[] = [Buffer.from('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n', 'binary')];
+  const chunks: Buffer[] = [Buffer.from('%PDF-1.6\n%\xE2\xE3\xCF\xD3\n', 'binary')];
   const offsets = [0];
   let byteOffset = chunks[0].length;
   for (const object of objects) {

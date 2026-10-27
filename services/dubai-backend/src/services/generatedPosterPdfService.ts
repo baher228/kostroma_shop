@@ -25,7 +25,8 @@ type Replacement = ParsedTextLayer & {
   value: string;
 };
 
-const pageWidthPt = 160 / 25.4 * 72;
+const pageWidthPt = 297 / 25.4 * 72;
+const pageHeightPt = 160 / 25.4 * 72;
 
 let initialized = false;
 
@@ -203,10 +204,16 @@ const pdfObject = (id: number, body: string | Buffer) => ({
 });
 
 const buildPdf = (image: { width: number; height: number; rgb: Buffer }) => {
-  const pageHeightPt = pageWidthPt * (image.height / image.width);
+  // The print format is fixed, independently of the PSD's pixel size or DPI.
+  // Fit the complete artwork without stretching or cropping nonstandard PSDs.
+  const scale = Math.min(pageWidthPt / image.width, pageHeightPt / image.height);
+  const imageWidthPt = image.width * scale;
+  const imageHeightPt = image.height * scale;
+  const x = Math.max(0, (pageWidthPt - imageWidthPt) / 2);
+  const y = Math.max(0, (pageHeightPt - imageHeightPt) / 2);
   const compressedRgb = zlib.deflateSync(image.rgb, { level: 9 });
   const objects = [
-    pdfObject(1, '<< /Type /Catalog /Pages 2 0 R >>\n'),
+    pdfObject(1, '<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None >> >>\n'),
     pdfObject(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>\n'),
     pdfObject(
       3,
@@ -224,10 +231,10 @@ const buildPdf = (image: { width: number; height: number; rgb: Buffer }) => {
       ]),
     ),
   ];
-  const content = `q\n${pageWidthPt.toFixed(2)} 0 0 ${pageHeightPt.toFixed(2)} 0 0 cm\n/Im0 Do\nQ\n`;
+  const content = `q\n${imageWidthPt.toFixed(2)} 0 0 ${imageHeightPt.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im0 Do\nQ\n`;
   objects.push(pdfObject(5, `<< /Length ${Buffer.byteLength(content, 'binary')} >>\nstream\n${content}endstream\n`));
 
-  const chunks: Buffer[] = [Buffer.from('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n', 'binary')];
+  const chunks: Buffer[] = [Buffer.from('%PDF-1.6\n%\xE2\xE3\xCF\xD3\n', 'binary')];
   const offsets = [0];
   for (const object of objects) {
     offsets[object.id] = chunks.reduce((sum, chunk) => sum + chunk.length, 0);

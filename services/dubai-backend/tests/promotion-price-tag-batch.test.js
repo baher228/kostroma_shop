@@ -113,6 +113,7 @@ test('1, 4, 5 and 12 real price tags fill A4 pages and each source raster appear
     const pdf = createPromotionPriceTagSheetPdf(rows.slice(0, count));
     assert.deepEqual(pdfRasterHashes(pdf), expectedHashes.slice(0, count), `${count} source tags must appear once, in order`);
     const source = pdf.toString('latin1');
+    assert.match(source, /\/ViewerPreferences << \/PrintScaling \/None >>/);
     const transforms = [...source.matchAll(/([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm/g)];
     assert.equal(transforms.length, count);
     for (const transform of transforms) {

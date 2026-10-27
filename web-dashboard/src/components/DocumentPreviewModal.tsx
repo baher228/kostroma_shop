@@ -105,6 +105,7 @@ export const DocumentPreviewModal = ({ state, onClose }: { state: DocumentPrevie
           {state.loading && <p role="status">Загружаем документ...</p>}
           {state.content?.type === 'pdf' && state.objectUrl && (
             <>
+              <p className="notice">Для сохранения размеров шаблона выберите в окне печати «Фактический размер» или масштаб 100%, без подгонки под лист.</p>
               <iframe ref={iframe} src={state.objectUrl} title={state.fileName} onLoad={() => setPdfLoaded(true)} />
               <a href={state.objectUrl} target="_blank" rel="noreferrer">Открыть PDF в новой вкладке для просмотра или печати</a>
             </>

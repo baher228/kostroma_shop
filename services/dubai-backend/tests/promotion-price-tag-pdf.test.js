@@ -133,6 +133,7 @@ test('local PSD generator returns one 100x115 mm PDF with the source raster size
   const { createPromotionPriceTagPdf } = service();
   const pdf = createPromotionPriceTagPdf(row());
   assert.equal(pdf.subarray(0, 5).toString('ascii'), '%PDF-');
+  assert.match(pdf.toString('latin1'), /\/ViewerPreferences << \/PrintScaling \/None >>/);
   assert.match(pdf.toString('latin1'), /\/Width 1181 \/Height 1358/);
 
   const parser = new PDFParse({ data: new Uint8Array(pdf) });

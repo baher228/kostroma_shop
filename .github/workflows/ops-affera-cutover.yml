@@ -2,11 +2,9 @@ name: Ops affera cutover
 
 on:
   workflow_dispatch:
-    inputs:
-      ssh_public_key:
-        description: Optional public key to add to the production host.
-        required: false
-        type: string
+
+permissions:
+  contents: read
 
 jobs:
   finish-cutover:
@@ -42,30 +40,6 @@ jobs:
           else
             ssh-keyscan -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
           fi
-
-      - name: Add temporary operator SSH key
-        if: ${{ inputs.ssh_public_key != '' }}
-        env:
-          OPS_PUBLIC_KEY: ${{ inputs.ssh_public_key }}
-        run: |
-          PORT="${SSH_PORT:-22}"
-          quoted_key=$(printf '%q' "$OPS_PUBLIC_KEY")
-          ssh -p "$PORT" "$SSH_USER@$SSH_HOST" "OPS_PUBLIC_KEY=$quoted_key bash -s" <<'REMOTE'
-          set -euo pipefail
-          key="$OPS_PUBLIC_KEY"
-          for home in /root /home/deploy; do
-            if [ -d "$home" ]; then
-              mkdir -p "$home/.ssh"
-              chmod 700 "$home/.ssh"
-              touch "$home/.ssh/authorized_keys"
-              chmod 600 "$home/.ssh/authorized_keys"
-              if ! grep -qxF "$key" "$home/.ssh/authorized_keys"; then
-                printf '%s\n' "$key" >> "$home/.ssh/authorized_keys"
-              fi
-              chown -R "$(stat -c '%U:%G' "$home")" "$home/.ssh"
-            fi
-          done
-          REMOTE
 
       - name: Verify data and enable HTTPS
         run: |

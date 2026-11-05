@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const files = ['app.config.js', 'worker-app/app.config.js'];
@@ -33,8 +34,41 @@ for (const file of files) {
   }
 }
 
+// The injected payloads were hidden behind long runs of whitespace or carried
+// these markers, so scan every tracked source file for them, not just the configs.
+const indicatorPatterns = [
+  ...suspiciousPatterns.slice(3),
+  /global\[['"]!['"]\]\s*=/,
+];
+const scannedExtensions = /\.(?:[cm]?[jt]sx?|json|ya?ml|sh|gradle|kts|properties|xml|html)$/i;
+const skippedFiles = /(?:^|\/)(?:package-lock\.json|.*\.min\.js)$/;
+const trackedFiles = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
+  .split('\0')
+  .filter((file) => file && scannedExtensions.test(file) && !skippedFiles.test(file) && file !== 'scripts/check-app-config-clean.mjs');
+
+for (const file of trackedFiles) {
+  let text;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    continue;
+  }
+  text.split(/\r?\n/).forEach((line, index) => {
+    if (/\S[ \t]{150,}\S/.test(line)) {
+      console.error(`${file}:${index + 1} hides code after a long run of whitespace.`);
+      failed = true;
+    }
+  });
+  for (const pattern of indicatorPatterns) {
+    if (pattern.test(text)) {
+      console.error(`${file} matches malware indicator ${pattern}.`);
+      failed = true;
+    }
+  }
+}
+
 if (failed) {
   process.exit(1);
 }
 
-console.log('Expo app config files passed static safety checks.');
+console.log(`Expo app configs and ${trackedFiles.length} tracked source files passed static safety checks.`);

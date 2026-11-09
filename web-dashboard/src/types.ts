@@ -590,5 +590,6 @@ export type DeliveryReceipt = {
   supplierId: string;
   date: string;
   receivedAt: string;
+  markedAt: string;
   hasInvoicePhoto: boolean;
 };

@@ -5221,10 +5221,207 @@ input[type='datetime-local'] {
   font-size: 13px;
 }
 
-.delivery-month-chips {
+.deliveries-month {
+  display: grid;
+  gap: 14px;
+}
+
+.deliveries-block {
+  border: 1px solid #e3e6ea;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 18px 12px;
+  min-width: 0;
+}
+
+.deliveries-block > header {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.deliveries-block h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.deliveries-block th,
+.deliveries-block td,
+.deliveries-block tbody tr:hover td {
+  background: transparent;
+  color: #1d2329;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.deliveries-legend {
+  display: flex;
+  gap: 14px;
+  color: #5b6470;
+  font-size: 13px;
+}
+
+.deliveries-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+.deliveries-heatmap-scroll {
+  overflow-x: auto;
+}
+
+.deliveries-heatmap {
+  border-collapse: separate;
+  border-spacing: 4px 3px;
+  width: 100%;
+  min-width: 900px;
+  table-layout: fixed;
+}
+
+.deliveries-heatmap th,
+.deliveries-heatmap td {
+  border-bottom: 0;
+  padding: 0;
+}
+
+.deliveries-heatmap thead th:first-child {
+  width: 190px;
+}
+
+.deliveries-heatmap thead th {
+  padding-bottom: 4px;
+  color: #5b6470;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.deliveries-heatmap thead th.weekend {
+  color: #1d2329;
+  font-weight: 700;
+}
+
+.deliveries-heatmap tbody th {
+  padding-right: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.deliveries-heatmap td {
+  padding: 0;
+}
+
+.deliveries-heat {
+  display: block;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.tone-ok.deliveries-heat,
+.deliveries-legend .tone-ok {
+  background: #c7e3cf;
+}
+
+.tone-warn.deliveries-heat,
+.deliveries-legend .tone-warn {
+  background: #efd28d;
+}
+
+.tone-bad.deliveries-heat,
+.deliveries-legend .tone-bad {
+  background: #dc8471;
+}
+
+.tone-none.deliveries-heat {
+  background: #f1f2f4;
+}
+
+.deliveries-note {
+  margin: 8px 0 0;
+  color: #5b6470;
+  font-size: 13px;
+}
+
+.deliveries-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.deliveries-report-table thead th {
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid #e3e6ea;
+  color: #5b6470;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.deliveries-report-table tbody th,
+.deliveries-report-table td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid #eef0f2;
+  text-align: left;
+}
+
+.deliveries-report-table tbody tr:last-child th,
+.deliveries-report-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.deliveries-report-table tbody th {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.deliveries-report-table td.alert {
+  color: #b23a2a;
+}
+
+.deliveries-share {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.deliveries-share b {
+  min-width: 38px;
+  font-weight: 400;
+  text-align: right;
+}
+
+.deliveries-share-track {
+  flex: 1;
+  max-width: 320px;
+  height: 8px;
+  border-radius: 4px;
+  background: #eef0f3;
+  overflow: hidden;
+}
+
+.deliveries-share-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.deliveries-share-track.tone-shop > span {
+  background: #3d8a5a;
+}
+
+.deliveries-share-track.tone-supplier > span {
+  background: #bb802f;
 }
 
 .deliveries-empty,

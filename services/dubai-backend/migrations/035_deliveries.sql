@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS delivery_receipts (
   received_at TIMESTAMPTZ NOT NULL,
   invoice_photo_key TEXT,
   invoice_photo_content_type TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (supplier_id, day_date)
 );

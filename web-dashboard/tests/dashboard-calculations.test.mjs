@@ -117,14 +117,16 @@ test('bread daily sold treats blank stock as zero in dashboard and tablet app', 
   }
 });
 
-test('Хлеб adds a weekly «Остаток» column (Saturday stock + order on Sunday) after Saturday «Продано»', async () => {
+test('Хлеб keeps the thick line after Saturday «Продано», the weekly «Остаток» column is switched off', async () => {
   const source = await readFile(new URL('../src/panels/products/ProductsPanel.tsx', import.meta.url), 'utf8');
   const shared = await readFile(new URL('../../shared/dashboard-calculations.ts', import.meta.url), 'utf8');
 
-  assert.match(source, /const isWeekStockDate = \(date: string\) => isBreadTable && parseDateKey\(date\)\.getDay\(\) === 6;/);
+  assert.match(source, /const SHOW_BREAD_WEEK_STOCK_COLUMN = false;/);
+  assert.match(source, /const isWeekEndDate = \(date: string\) => isBreadTable && parseDateKey\(date\)\.getDay\(\) === 6;/);
+  assert.match(source, /const isWeekStockDate = \(date: string\) => SHOW_BREAD_WEEK_STOCK_COLUMN && isWeekEndDate\(date\);/);
   assert.match(source, /orderUnitsFromPacks\(orderPacksForDate\(row\.productId, dailyOrderDateForStockDate\(date, activeBusinessCategory\)\), row\.unitsInPack \?\? 1\);\r?\n    return computeStockWithOrder\(row\.values\[date\], orderUnits\);/);
   assert.match(source, /\{isWeekStockDate\(date\) && <td className="week-stock-col">\{weekStockFor\(row, date\) \|\| '-'\}<\/td>\}/);
-  assert.match(source, /isWeekStockDate\(date\) \? 'week-end-col' : ''/);
+  assert.match(source, /isWeekEndDate\(date\) \? 'week-end-col' : ''/);
   assert.match(source, /const usesWeekdayHeaders = usesMilkTones;/);
   assert.match(source, /usesWeekdayHeaders \? formatWeekdayDateShort\(date\) : formatDateShort\(date\)/);
   assert.match(shared, /return String\(\(parseStockNumber\(stockRaw\) \?\? 0\) \+ \(parseStockNumber\(orderUnitsRaw\) \?\? 0\)\);/);

@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { Feedback, Modal } from '../../components/ui';
 import { messageOf } from '../../shared/format';
+import { DeliveriesMonthReport } from './DeliveriesMonthReport';
 import type { DeliveryReceipt, DeliverySupplier, DeliverySupplierInput, Session, Shop } from '../../types';
 import {
   addDaysToDateKey,
+  buildDeliveryMonthReport,
   countDeliveryStatuses,
   deliveryAcceptedCount,
   deliveryProblemCount,
@@ -15,7 +17,6 @@ import {
   moscowDateTimeToIso,
   moscowMinutes,
   parseClockMinutes,
-  type DeliveryCounts,
   type DeliveryStatus,
 } from '../../../../shared/delivery-status';
 
@@ -46,11 +47,6 @@ const monthRange = (dateKey: string) => {
   return { from, to };
 };
 
-const dateKeysBetween = (from: string, to: string) => {
-  const keys: string[] = [];
-  for (let key = from; key <= to; key = addDaysToDateKey(key, 1)) keys.push(key);
-  return keys;
-};
 
 const headerDate = (dateKey: string) => {
   const [year, month, day] = dateKey.split('-').map(Number);
@@ -79,7 +75,6 @@ type CardModel = {
   supplier: DeliverySupplier;
   status: DeliveryStatus;
   receipt?: DeliveryReceipt;
-  counts?: DeliveryCounts;
 };
 
 export const DeliveriesPanel = ({ session }: { session: Session }) => {
@@ -129,52 +124,36 @@ export const DeliveriesPanel = ({ session }: { session: Session }) => {
 
   const sections = useMemo(() => {
     const now = loadedAt ?? new Date();
-    const month = monthRange(today);
-    const monthDays = dateKeysBetween(month.from, month.to);
     return shops.map((shop) => {
       const shopSuppliers = suppliers
         .filter((supplier) => supplier.shopId === shop.id)
         .sort((a, b) => a.windowStartMinutes - b.windowStartMinutes || a.name.localeCompare(b.name, 'ru'));
       const cards: CardModel[] = [];
       const idle: DeliverySupplier[] = [];
-      const statuses: DeliveryStatus[] = [];
       for (const supplier of shopSuppliers) {
-        if (period === 'today') {
-          if (!isDeliveryDay(supplier, today)) {
-            idle.push(supplier);
-            continue;
-          }
-          const receipt = receiptsByKey.get(receiptKey(supplier.id, today));
-          const status = deliveryStatus(supplier, today, receipt, now);
-          statuses.push(status);
-          cards.push({ supplier, status, receipt });
-        } else {
-          const firstDay = moscowDateKey(new Date(supplier.createdAt));
-          const supplierStatuses = monthDays
-            .filter((day) => day >= firstDay && day <= today && isDeliveryDay(supplier, day))
-            .map((day) => deliveryStatus(supplier, day, receiptsByKey.get(receiptKey(supplier.id, day)), now));
-          statuses.push(...supplierStatuses);
-          const counts = countDeliveryStatuses(supplierStatuses);
-          const worst: DeliveryStatus =
-            counts.missed ? 'missed' : counts.late ? 'late' : counts.no_photo ? 'no_photo' : counts.on_time ? 'on_time' : 'expected';
-          cards.push({ supplier, status: worst, counts });
+        if (!isDeliveryDay(supplier, today)) {
+          idle.push(supplier);
+          continue;
         }
+        const receipt = receiptsByKey.get(receiptKey(supplier.id, today));
+        cards.push({ supplier, status: deliveryStatus(supplier, today, receipt, now), receipt });
       }
-      return { shop, cards, idle, counts: countDeliveryStatuses(statuses) };
+      return { shop, cards, idle, counts: countDeliveryStatuses(cards.map((card) => card.status)) };
     });
-  }, [shops, suppliers, receiptsByKey, period, today, loadedAt]);
+  }, [shops, suppliers, receiptsByKey, today, loadedAt]);
 
-  const total = useMemo(
-    () => countDeliveryStatuses(sections.flatMap((section) => section.cards.flatMap((card) =>
-      card.counts
-        ? (Object.entries(card.counts) as Array<[DeliveryStatus, number]>).flatMap(([status, count]) => Array(count).fill(status))
-        : [card.status]))),
-    [sections],
+  const monthReport = useMemo(
+    () => buildDeliveryMonthReport({ shops, suppliers, receipts, today, now: loadedAt ?? new Date() }),
+    [shops, suppliers, receipts, today, loadedAt],
   );
 
-  const openCard = (card: CardModel, shop: Shop) => {
-    if (period === 'today') setReceiptTarget({ supplier: card.supplier, receipt: card.receipt });
-    else setSupplierTarget({ shop, supplier: card.supplier });
+  const total = useMemo(
+    () => (period === 'today' ? countDeliveryStatuses(sections.flatMap((section) => section.cards.map((card) => card.status))) : monthReport.counts),
+    [period, sections, monthReport],
+  );
+
+  const openCard = (card: CardModel) => {
+    setReceiptTarget({ supplier: card.supplier, receipt: card.receipt });
   };
 
   const afterChange = async (message: string) => {
@@ -206,14 +185,14 @@ export const DeliveriesPanel = ({ session }: { session: Session }) => {
         <SummaryCard tone="bad" label="Не отмечено / без фото" value={total.missed + total.no_photo} />
         <SummaryCard tone="wait" label="Ожидается" value={total.expected} />
       </div>
-      {loading && !loadedAt ? <p>Загружаем приёмку...</p> : (
+      {loading && !loadedAt ? <p>Загружаем приёмку...</p> : period === 'month' ? <DeliveriesMonthReport report={monthReport} /> : (
         <div className="deliveries-shops">
           {sections.map(({ shop, cards, idle, counts }) => (
             <article key={shop.id} className="deliveries-shop">
               <header>
                 <h3>{shop.name}</h3>
                 <span className="deliveries-shop-stats">
-                  {deliveryAcceptedCount(counts)} из {period === 'today' ? cards.length : counts.on_time + counts.late + counts.no_photo + counts.missed + counts.expected} принято · проблем: {deliveryProblemCount(counts)}
+                  {deliveryAcceptedCount(counts)} из {cards.length} принято · проблем: {deliveryProblemCount(counts)}
                 </span>
                 <button type="button" className="ghost deliveries-add" onClick={() => setSupplierTarget({ shop })}>+ Поставщик</button>
               </header>
@@ -223,7 +202,7 @@ export const DeliveriesPanel = ({ session }: { session: Session }) => {
                     type="button"
                     key={card.supplier.id}
                     className={`delivery-card status-${card.status}`}
-                    onClick={() => openCard(card, shop)}
+                    onClick={() => openCard(card)}
                     title={card.supplier.name}
                   >
                     <span className="delivery-card-top">
@@ -231,12 +210,8 @@ export const DeliveriesPanel = ({ session }: { session: Session }) => {
                       <span>{formatClockMinutes(card.supplier.windowStartMinutes)}–{formatClockMinutes(card.supplier.windowEndMinutes)}</span>
                     </span>
                     <span className="delivery-card-bottom">
-                      {card.counts ? <MonthChips counts={card.counts} /> : (
-                        <>
-                          <span className={`delivery-status status-${card.status}`}>{STATUS_LABELS[card.status]}</span>
-                          {card.receipt && <span className="delivery-time">{clockOf(card.receipt.receivedAt)}</span>}
-                        </>
-                      )}
+                      <span className={`delivery-status status-${card.status}`}>{STATUS_LABELS[card.status]}</span>
+                      {card.receipt && <span className="delivery-time">{clockOf(card.receipt.receivedAt)}</span>}
                     </span>
                   </button>
                 ))}
@@ -246,7 +221,7 @@ export const DeliveriesPanel = ({ session }: { session: Session }) => {
                   </p>
                 )}
               </div>
-              {period === 'today' && idle.length > 0 && (
+              {idle.length > 0 && (
                 <p className="deliveries-idle">
                   Не сегодня:{' '}
                   {idle.map((supplier, index) => (
@@ -296,25 +271,6 @@ const SummaryCard = ({ tone, label, value }: { tone: 'ok' | 'late' | 'bad' | 'wa
     <strong>{value}</strong>
   </div>
 );
-
-const MonthChips = ({ counts }: { counts: DeliveryCounts }) => {
-  const items: Array<[DeliveryStatus, string]> = [
-    ['on_time', 'вовремя'],
-    ['late', 'опозд.'],
-    ['no_photo', 'без фото'],
-    ['missed', 'не отм.'],
-    ['expected', 'ожид.'],
-  ];
-  const visible = items.filter(([status]) => counts[status] > 0);
-  if (!visible.length) return <span className="delivery-status status-expected">Нет поставок</span>;
-  return (
-    <span className="delivery-month-chips">
-      {visible.map(([status, label]) => (
-        <span key={status} className={`delivery-status status-${status}`}>{counts[status]} {label}</span>
-      ))}
-    </span>
-  );
-};
 
 const ReceiptModal = ({
   session,

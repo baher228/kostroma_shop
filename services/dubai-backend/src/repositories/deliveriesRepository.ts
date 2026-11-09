@@ -14,6 +14,7 @@ export type DeliveryReceipt = {
   supplierId: string;
   date: string;
   receivedAt: string;
+  markedAt: string;
   hasInvoicePhoto: boolean;
 };
 
@@ -33,6 +34,7 @@ type ReceiptDbRow = {
   supplier_id: string;
   day_date: string;
   received_at: Date | string;
+  created_at: Date | string;
   has_invoice_photo: boolean;
 };
 
@@ -50,11 +52,12 @@ const toReceipt = (row: ReceiptDbRow): DeliveryReceipt => ({
   supplierId: row.supplier_id,
   date: row.day_date,
   receivedAt: new Date(row.received_at).toISOString(),
+  markedAt: new Date(row.created_at ?? row.received_at).toISOString(),
   hasInvoicePhoto: Boolean(row.has_invoice_photo),
 });
 
 const SUPPLIER_COLUMNS = 'id, shop_id, name, window_start_minutes, window_end_minutes, weekdays, created_at';
-const RECEIPT_COLUMNS = 'supplier_id, day_date::text AS day_date, received_at, invoice_photo_key IS NOT NULL AS has_invoice_photo';
+const RECEIPT_COLUMNS = 'supplier_id, day_date::text AS day_date, received_at, created_at, invoice_photo_key IS NOT NULL AS has_invoice_photo';
 
 export const listDeliverySuppliers = async (): Promise<DeliverySupplier[]> => {
   const result = await opsDb.query<SupplierDbRow>(

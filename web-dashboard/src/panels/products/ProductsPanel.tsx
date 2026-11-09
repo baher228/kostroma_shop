@@ -292,6 +292,8 @@ const InventoryPriceInput = ({ value, label, onCommit }: { value: number | null 
   );
 };
 
+const SHOW_BREAD_WEEK_STOCK_COLUMN = false;
+
 export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; mode?: 'stock' | 'inventory' }) => {
   const isInventory = mode === 'inventory';
   const valueKind = isInventory ? 'inventory' : undefined;
@@ -421,8 +423,9 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   const usesMilkTones = (['Хлеб', 'Деликатесы', 'Сыр', 'Мороженое', 'Курица'] as BusinessCategory[]).includes(activeBusinessCategory);
   const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
   const isBreadTable = activeBusinessCategory === 'Хлеб';
-  // Хлеб: after every Saturday's «Продано» a thick line and an «Остаток» column (Saturday stock + order on Sunday).
-  const isWeekStockDate = (date: string) => isBreadTable && parseDateKey(date).getDay() === 6;
+  // Хлеб: a thick line after every Saturday's «Продано». The «Остаток» column there (Saturday stock + order on Sunday) is switched off.
+  const isWeekEndDate = (date: string) => isBreadTable && parseDateKey(date).getDay() === 6;
+  const isWeekStockDate = (date: string) => SHOW_BREAD_WEEK_STOCK_COLUMN && isWeekEndDate(date);
   const usesWeekdayHeaders = usesMilkTones;
   const eveningHeaderDate = (date: string) => usesWeekdayHeaders ? formatWeekdayDateShort(date) : formatDateShort(date);
   const eveningHeaderLines = (date: string) => usesWeekdayHeaders ? `${formatWeekdayName(date)}\n${formatDateShort(date)}` : formatDateShort(date);
@@ -1014,7 +1017,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                     {usesEveningStockHeaders ? 'Заказ на' : 'Заказ'}
                     <small>{eveningHeaderLines(usesEveningStockHeaders ? orderHeaderDateForStockDate(date, activeBusinessCategory) : dailyOrderDateForStockDate(date, activeBusinessCategory))}</small>
                   </th>
-                  <th className={[usesMilkTones ? 'dashboard-tone-yellow' : '', isWeekStockDate(date) ? 'week-end-col' : ''].filter(Boolean).join(' ') || undefined}>
+                  <th className={[usesMilkTones ? 'dashboard-tone-yellow' : '', isWeekEndDate(date) ? 'week-end-col' : ''].filter(Boolean).join(' ') || undefined}>
                     Продано
                     <small>{eveningHeaderLines(date)}</small>
                   </th>
@@ -1079,7 +1082,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                           }}
                         />
                       </td>
-                      <td className={[usesMilkTones ? 'dashboard-value-yellow' : '', isWeekStockDate(date) ? 'week-end-col' : ''].filter(Boolean).join(' ') || undefined}>{soldFor(row, date) || '-'}</td>
+                      <td className={[usesMilkTones ? 'dashboard-value-yellow' : '', isWeekEndDate(date) ? 'week-end-col' : ''].filter(Boolean).join(' ') || undefined}>{soldFor(row, date) || '-'}</td>
                       {isWeekStockDate(date) && <td className="week-stock-col">{weekStockFor(row, date) || '-'}</td>}
                     </React.Fragment>
                   );

@@ -33,7 +33,7 @@ import {
   StockTable,
   Task,
   TaskStatus,
-  StoreTablet, TaskRepeat, TaskSeries
+  StoreTablet, TaskRepeat, TaskSeries, DeliveryReceipt, DeliverySupplier, DeliverySupplierInput
 } from './types';
 import { downloadFileName } from './downloadFileName';
 
@@ -246,6 +246,20 @@ const dxbFormRequest = async <T>(path: string, token: string, form: FormData) =>
   }
 };
 
+const dxbImageBlobRequest = async (path: string, token: string) => {
+  try {
+    const opsToken = await fetchOpsToken(token);
+    return await makeImageBlobRequest(DXB_API_BASE_URL, path, opsToken);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      opsTokenCache.delete(token);
+      const opsToken = await fetchOpsToken(token);
+      return makeImageBlobRequest(DXB_API_BASE_URL, path, opsToken);
+    }
+    throw error;
+  }
+};
+
 const dxbBlobRequest = async (path: string, token: string) => {
   try {
     const opsToken = await fetchOpsToken(token);
@@ -348,6 +362,38 @@ export const api = {
     delete: async (token: string, taskId: string) => {
       await ruRequest<{}>(`/api/tasks/${taskId}`, { method: 'DELETE', token });
     },
+  },
+  deliveries: {
+    board: async (token: string, range: { from: string; to: string }) =>
+      dxbRequest<{ suppliers: DeliverySupplier[]; receipts: DeliveryReceipt[] }>(`/api/deliveries${query(range)}`, { token }),
+    createSupplier: async (token: string, payload: DeliverySupplierInput & { shopId: string }) =>
+      (await dxbRequest<{ supplier: DeliverySupplier }>('/api/deliveries/suppliers', { method: 'POST', token, body: payload })).supplier,
+    updateSupplier: async (token: string, supplierId: string, payload: DeliverySupplierInput) =>
+      (await dxbRequest<{ supplier: DeliverySupplier }>(`/api/deliveries/suppliers/${encodeURIComponent(supplierId)}`, {
+        method: 'PATCH',
+        token,
+        body: payload,
+      })).supplier,
+    deleteSupplier: async (token: string, supplierId: string) => {
+      await dxbRequest<{}>(`/api/deliveries/suppliers/${encodeURIComponent(supplierId)}`, { method: 'DELETE', token });
+    },
+    saveReceipt: async (
+      token: string,
+      payload: { supplierId: string; date: string; receivedAt: string; photo?: File | null; removePhoto?: boolean },
+    ) => {
+      const form = new FormData();
+      form.set('supplierId', payload.supplierId);
+      form.set('date', payload.date);
+      form.set('receivedAt', payload.receivedAt);
+      if (payload.removePhoto) form.set('removePhoto', 'true');
+      if (payload.photo) form.set('photo', payload.photo);
+      return (await dxbFormRequest<{ receipt: DeliveryReceipt }>('/api/deliveries/receipts', token, form)).receipt;
+    },
+    deleteReceipt: async (token: string, supplierId: string, date: string) => {
+      await dxbRequest<{}>(`/api/deliveries/receipts/${encodeURIComponent(supplierId)}/${date}`, { method: 'DELETE', token });
+    },
+    invoicePhoto: (token: string, supplierId: string, date: string) =>
+      dxbImageBlobRequest(`/api/deliveries/receipts/${encodeURIComponent(supplierId)}/${date}/photo`, token),
   },
   shops: {
     list: async (token: string) => (await dxbRequest<{ shops: Shop[] }>('/api/shops', { token })).shops,

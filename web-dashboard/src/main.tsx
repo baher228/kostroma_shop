@@ -5,6 +5,7 @@ import { Login } from './app/Login';
 import { AudioQcPanel } from './panels/audioQc/AudioQcPanel';
 import { AttendancePanel } from './panels/attendance/AttendancePanel';
 import { AppDownloadPanel } from './panels/app/AppDownloadPanel';
+import { DeliveriesPanel } from './panels/deliveries/DeliveriesPanel';
 import { OrdersPanel } from './panels/orders/OrdersPanel';
 import { ProductsPanel } from './panels/products/ProductsPanel';
 import { PromotionsPanel } from './panels/promotions/PromotionsPanel';
@@ -14,7 +15,7 @@ import { UsersPanel } from './panels/users/UsersPanel';
 import './styles.css';
 import { Session } from './types';
 
-type Section = 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'inventory' | 'orders' | 'promotions' | 'app';
+type Section = 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'inventory' | 'orders' | 'deliveries' | 'promotions' | 'app';
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -78,6 +79,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
     { key: 'products', label: 'Остатки' },
     { key: 'inventory', label: 'Инвентаризация' },
     { key: 'orders', label: 'Заказ' },
+    { key: 'deliveries', label: 'Приёмка' },
     { key: 'promotions', label: 'Акции' },
     { key: 'app', label: 'Приложение' },
   ];
@@ -112,6 +114,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         {section === 'products' && <ProductsPanel session={session} />}
         {section === 'inventory' && <ProductsPanel session={session} mode="inventory" />}
         {section === 'orders' && <OrdersPanel session={session} />}
+        {section === 'deliveries' && <DeliveriesPanel session={session} />}
         {section === 'promotions' && <PromotionsPanel session={session} />}
         {section === 'app' && <AppDownloadPanel />}
       </main>

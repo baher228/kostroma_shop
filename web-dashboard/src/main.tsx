@@ -6,7 +6,6 @@ import { AudioQcPanel } from './panels/audioQc/AudioQcPanel';
 import { AttendancePanel } from './panels/attendance/AttendancePanel';
 import { AppDownloadPanel } from './panels/app/AppDownloadPanel';
 import { OrdersPanel } from './panels/orders/OrdersPanel';
-import { OverviewPanel } from './panels/overview/OverviewPanel';
 import { ProductsPanel } from './panels/products/ProductsPanel';
 import { PromotionsPanel } from './panels/promotions/PromotionsPanel';
 import { ShopsPanel } from './panels/shops/ShopsPanel';
@@ -15,7 +14,7 @@ import { UsersPanel } from './panels/users/UsersPanel';
 import './styles.css';
 import { Session } from './types';
 
-type Section = 'overview' | 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'inventory' | 'orders' | 'promotions' | 'app';
+type Section = 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'inventory' | 'orders' | 'promotions' | 'app';
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -69,9 +68,8 @@ const App = () => {
 };
 
 const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => void }) => {
-  const [section, setSection] = useState<Section>(() => new URLSearchParams(window.location.search).has('gmail') ? 'promotions' : 'overview');
+  const [section, setSection] = useState<Section>(() => new URLSearchParams(window.location.search).has('gmail') ? 'promotions' : 'attendance');
   const nav: Array<{ key: Section; label: string }> = [
-    { key: 'overview', label: 'Обзор' },
     { key: 'attendance', label: 'Посещаемость' },
     { key: 'audioQc', label: 'AI QC' },
     { key: 'users', label: 'Пользователи' },
@@ -106,7 +104,6 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
       </header>
 
       <main className={section === 'products' || section === 'inventory' ? 'content stock-content' : 'content'}>
-        {section === 'overview' && <OverviewPanel session={session} setSection={setSection} />}
         {section === 'attendance' && <AttendancePanel session={session} />}
         {section === 'audioQc' && <AudioQcPanel session={session} />}
         {section === 'users' && <UsersPanel session={session} />}

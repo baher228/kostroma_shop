@@ -324,3 +324,40 @@ export const subcategorySchema = z.object({
   businessCategory: businessCategorySchema,
   name: productCategorySchema,
 }).strict();
+
+const deliveryWeekdaysSchema = z
+  .array(z.number().int().min(0).max(6))
+  .min(1, 'Выберите хотя бы один день недели.')
+  .max(7)
+  .transform((days) => Array.from(new Set(days)).sort((a, b) => a - b));
+
+const deliverySupplierFields = {
+  name: z.string().trim().min(1, 'Укажите поставщика.').max(80),
+  windowStartMinutes: z.number().int().min(0).max(1439),
+  windowEndMinutes: z.number().int().min(1).max(1440),
+  weekdays: deliveryWeekdaysSchema,
+};
+
+const windowIsOrdered = (value: { windowStartMinutes: number; windowEndMinutes: number }) =>
+  value.windowEndMinutes > value.windowStartMinutes;
+const windowOrderMessage = { message: 'Окно доставки должно заканчиваться позже, чем начинается.' };
+
+export const createDeliverySupplierSchema = z
+  .object({ shopId: z.string().trim().min(1), ...deliverySupplierFields })
+  .refine(windowIsOrdered, windowOrderMessage);
+
+export const updateDeliverySupplierSchema = z.object(deliverySupplierFields).refine(windowIsOrdered, windowOrderMessage);
+
+export const deliveriesQuerySchema = z
+  .object({ from: dateKeySchema, to: dateKeySchema })
+  .refine((value) => value.from <= value.to, { message: 'from must not be after to.' });
+
+export const deliveryReceiptKeySchema = z.object({
+  supplierId: z.string().trim().min(1),
+  date: dateKeySchema,
+});
+
+export const upsertDeliveryReceiptSchema = deliveryReceiptKeySchema.extend({
+  receivedAt: z.string().datetime({ offset: true }),
+  removePhoto: z.enum(['true', 'false']).optional(),
+});

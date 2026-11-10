@@ -573,3 +573,23 @@ export type CheckInStats = {
   daily: DailyCheckInSummary[];
   events: WorkerCheckInEvent[];
 };
+
+export type DeliverySupplier = {
+  id: string;
+  shopId: string;
+  name: string;
+  windowStartMinutes: number;
+  windowEndMinutes: number;
+  weekdays: number[];
+  createdAt: string;
+};
+
+export type DeliverySupplierInput = Omit<DeliverySupplier, 'id' | 'shopId' | 'createdAt'>;
+
+export type DeliveryReceipt = {
+  supplierId: string;
+  date: string;
+  receivedAt: string;
+  markedAt: string;
+  hasInvoicePhoto: boolean;
+};

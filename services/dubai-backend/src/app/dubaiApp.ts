@@ -6,6 +6,7 @@ import { registerPromotionDocumentRoutes } from '../routes/promotionDocumentsRou
 import { registerPromotionRowsRoutes } from '../routes/promotionRowsRoutes';
 import { registerShopRoutes } from '../routes/shopsRoutes';
 import { registerStockRoutes } from '../routes/stockRoutes';
+import { registerDeliveryRoutes } from '../routes/deliveriesRoutes';
 import { registerGmailRoutes } from '../routes/gmailRoutes';
 import { getGmailHealth } from '../gmail/gmailPoller';
 import { registerGmailOAuthCallback,registerGmailOAuthManagerRoutes } from '../routes/gmailOAuthRoutes';
@@ -26,6 +27,7 @@ export const createDubaiApp = () => {
   registerShopRoutes(app);
   registerStockRoutes(app);
   registerOrderRoutes(app);
+  registerDeliveryRoutes(app);
   registerPromotionRowsRoutes(app);
   registerPromotionDocumentRoutes(app);
   registerGmailRoutes(app);

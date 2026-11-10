@@ -21,3 +21,4 @@ require('./promotion-rules.test');
 require('./promotion-provenance.test');
 require('./product.creation.test');
 require('./management.mutations.test');
+require('./deliveries.test');

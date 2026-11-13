@@ -20,6 +20,7 @@ import { AudioQcStatistics } from './AudioQcStatistics';
 type PeriodKey = 'today' | '7d' | '30d' | 'all' | 'custom';
 type DateRange = { from?: string; to?: string };
 const PAGE_SIZE = 25;
+const ALL_SHOPS = '__all__';
 
 const dateInMoscow = (date = new Date()) => new Intl.DateTimeFormat('en-CA', {
   year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Europe/Moscow',
@@ -68,7 +69,7 @@ const fillDailyTrends = (trends: QcTrendPoint[], range: DateRange, interval: 'da
 
 const defaultPolicy = (shopId: string): AudioQcPolicyWithHeartbeat => ({
   enabled: false,
-  mode: 'manual',
+  mode: 'vad_auto',
   shopId,
   targetRole: 'store_tablet',
   maxSegmentDurationSec: 300,
@@ -81,7 +82,7 @@ const defaultPolicy = (shopId: string): AudioQcPolicyWithHeartbeat => ({
 
 const editablePolicy = (policy: AudioQcPolicyWithHeartbeat): AudioQcPolicy => ({
   enabled: policy.enabled,
-  mode: policy.mode,
+  mode: 'vad_auto',
   shopId: policy.shopId,
   targetRole: 'store_tablet',
   maxSegmentDurationSec: policy.maxSegmentDurationSec,
@@ -103,8 +104,9 @@ const policyKey = (policy: AudioQcPolicy | AudioQcPolicyWithHeartbeat | null) =>
 export const AudioQcPanel = ({ session }: { session: Session }) => {
   const [shops, setShops] = useState<Shop[]>([]);
   const [policies, setPolicies] = useState<AudioQcPolicyWithHeartbeat[]>([]);
-  const [activeShopId, setActiveShopId] = useState('');
+  const [activeShopId, setActiveShopId] = useState(ALL_SHOPS);
   const [draft, setDraft] = useState<AudioQcPolicy | null>(null);
+  const [fleetEdited, setFleetEdited] = useState(false);
   const [period, setPeriod] = useState<PeriodKey>('7d');
   const [customFrom, setCustomFrom] = useState(dateInMoscow());
   const [customTo, setCustomTo] = useState(dateInMoscow());
@@ -126,8 +128,16 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
   const refreshInFlightRef = useRef(false);
 
   const activeShop = shops.find((shop) => shop.id === activeShopId) ?? null;
-  const activePolicy = useMemo(() => policies.find((policy) => policy.shopId === activeShopId) ?? (activeShopId ? defaultPolicy(activeShopId) : null), [activeShopId, policies]);
-  const dirty = Boolean(draft && activePolicy && policyKey(draft) !== policyKey(activePolicy));
+  const allShops = activeShopId === ALL_SHOPS;
+  const activePolicy = useMemo(() => {
+    if (activeShopId === ALL_SHOPS) return shops.length ? {
+      ...defaultPolicy(ALL_SHOPS),
+      enabled: shops.every(shop => policies.some(policy => policy.shopId === shop.id && policy.enabled)),
+      updatedAt: policies.map(policy => policy.updatedAt).sort().at(-1) ?? new Date(0).toISOString(),
+    } : null;
+    return policies.find(policy => policy.shopId === activeShopId) ?? (activeShopId ? defaultPolicy(activeShopId) : null);
+  }, [activeShopId, policies, shops]);
+  const dirty = Boolean(draft && activePolicy && (policyKey(draft) !== policyKey(activePolicy) || (allShops && fleetEdited)));
   const range = useMemo(() => toRange(period, customFrom, customTo), [period, customFrom, customTo]);
 
   const loadBase = useCallback(async (showLoading = false) => {
@@ -140,7 +150,7 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
       ]);
       setShops(nextShops);
       setPolicies(nextPolicies);
-      setActiveShopId((current) => nextShops.some((shop) => shop.id === current) ? current : nextShops[0]?.id ?? '');
+      setActiveShopId(current => current === ALL_SHOPS || nextShops.some(shop => shop.id === current) ? current : ALL_SHOPS);
     } catch (error) {
       setBaseError(messageOf(error));
     } finally {
@@ -162,10 +172,11 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
       setLoadingStats(true);
     }
     const interval = intervalFor(range);
+    const shopFilter = activeShopId === ALL_SHOPS ? {} : { shopId: activeShopId };
     const [recordingsResult, overviewResult, trendsResult] = await Promise.allSettled([
-      api.audioQc.recordings(session.token, { shopId: activeShopId, ...range, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
-      api.qualityControl.overview(session.token, { shopId: activeShopId, ...range }),
-      api.qualityControl.trends(session.token, { shopId: activeShopId, ...range, interval }),
+      api.audioQc.recordings(session.token, { ...shopFilter, ...range, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
+      api.qualityControl.overview(session.token, { ...shopFilter, ...range }),
+      api.qualityControl.trends(session.token, { ...shopFilter, ...range, interval }),
     ]);
     if (requestId !== dataRequestRef.current) return;
     if (recordingsResult.status === 'fulfilled') {
@@ -211,6 +222,14 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
     setBaseError('');
     setNotice('');
     try {
+      if (allShops) {
+        const saved = await api.audioQc.savePolicies(session.token, shops.map(shop => shop.id), draft);
+        setPolicies(saved);
+        setFleetEdited(false);
+        setDraft(null);
+        setNotice(`Настройки применены ко всем магазинам (${shops.length}). Офлайн-планшеты получат их при подключении.`);
+        return;
+      }
       const saved = await api.audioQc.savePolicy(session.token, draft.shopId, draft);
       setPolicies((current) => [saved, ...current.filter((item) => item.shopId !== saved.shopId)]);
       setDraft(editablePolicy(saved));
@@ -225,6 +244,7 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
   const selectShop = (nextShopId: string) => {
     if (dirty && !window.confirm('Изменения настроек не сохранены. Перейти к другому магазину?')) return;
     setActiveShopId(nextShopId);
+    setFleetEdited(false);
     setPage(1);
     setNotice('');
   };
@@ -257,6 +277,7 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
         <label>
           Магазин
           <select value={activeShopId} onChange={(event) => selectShop(event.target.value)} disabled={loadingBase || shops.length === 0}>
+            <option value={ALL_SHOPS}>ВСЕ МАГАЗИНЫ</option>
             {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
           </select>
         </label>
@@ -276,13 +297,20 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
         )}
       </div>
 
+      {allShops && shops.length > 0 && <p>
+        Запись включена: {shops.filter(shop => policies.some(policy => policy.shopId === shop.id && policy.enabled)).length} из {shops.length}.
+        {' '}Изменения ниже применяются ко всем магазинам только после сохранения.
+      </p>}
       {loadingBase && shops.length === 0 ? <p>Загружаем настройки AI QC...</p> : activePolicy && draft ? (
-        <AudioQcSettings saved={activePolicy} draft={draft} dirty={dirty} saving={saving} onChange={setDraft} onSave={save} />
+        <AudioQcSettings fleet={allShops} saved={activePolicy} draft={draft} dirty={dirty} saving={saving}
+          onChange={next => { setDraft(next); if (allShops) setFleetEdited(true); }} onSave={save} />
       ) : <p>Нет доступных магазинов.</p>}
 
       {recordingsError && <p className="error">История записей: {recordingsError}</p>}
       <AudioQcHistory
-        shopName={activeShop?.name ?? ''}
+        shopName={allShops ? 'Все магазины' : activeShop?.name ?? ''}
+        shops={shops}
+        showShop={allShops}
         recordings={recordings}
         total={recordingsTotal}
         loading={loadingRecordings}

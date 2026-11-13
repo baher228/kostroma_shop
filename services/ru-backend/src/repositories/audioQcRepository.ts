@@ -106,7 +106,7 @@ const supportedModeOrNull = (mode: string | null): AudioQcRecordingMode | null =
 
 export const defaultAudioQcPolicy = (shopId: string): AudioQcPolicy => ({
   enabled: false,
-  mode: 'manual',
+  mode: 'vad_auto',
   shopId,
   targetRole: 'store_tablet',
   maxSegmentDurationSec: 300,
@@ -118,7 +118,8 @@ export const defaultAudioQcPolicy = (shopId: string): AudioQcPolicy => ({
 
 const mapPolicy = (row: AudioQcPolicyRow): AudioQcPolicy => ({
   enabled: row.enabled,
-  mode: supportedModeOrNull(row.mode) ?? 'manual',
+  // Never advertise the retired manual mode to older tablets.
+  mode: 'vad_auto',
   shopId: row.shop_id,
   targetRole: 'store_tablet',
   maxSegmentDurationSec: row.max_segment_duration_sec,
@@ -317,6 +318,22 @@ export const upsertAudioQcPolicy = async (
     ],
   );
   return getAudioQcPolicyWithHeartbeatByShopId(shopId);
+};
+
+// One statement makes a fleet command atomic; a failed save cannot enable only
+// part of the selected fleet.
+export const upsertAudioQcPolicies = async (shopIds: string[], patch: AudioQcPolicyPatch, updatedBy: string) => {
+  await personalDb.query(`
+    INSERT INTO audio_qc_policies
+      (id,shop_id,enabled,mode,max_segment_duration_sec,silence_to_stop_sec,pre_roll_sec,upload_immediately,updated_by)
+    SELECT 'audio_qc_policy_' || shop_id,shop_id,$2,'vad_auto',$3,$4,$5,$6,$7
+    FROM unnest($1::text[]) AS shops(shop_id)
+    ON CONFLICT (shop_id) DO UPDATE SET
+      enabled=EXCLUDED.enabled,mode='vad_auto',max_segment_duration_sec=EXCLUDED.max_segment_duration_sec,
+      silence_to_stop_sec=EXCLUDED.silence_to_stop_sec,pre_roll_sec=EXCLUDED.pre_roll_sec,
+      upload_immediately=EXCLUDED.upload_immediately,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+  `, [shopIds,patch.enabled,patch.maxSegmentDurationSec,patch.silenceToStopSec,patch.preRollSec,patch.uploadImmediately,updatedBy]);
+  return (await listAudioQcPolicies()).filter(policy => shopIds.includes(policy.shopId));
 };
 
 export const upsertAudioQcHeartbeat = async (heartbeat: AudioQcHeartbeatInput): Promise<AudioQcDeviceHeartbeat> => {

@@ -23,7 +23,7 @@ test('all Russia migrations apply and the existing migration runner is repeatabl
   const first = await db.query('SELECT name FROM schema_migrations ORDER BY name');
   const migrationCount = readdirSync(path.resolve(__dirname, '../migrations')).filter(name => name.endsWith('.sql')).length;
   assert.equal(first.rows.length, migrationCount);
-  assert.equal(first.rows.at(-1).name, '018_qc_dialog_context.sql');
+  assert.equal(first.rows.at(-1).name, '019_audio_qc_vad_only.sql');
   await migrate();
   assert.deepEqual((await db.query('SELECT name FROM schema_migrations ORDER BY name')).rows, first.rows);
   const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'qc_%'");

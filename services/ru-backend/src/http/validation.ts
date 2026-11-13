@@ -284,11 +284,17 @@ export const shopIdParamSchema = z.object({
 
 export const audioQcPolicySchema = z.object({
   enabled: z.boolean(),
-  mode: z.enum(['manual', 'vad_auto']),
+  mode: z.literal('vad_auto'),
   maxSegmentDurationSec: z.number().int().min(30).max(1800).default(300),
   silenceToStopSec: z.number().int().min(1).max(30).default(10),
   preRollSec: z.number().int().min(0).max(30).default(5),
   uploadImmediately: z.boolean().default(true),
+}).strict();
+
+export const audioQcBulkPolicySchema = z.object({
+  shopIds: z.array(z.string().trim().min(1).max(100)).min(1).max(500)
+    .refine(ids => new Set(ids).size === ids.length, 'Shop identifiers must be unique.'),
+  policy: audioQcPolicySchema,
 }).strict();
 
 export const audioQcHeartbeatSchema = z.object({
@@ -328,7 +334,7 @@ export const audioQcRecordingSchema = z.object({
   endedAt: z.string().datetime().nullable().default(null),
   appVersion: z.string().trim().min(1).max(80),
   timezone: z.string().trim().min(1).max(100),
-  recordingMode: z.enum(['manual', 'vad_auto']),
+  recordingMode: z.literal('vad_auto'),
   durationSec: z.number().int().min(0).max(86_400).nullable().default(null),
   fileSizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().default(null),
   status: audioQcRecordingStatusSchema,

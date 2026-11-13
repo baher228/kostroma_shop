@@ -27,9 +27,6 @@ import { FobScannerPanel } from '../components/FobScannerPanel';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import { useTaskNotifications } from '../hooks/useTaskNotifications';
 import { AudioQcAdminPanel } from '../features/audioQc/AudioQcAdminPanel';
-import { AudioQcControls } from '../features/audioQc/AudioQcControls';
-import { AudioQcRecordingsList } from '../features/audioQc/AudioQcRecordingsList';
-import { AudioQcStatusBadge } from '../features/audioQc/AudioQcStatusBadge';
 import {
   DASHBOARD_COLUMNS,
   BUSINESS_CATEGORIES,
@@ -1459,23 +1456,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       );
     }
     if (activeTab === 'audioQc') {
-      return (
-        <View style={styles.tabContentWrap}>
-          {canManage ? (
-            <AudioQcAdminPanel shops={shops} selectedShopId={selectedShopId} />
-          ) : (
-            <ScrollView
-              style={styles.tabContentWrap}
-              contentContainerStyle={styles.audioQcStack}
-              keyboardShouldPersistTaps="handled"
-            >
-              <AudioQcStatusBadge />
-              <AudioQcControls />
-              <AudioQcRecordingsList />
-            </ScrollView>
-          )}
-        </View>
-      );
+      return canManage ? <AudioQcAdminPanel shops={shops} selectedShopId={selectedShopId} /> : null;
     }
     if (activeTab === 'tasks') {
       return (
@@ -1550,7 +1531,6 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
-        ...(isStoreTablet ? [{ key: 'audioQc' as ScreenTab, label: 'Запись' }] : []),
         ...((isWorker || isStoreTablet)
           ? [{ key: 'fob' as ScreenTab, label: isStoreTablet ? 'FOB-сканер' : 'FOB' }]
           : []),

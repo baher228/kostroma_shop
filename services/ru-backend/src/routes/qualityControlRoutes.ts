@@ -80,7 +80,13 @@ export const registerQualityControlRoutes = (app: Express, options: {
   };
 
   app.post(`${base}/sessions`, auth, guard, handle(async (req, res) => {
-    res.status(201).json({ session: await service.createSession(user(req), createSchema.parse(req.body)) });
+    const input = createSchema.parse(req.body);
+    // Older tablet builds can still have cached manual controls. Refuse their
+    // manual sessions even before they fetch the VAD-only policy.
+    if (user(req).role === 'store_tablet' && !input.externalSessionId?.startsWith('aqc_vad_')) {
+      throw new QcError('MANUAL_RECORDING_DISABLED', 'Only automatic VAD recordings are supported.', 400);
+    }
+    res.status(201).json({ session: await service.createSession(user(req), input) });
   }));
   app.get(`${base}/sessions`, auth, guard, handle(async (req, res) => {
     res.json({ sessions: await service.listSessions(user(req), filtersSchema.parse(req.query)) });

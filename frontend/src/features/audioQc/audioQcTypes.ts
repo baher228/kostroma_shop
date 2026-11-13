@@ -152,10 +152,6 @@ export type AudioQcControllerValue = {
   elapsedSec: number;
   lastError: string | null;
   vadStatus: AudioQcVadStatus;
-  startManualRecording: () => Promise<void>;
-  pauseRecording: () => Promise<void>;
-  resumeRecording: () => Promise<void>;
-  stopRecording: () => Promise<void>;
   retryUpload: () => Promise<void>;
   refreshPolicy: () => Promise<void>;
   refreshPolicies: () => Promise<void>;

@@ -66,3 +66,7 @@ temp_interactive_push.bat
 /email-downloading-discount/
 /.qc-*-export/
 config.bat
+
+# Never track local credentials
+.env
+**/.env

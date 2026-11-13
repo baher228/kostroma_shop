@@ -8,6 +8,7 @@ const numberValue = (value: string, fallback: number) => {
 };
 
 type Props = {
+  fleet?: boolean;
   saved: AudioQcPolicyWithHeartbeat;
   draft: AudioQcPolicy;
   dirty: boolean;
@@ -16,7 +17,7 @@ type Props = {
   onSave: (event: FormEvent) => void;
 };
 
-export const AudioQcSettings = ({ saved, draft, dirty, saving, onChange, onSave }: Props) => {
+export const AudioQcSettings = ({ fleet = false, saved, draft, dirty, saving, onChange, onSave }: Props) => {
   const heartbeat = saved.heartbeat;
   const online = heartbeat?.online === true;
 
@@ -25,11 +26,15 @@ export const AudioQcSettings = ({ saved, draft, dirty, saving, onChange, onSave 
       <summary className="audio-qc-settings-summary">
         <span>Настройки записи</span>
         <span className={`qc-state-chip ${saved.enabled ? 'active' : ''}`}>{saved.enabled ? 'включена' : 'выключена'}</span>
-        <span className="qc-summary-meta">{saved.mode === 'vad_auto' ? 'Авто по речи' : 'Ручная запись'}</span>
+        <span className="qc-summary-meta">Авто по речи</span>
         {dirty && <span className="qc-unsaved">есть несохранённые изменения</span>}
       </summary>
 
       <form className="audio-qc-settings-form" onSubmit={onSave}>
+        {fleet && <div className="audio-qc-toggle-row">
+          <button type="button" className="secondary" onClick={() => onChange({ ...draft, enabled: true })}>Включить всем</button>
+          <button type="button" className="secondary" onClick={() => onChange({ ...draft, enabled: false })}>Выключить всем</button>
+        </div>}
         <div className="audio-qc-toggle-row">
           <label className="audio-qc-check">
             <input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} />
@@ -39,11 +44,6 @@ export const AudioQcSettings = ({ saved, draft, dirty, saving, onChange, onSave 
             <input type="checkbox" checked={draft.uploadImmediately} onChange={(event) => onChange({ ...draft, uploadImmediately: event.target.checked })} />
             Отправлять сразу после записи
           </label>
-        </div>
-
-        <div className="audio-qc-mode-row" aria-label="Режим записи">
-          <button type="button" className={draft.mode === 'manual' ? '' : 'secondary'} onClick={() => onChange({ ...draft, mode: 'manual' })}>Ручная запись</button>
-          <button type="button" className={draft.mode === 'vad_auto' ? '' : 'secondary'} onClick={() => onChange({ ...draft, mode: 'vad_auto' })}>Авто по речи</button>
         </div>
 
         {draft.mode === 'vad_auto' && (
@@ -60,9 +60,9 @@ export const AudioQcSettings = ({ saved, draft, dirty, saving, onChange, onSave 
           </div>
         )}
 
-        <button disabled={saving || !dirty}>{saving ? 'Сохраняем...' : 'Применить настройки'}</button>
+        <button disabled={saving || !dirty}>{saving ? 'Сохраняем...' : fleet ? 'Применить ко всем магазинам' : 'Применить настройки'}</button>
 
-        <div className="audio-qc-device-status">
+        {!fleet && <div className="audio-qc-device-status">
           <strong>Планшет магазина</strong>
           <span className={online ? 'online' : 'offline'}>{online ? 'Онлайн' : 'Офлайн'}</span>
           {online ? (
@@ -73,7 +73,7 @@ export const AudioQcSettings = ({ saved, draft, dirty, saving, onChange, onSave 
             </>
           ) : <span>Текущее состояние неизвестно</span>}
           <span>Последний сигнал: {formatDateTime(heartbeat?.lastSeenAt)}</span>
-        </div>
+        </div>}
       </form>
     </details>
   );

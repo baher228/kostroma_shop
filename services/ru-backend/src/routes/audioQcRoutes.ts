@@ -4,6 +4,7 @@ import { AuthorizedRequest, requireAuth, requireRole } from '../auth/middleware'
 import { toValidationMessage } from '../http/http';
 import {
   audioQcHeartbeatSchema,
+  audioQcBulkPolicySchema,
   audioQcPolicySchema,
   audioQcRecordingSchema,
   audioQcRecordingsQuerySchema,
@@ -17,6 +18,7 @@ import {
   recordTabletAudioQcHeartbeat,
   recordTabletAudioQcRecording,
   saveManagedAudioQcPolicy,
+  saveManagedAudioQcPolicies,
 } from '../services/audioQcService';
 
 const handleAudioQcError = (error: unknown, res: Response, fallbackMessage: string) => {
@@ -50,6 +52,15 @@ export const registerAudioQcRoutes = (app: Express) => {
       res.json({ policies });
     } catch (error) {
       handleAudioQcError(error, res, 'Failed to load Audio QC policies.');
+    }
+  });
+
+  app.put('/api/audio-qc/policies', requireAuth, requireRole('manager'), async (req: Request, res: Response) => {
+    try {
+      const { shopIds, policy } = audioQcBulkPolicySchema.parse(req.body);
+      res.json({ policies: await saveManagedAudioQcPolicies((req as AuthorizedRequest).user, shopIds, policy) });
+    } catch (error) {
+      handleAudioQcError(error, res, 'Failed to save Audio QC policies.');
     }
   });
 

@@ -74,7 +74,7 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
     }
     setDraft({
       enabled: activePolicy.enabled,
-      mode: activePolicy.mode,
+      mode: 'vad_auto',
       shopId: activePolicy.shopId,
       targetRole: 'store_tablet',
       maxSegmentDurationSec: activePolicy.maxSegmentDurationSec,
@@ -181,21 +181,6 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
           />
         </View>
 
-        <View style={styles.modeRow}>
-          {audioQcModes.map((mode) => {
-            const active = draft.mode === mode;
-            return (
-              <Pressable
-                key={mode}
-                style={[styles.modeButton, active && styles.modeButtonActive]}
-                onPress={() => setDraft((current) => (current ? { ...current, mode } : current))}
-              >
-                <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{audioQcModeLabels[mode]}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
         {draft.mode === 'vad_auto' && (
           <View style={styles.stepperGrid}>
             {([
@@ -239,7 +224,7 @@ export const AudioQcAdminPanel = ({ shops, selectedShopId }: AudioQcAdminPanelPr
 
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>Диагностика планшета</Text>
-        <Text style={styles.sectionMeta}>Тестовый блок. Ручная запись работает независимо от этого сигнала.</Text>
+        <Text style={styles.sectionMeta}>Автоматическая запись управляется политикой магазина.</Text>
         <View style={styles.heartbeatGrid}>
           <Text style={styles.heartbeatItem}>Планшет: {heartbeat?.deviceId ?? '-'}</Text>
           <Text style={styles.heartbeatItem}>Статус: {heartbeat?.online ? 'онлайн' : 'офлайн'}</Text>

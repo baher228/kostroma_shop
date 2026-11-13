@@ -33,6 +33,16 @@ for (const file of files) {
   }
 }
 
+// The obfuscated loader has also appeared behind package startup/build scripts.
+for (const file of ['package.json', 'worker-app/package.json', 'web-dashboard/package.json',
+  'services/ru-backend/package.json', 'services/dubai-backend/package.json']) {
+  const { scripts = {} } = JSON.parse(readFileSync(file, 'utf8'));
+  if (Object.values(scripts).some(command => /\bnode\s+init(?:\s|$)/.test(command))) {
+    console.error(`${file} starts the retired init loader.`);
+    failed = true;
+  }
+}
+
 if (failed) {
   process.exit(1);
 }

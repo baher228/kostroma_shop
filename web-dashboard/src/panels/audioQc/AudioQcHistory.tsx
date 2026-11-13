@@ -1,10 +1,12 @@
 import type { KeyboardEvent } from 'react';
 import { Table } from '../../components/ui';
-import type { AudioQcRecording } from '../../types';
+import type { AudioQcRecording, Shop } from '../../types';
 import { formatDateTime, formatDuration, qcStatusLabels, qualityLabels, recordingStatusLabels } from './qualityControlFormat';
 
 type Props = {
   shopName: string;
+  shops: Shop[];
+  showShop: boolean;
   recordings: AudioQcRecording[];
   total: number;
   loading: boolean;
@@ -14,7 +16,7 @@ type Props = {
   onOpen: (recording: AudioQcRecording) => void;
 };
 
-export const AudioQcHistory = ({ shopName, recordings, total, loading, page, pageSize, onPageChange, onOpen }: Props) => {
+export const AudioQcHistory = ({ shopName, shops, showShop, recordings, total, loading, page, pageSize, onPageChange, onOpen }: Props) => {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const openFromKeyboard = (event: KeyboardEvent<HTMLTableRowElement>, recording: AudioQcRecording) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -29,7 +31,7 @@ export const AudioQcHistory = ({ shopName, recordings, total, loading, page, pag
       {loading ? <p>Загружаем записи...</p> : recordings.length === 0 ? <p>За выбранный период записей нет.</p> : (
         <Table>
           <thead>
-            <tr><th>Начало</th><th>Длительность</th><th>Режим</th><th>Обработка</th><th>Оценка</th><th>Результат</th><th /></tr>
+            <tr>{showShop && <th>Магазин</th>}<th>Начало</th><th>Длительность</th><th>Режим</th><th>Обработка</th><th>Оценка</th><th>Результат</th><th /></tr>
           </thead>
           <tbody>
             {recordings.map((recording) => {
@@ -44,6 +46,7 @@ export const AudioQcHistory = ({ shopName, recordings, total, loading, page, pag
                   onKeyDown={(event) => openFromKeyboard(event, recording)}
                   aria-label={`Открыть запись от ${formatDateTime(recording.startedAt)}`}
                 >
+                  {showShop && <td>{shops.find(shop => shop.id === recording.shopId)?.name ?? recording.shopId}</td>}
                   <td>{formatDateTime(recording.startedAt)}</td>
                   <td>{formatDuration(recording.durationSec)}</td>
                   <td>{recording.recordingMode === 'vad_auto' ? 'Авто по речи' : 'Ручная'}</td>

@@ -524,6 +524,13 @@ export const api = {
       (await ruRequest<{ stats: CheckInStats }>(`/api/checkin/stats${query({ from, to, shopId })}`, { token })).stats,
   },
   audioQc: {
+    savePolicies: async (token: string, shopIds: string[], policy: AudioQcPolicy) =>
+      (await ruRequest<{ policies: AudioQcPolicyWithHeartbeat[] }>('/api/audio-qc/policies', {
+        method: 'PUT', token, body: { shopIds, policy: {
+          enabled: policy.enabled, mode: 'vad_auto', maxSegmentDurationSec: policy.maxSegmentDurationSec,
+          silenceToStopSec: policy.silenceToStopSec, preRollSec: policy.preRollSec, uploadImmediately: policy.uploadImmediately,
+        } },
+      })).policies,
     policies: async (token: string) =>
       (await ruRequest<{ policies: AudioQcPolicyWithHeartbeat[] }>('/api/audio-qc/policies', { token })).policies,
     savePolicy: async (token: string, shopId: string, policy: AudioQcPolicy) =>

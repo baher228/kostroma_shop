@@ -24,11 +24,44 @@ test('Audio QC default tablet policy is disabled and bounded', async () => {
 
   assert.equal(policy.shopId, 'shop_main');
   assert.equal(policy.enabled, false);
-  assert.equal(policy.mode, 'manual');
+  assert.equal(policy.mode, 'vad_auto');
   assert.equal(policy.targetRole, 'store_tablet');
   assert.equal(policy.maxSegmentDurationSec, 300);
   assert.equal(policy.silenceToStopSec, 10);
   assert.equal(policy.preRollSec, 5);
+});
+
+test('Manual commands are rejected while old tablet heartbeat telemetry is accepted', () => {
+  const { audioQcPolicySchema, audioQcBulkPolicySchema, audioQcHeartbeatSchema } = require('../dist/http/validation');
+  assert.equal(audioQcPolicySchema.safeParse({ enabled: true, mode: 'manual' }).success, false);
+  assert.equal(audioQcBulkPolicySchema.safeParse({ shopIds: ['one', 'one'], policy: { enabled: false, mode: 'vad_auto' } }).success, false);
+  assert.equal(audioQcBulkPolicySchema.safeParse({ shopIds: ['one', 'two'], policy: { enabled: false, mode: 'vad_auto' } }).success, true);
+  assert.equal(audioQcHeartbeatSchema.safeParse({ deviceId: 'old-tablet', currentMode: 'manual', queueSize: 0, isRecording: false }).success, true);
+});
+
+test('All-shops recording history omits shop filter and retains pagination', async () => {
+  const calls = [];
+  const { listAudioQcRecordings } = installDbMock(async (sql, params) => {
+    calls.push({ sql, params });
+    return { rows: sql.includes('COUNT(*)') ? [{ total: 0 }] : [] };
+  });
+  await listAudioQcRecordings({ limit: 25, offset: 25 });
+  assert.equal(calls.some(call => call.sql.includes('WHERE r.shop_id')), false);
+  assert.deepEqual(calls.find(call => call.sql.includes('LEFT JOIN qc_sessions')).params, [25, 25]);
+});
+
+test('Fleet policy command uses one atomic statement with disabled VAD settings', async () => {
+  const calls = [];
+  const { upsertAudioQcPolicies } = installDbMock(async (sql, params) => {
+    calls.push({ sql, params }); return { rows: [] };
+  });
+  await upsertAudioQcPolicies(['one', 'two'], {
+    enabled: false, mode: 'vad_auto', maxSegmentDurationSec: 300, silenceToStopSec: 10, preRollSec: 5, uploadImmediately: true,
+  }, 'manager');
+  const writes = calls.filter(call => call.sql.includes('INSERT INTO'));
+  assert.equal(writes.length, 1);
+  assert.ok(writes[0].sql.includes('unnest($1::text[])'));
+  assert.deepEqual(writes[0].params, [['one', 'two'], false, 300, 10, 5, true, 'manager']);
 });
 
 test('Audio QC policy upsert stores manager vad_auto command in RU backend', async () => {

@@ -6,6 +6,21 @@ const { registerQualityControlRoutes } = require('../dist/routes/qualityControlR
 const manager = { id: 'manager', username: 'manager', firstName: 'Main', lastName: 'Manager', fullName: 'Main Manager', role: 'manager', shopId: null, shopName: null };
 const worker = { id: 'worker', username: 'worker', firstName: 'Store', lastName: 'Worker', fullName: 'Store Worker', role: 'worker', shopId: 'shop_main', shopName: null };
 
+test('Older tablets cannot create manual sessions, but automatic VAD sessions still work', async () => {
+  await withApp({ ...worker, role: 'store_tablet' }, true, async (base, calls) => {
+    const send = externalSessionId => fetch(`${base}/api/quality-control/sessions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shopId: 'shop_main', startedAt: '2026-11-12T10:00:00Z', externalSessionId }),
+    });
+    const manual = await send('aqc_manual_old');
+    assert.equal(manual.status, 400);
+    assert.equal((await manual.json()).code, 'MANUAL_RECORDING_DISABLED');
+    assert.equal(calls.length, 0);
+    assert.equal((await send('aqc_vad_automatic')).status, 201);
+    assert.equal(calls.length, 1);
+  });
+});
+
 async function withApp(user, enabled, callback) {
   const calls = [];
   const service = {

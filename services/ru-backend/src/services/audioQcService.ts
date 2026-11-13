@@ -5,6 +5,7 @@ import {
   listAudioQcRecordings,
   upsertAudioQcHeartbeat,
   upsertAudioQcPolicy,
+  upsertAudioQcPolicies,
   upsertAudioQcRecording,
 } from '../repositories/audioQcRepository';
 import {
@@ -56,6 +57,11 @@ export const getTabletAudioQcPolicy = (user: SessionUser) => {
     throw new AudioQcPolicyError('shop_required');
   }
   return getAudioQcPolicyByShopId(user.shopId);
+};
+
+export const saveManagedAudioQcPolicies = (user: SessionUser, shopIds: string[], patch: AudioQcPolicyPatch) => {
+  if (user.role !== 'manager') throw new AudioQcPolicyError('forbidden');
+  return upsertAudioQcPolicies(shopIds, patch, user.id);
 };
 
 export const recordTabletAudioQcHeartbeat = (

@@ -261,6 +261,38 @@ export const deleteTask = async (id: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0;
 };
 
+export const deleteOverdueTasksPastRetention = async (): Promise<Array<{
+  photoFileName: string | null;
+  instructionPhotoId: string | null;
+}>> => {
+  const result = await personalDb.query<Pick<TaskDbRow, 'photo_confirmation_file_name' | 'instruction_photo_id'>>(
+    `
+      DELETE FROM tasks
+      WHERE status = 'open'
+        AND deadline_at <= NOW() - INTERVAL '7 days'
+      RETURNING photo_confirmation_file_name, instruction_photo_id;
+    `,
+  );
+  return result.rows.map((row: Pick<TaskDbRow, 'photo_confirmation_file_name' | 'instruction_photo_id'>) => ({
+    photoFileName: row.photo_confirmation_file_name,
+    instructionPhotoId: row.instruction_photo_id,
+  }));
+};
+
+export const deleteUnreferencedTaskInstructionPhotos = async (photoIds: string[]): Promise<void> => {
+  const uniquePhotoIds = [...new Set(photoIds.filter(Boolean))];
+  if (uniquePhotoIds.length === 0) return;
+  await personalDb.query(
+    `
+      DELETE FROM task_instruction_photos AS photo
+      WHERE photo.id = ANY($1::text[])
+        AND NOT EXISTS (SELECT 1 FROM tasks WHERE instruction_photo_id = photo.id)
+        AND NOT EXISTS (SELECT 1 FROM task_series WHERE instruction_photo_id = photo.id);
+    `,
+    [uniquePhotoIds],
+  );
+};
+
 export type TaskDeadlineReminderKind = 'hour_before' | 'deadline';
 
 const REMINDER_SEND_WINDOW = "INTERVAL '10 minutes'";

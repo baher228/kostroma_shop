@@ -2,7 +2,7 @@ import { config } from './config/config';
 import { runMigrations } from './db/migrate';
 import { personalDb } from './db/personalDb';
 import { createRussiaApp } from './app/russiaApp';
-import { cleanupExpiredTaskPhotos } from './services/taskService';
+import { cleanupExpiredTaskPhotos, cleanupOverdueTasks } from './services/taskService';
 import { qcConfig, validateQcConfig } from './quality-control/config';
 import { createQualityControlWorker } from './quality-control/worker';
 import { createQualityControlRetentionWorker } from './quality-control/retentionWorker';
@@ -15,9 +15,15 @@ const startServer = async () => {
   void cleanupExpiredTaskPhotos().catch((error) => {
     console.error('Failed to clean up expired task photos:', error);
   });
+  void cleanupOverdueTasks().catch((error) => {
+    console.error('Failed to clean up overdue tasks:', error);
+  });
   setInterval(() => {
     void cleanupExpiredTaskPhotos().catch((error) => {
       console.error('Failed to clean up expired task photos:', error);
+    });
+    void cleanupOverdueTasks().catch((error) => {
+      console.error('Failed to clean up overdue tasks:', error);
     });
   }, 5 * 60 * 1000).unref();
   setInterval(() => {

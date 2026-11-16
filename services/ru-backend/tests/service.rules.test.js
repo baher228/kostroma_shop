@@ -231,6 +231,71 @@ test('task repository create insert covers photo review columns', async () => {
   assert.match(insertSql, /NULL,NULL,NULL,'none',NULL,NULL,NOW\(\)/);
 });
 
+test('overdue task retention deletes attachments and prunes only unreferenced instructions', async () => {
+  const cleanupCalls = [];
+  const { cleanupOverdueTasks } = loadWithMock('../dist/services/taskService', {
+    '../dist/repositories/taskRepository': {
+      deleteOverdueTasksPastRetention: async () => [
+        { photoFileName: 'overdue-task.jpg', instructionPhotoId: 'used-by-series' },
+        { photoFileName: null, instructionPhotoId: 'orphaned-instruction' },
+      ],
+      deleteUnreferencedTaskInstructionPhotos: async (photoIds) => cleanupCalls.push(['instructions', photoIds]),
+    },
+    '../dist/services/taskPhotoStorageService': {
+      deleteTaskPhotoFile: async (fileName) => cleanupCalls.push(['photo', fileName]),
+    },
+  });
+
+  assert.equal(await cleanupOverdueTasks(), 2);
+  assert.deepEqual(cleanupCalls, [
+    ['photo', 'overdue-task.jpg'],
+    ['instructions', ['used-by-series', 'orphaned-instruction']],
+  ]);
+});
+
+test('task repository retention deletes only open tasks at least seven days past deadline', async () => {
+  let query = '';
+  const { deleteOverdueTasksPastRetention } = loadWithMock('../dist/repositories/taskRepository', {
+    '../dist/db/personalDb': {
+      personalDb: {
+        query: async (sql) => {
+          query = sql;
+          return { rows: [{ photo_confirmation_file_name: 'task.jpg', instruction_photo_id: 'instruction-1' }] };
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(await deleteOverdueTasksPastRetention(), [
+    { photoFileName: 'task.jpg', instructionPhotoId: 'instruction-1' },
+  ]);
+  assert.match(query, /DELETE FROM tasks/);
+  assert.match(query, /status = 'open'/);
+  assert.match(query, /deadline_at <= NOW\(\) - INTERVAL '7 days'/);
+});
+
+test('task instruction photos stay while a task or repeating series still references them', async () => {
+  let query = '';
+  let params = null;
+  const { deleteUnreferencedTaskInstructionPhotos } = loadWithMock('../dist/repositories/taskRepository', {
+    '../dist/db/personalDb': {
+      personalDb: {
+        query: async (sql, values) => {
+          query = sql;
+          params = values;
+          return { rowCount: 1 };
+        },
+      },
+    },
+  });
+
+  await deleteUnreferencedTaskInstructionPhotos(['instruction-1', 'instruction-1', '']);
+
+  assert.deepEqual(params, [['instruction-1']]);
+  assert.match(query, /NOT EXISTS \(SELECT 1 FROM tasks WHERE instruction_photo_id = photo\.id\)/);
+  assert.match(query, /NOT EXISTS \(SELECT 1 FROM task_series WHERE instruction_photo_id = photo\.id\)/);
+});
+
 test('task notification sounds on the tasks channel and removes invalid devices', async () => {
   const originalFetch = global.fetch;
   const removedTokens = [];

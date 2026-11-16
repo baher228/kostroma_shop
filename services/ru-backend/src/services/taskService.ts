@@ -1,7 +1,9 @@
 import {
   attachTaskPhoto,
   createTask,
+  deleteOverdueTasksPastRetention,
   deleteTask,
+  deleteUnreferencedTaskInstructionPhotos,
   detachExpiredTaskPhotos,
   getTaskPhotoFile,
   listTasks,
@@ -183,6 +185,20 @@ export const readTaskInstructionPhoto = async (
 export const cleanupExpiredTaskPhotos = async () => {
   const expiredFileNames = await detachExpiredTaskPhotos();
   await Promise.all(expiredFileNames.map((fileName) => deleteTaskPhotoFile(fileName)));
+};
+
+export const cleanupOverdueTasks = async () => {
+  const deletedTasks = await deleteOverdueTasksPastRetention();
+  await Promise.all(deletedTasks
+    .map((task) => task.photoFileName)
+    .filter((fileName): fileName is string => Boolean(fileName))
+    .map((fileName) => deleteTaskPhotoFile(fileName)));
+  await deleteUnreferencedTaskInstructionPhotos(
+    deletedTasks
+      .map((task) => task.instructionPhotoId)
+      .filter((photoId): photoId is string => Boolean(photoId)),
+  );
+  return deletedTasks.length;
 };
 
 export const removeTask = async (taskId: string) => {

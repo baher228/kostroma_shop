@@ -7,7 +7,7 @@ import { formatTaskDuration, groupTasksByUrgency, taskDueLabel, taskGroupKey } f
 const now = new Date('2026-10-06T10:40:00Z').getTime();
 const task = (id, status, deadlineAt, completedAt = null) => ({ id, status, deadlineAt, completedAt });
 
-test('tasks are grouped by deadline urgency in a fixed order', () => {
+test('groups tasks by urgency and shows the most recently overdue task first', () => {
   const groups = groupTasksByUrgency([
     task('later', 'open', '2026-10-06T13:00:00Z'),
     task('done', 'done', '2026-10-06T09:00:00Z', '2026-10-06T09:30:00Z'),
@@ -18,7 +18,7 @@ test('tasks are grouped by deadline urgency in a fixed order', () => {
   ], now);
 
   assert.deepEqual(groups.map((group) => group.key), ['overdue', 'soon', 'later', 'noDeadline', 'done']);
-  assert.deepEqual(groups[0].tasks.map((item) => item.id), ['late1', 'late2']);
+  assert.deepEqual(groups[0].tasks.map((item) => item.id), ['late2', 'late1']);
   assert.equal(taskGroupKey(task('x', 'open', '2026-10-06T11:40:00Z'), now), 'soon');
   assert.equal(taskGroupKey(task('x', 'open', '2026-10-06T11:41:00Z'), now), 'later');
 });

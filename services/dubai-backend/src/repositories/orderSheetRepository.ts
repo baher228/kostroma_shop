@@ -61,15 +61,11 @@ export const getOrderSheet = async (date: string, businessCategory: BusinessCate
        WHERE business_category = $1
          AND (
            is_active = TRUE
-           OR (
-             $2::date < stock_products.archived_at::date
-             AND EXISTS (
-               SELECT 1
-               FROM order_sheet_values historical_values
-               WHERE historical_values.product_id = stock_products.id
-                 AND historical_values.order_date = $2::date
-                 AND historical_values.order_date <= stock_products.archived_at::date
-             )
+           OR EXISTS (
+             SELECT 1
+             FROM order_sheet_values historical_values
+             WHERE historical_values.product_id = stock_products.id
+               AND historical_values.order_date = $2::date
            )
          )
        ORDER BY is_active DESC, display_order ASC NULLS LAST, created_at ASC, name ASC;`,

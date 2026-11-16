@@ -555,6 +555,7 @@ export const getStockTable = async (
     return null;
   }
 
+  const isInventory = params.kind === 'inventory';
   const [productsResult, valuesResult, dashboardOverridesResult, subcategoriesResult] = await Promise.all([
     opsDb.query<ProductDbRow>(
       `
@@ -574,10 +575,21 @@ export const getStockTable = async (
                   AND historical_values.day_date <= $4::date
               )
             )
+            OR (
+              $5::boolean
+              AND EXISTS (
+                SELECT 1
+                FROM order_sheet_values historical_orders
+                WHERE historical_orders.product_id = stock_products.id
+                  AND historical_orders.shop_id = $2
+                  AND historical_orders.order_date >= $3::date
+                  AND historical_orders.order_date <= ($4::date + CASE WHEN $1 = 'Деликатесы' THEN 1 ELSE 0 END)
+              )
+            )
           )
         ORDER BY is_active DESC, display_order ASC NULLS LAST, created_at ASC, name ASC;
       `,
-      [businessCategory, shop.id, range.from, range.to],
+      [businessCategory, shop.id, range.from, range.to, !isInventory],
     ),
     opsDb.query<ValueDbRow>(
       `
@@ -612,7 +624,6 @@ export const getStockTable = async (
     ),
   ]);
 
-  const isInventory = params.kind === 'inventory';
   const productIds = new Set(productsResult.rows.map((product: ProductDbRow) => product.id));
   const inventoryCounts: Record<string, string> = {};
   if (isInventory) {

@@ -295,6 +295,7 @@ export const deleteProductSubcategory = async (businessCategory: BusinessCategor
           FROM stock_products
           WHERE business_category = $1
             AND category = $2
+            AND is_active = TRUE
           LIMIT 1
         );
     `,
@@ -308,7 +309,8 @@ export const listProducts = async (): Promise<StockProduct[]> => {
     `
       SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat, min_stock_units, max_stock_units
       FROM stock_products
-      ORDER BY created_at ASC, name ASC;
+      WHERE is_active = TRUE
+      ORDER BY business_category ASC, display_order ASC NULLS LAST, created_at ASC, name ASC;
     `,
   );
   return result.rows.map(mapProduct);
@@ -560,9 +562,24 @@ export const getStockTable = async (
                , min_stock_units, max_stock_units, inventory_price_rub
         FROM stock_products
         WHERE business_category = $1
-        ORDER BY created_at ASC, name ASC;
+          AND (
+            is_active = TRUE
+            OR (
+              $4::date < stock_products.archived_at::date
+              AND EXISTS (
+                SELECT 1
+                FROM ${valuesTable} historical_values
+                WHERE historical_values.product_id = stock_products.id
+                  AND historical_values.shop_id = $2
+                  AND historical_values.day_date >= $3::date
+                  AND historical_values.day_date <= $4::date
+                  AND historical_values.day_date <= stock_products.archived_at::date
+              )
+            )
+          )
+        ORDER BY is_active DESC, display_order ASC NULLS LAST, created_at ASC, name ASC;
       `,
-      [businessCategory],
+      [businessCategory, shop.id, range.from, range.to],
     ),
     opsDb.query<ValueDbRow>(
       `
@@ -714,6 +731,7 @@ export const upsertStockValue = async (
       SELECT id, business_category
       FROM stock_products
       WHERE id = $1
+        AND is_active = TRUE
       LIMIT 1;
     `,
     [params.productId],

@@ -565,15 +565,13 @@ export const getStockTable = async (
           AND (
             is_active = TRUE
             OR (
-              $4::date < stock_products.archived_at::date
-              AND EXISTS (
+              EXISTS (
                 SELECT 1
                 FROM ${valuesTable} historical_values
                 WHERE historical_values.product_id = stock_products.id
                   AND historical_values.shop_id = $2
                   AND historical_values.day_date >= $3::date
                   AND historical_values.day_date <= $4::date
-                  AND historical_values.day_date <= stock_products.archived_at::date
               )
             )
           )

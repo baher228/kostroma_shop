@@ -59,8 +59,17 @@ export const getOrderSheet = async (date: string, businessCategory: BusinessCate
       `SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat
        FROM stock_products
        WHERE business_category = $1
-       ORDER BY created_at ASC, name ASC;`,
-      [businessCategory],
+         AND (
+           is_active = TRUE
+           OR EXISTS (
+             SELECT 1
+             FROM order_sheet_values historical_values
+             WHERE historical_values.product_id = stock_products.id
+               AND historical_values.order_date = $2::date
+           )
+         )
+       ORDER BY is_active DESC, display_order ASC NULLS LAST, created_at ASC, name ASC;`,
+      [businessCategory, date],
     ),
     opsDb.query<AggRow>(
       `SELECT product_id, shop_id, packs
@@ -159,7 +168,7 @@ export const upsertOrderSheetValue = async (
   }
 
   const productResult = await opsDb.query<{ id: string }>(
-    `SELECT id FROM stock_products WHERE id = $1 LIMIT 1;`,
+    `SELECT id FROM stock_products WHERE id = $1 AND is_active = TRUE LIMIT 1;`,
     [params.productId],
   );
   if (!productResult.rows[0]) {

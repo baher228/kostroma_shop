@@ -146,6 +146,7 @@ export const createSellerOrder = async (
       FROM stock_products
       WHERE id = $1
         AND business_category = $2
+        AND is_active = TRUE
       LIMIT 1;
     `,
     [input.productId, businessCategory],
@@ -253,7 +254,7 @@ const assertShopAndProducts = async (
     return true;
   }
   const products = await client.query<{ id: string }>(
-    `SELECT id FROM stock_products WHERE id = ANY($1::text[]) AND business_category = $2;`,
+    `SELECT id FROM stock_products WHERE id = ANY($1::text[]) AND business_category = $2 AND is_active = TRUE;`,
     [productIds, businessCategory],
   );
   return new Set(products.rows.map((row) => row.id)).size === new Set(productIds).size;

@@ -40,10 +40,11 @@ export type TaskGroup<T> = { key: TaskGroupKey; label: string; tasks: T[] };
 export const groupTasksByUrgency = <T extends TimelineTask>(tasks: T[], now: number): TaskGroup<T>[] => {
   const buckets: Record<TaskGroupKey, T[]> = { overdue: [], soon: [], later: [], noDeadline: [], done: [] };
   tasks.forEach((task) => buckets[taskGroupKey(task, now)].push(task));
-  const byDeadline = (a: T, b: T) => (timeOf(a.deadlineAt) ?? 0) - (timeOf(b.deadlineAt) ?? 0);
-  buckets.overdue.sort(byDeadline);
-  buckets.soon.sort(byDeadline);
-  buckets.later.sort(byDeadline);
+  const byDeadlineAscending = (a: T, b: T) => (timeOf(a.deadlineAt) ?? 0) - (timeOf(b.deadlineAt) ?? 0);
+  const byDeadlineDescending = (a: T, b: T) => byDeadlineAscending(b, a);
+  buckets.overdue.sort(byDeadlineDescending);
+  buckets.soon.sort(byDeadlineAscending);
+  buckets.later.sort(byDeadlineAscending);
   buckets.done.sort((a, b) => (timeOf(b.completedAt) ?? 0) - (timeOf(a.completedAt) ?? 0));
   return TASK_GROUP_ORDER
     .filter((key) => buckets[key].length > 0)

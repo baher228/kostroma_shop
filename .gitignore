@@ -68,3 +68,5 @@ temp_interactive_push.bat
 config.bat
 
 # Never track local credentials
+.env
+**/.env

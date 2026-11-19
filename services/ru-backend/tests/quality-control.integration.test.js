@@ -88,6 +88,41 @@ test('QC session creation is scoped, relation-checked and idempotent', async () 
   await assert.rejects(repository.createSession(manager, { ...input, shiftId: 'shift-open', externalSessionId: 'after-close' }), { code: 'INVALID_SHIFT' });
 });
 
+test('uploaded audio can be downloaded when scheduling transcription fails', async () => {
+  const repository = new QualityControlRepository(db);
+  const stored = new Map();
+  const storage = {
+    bucket: 'existing-private-minio',
+    async put(key, value) { stored.set(key, Buffer.from(value)); },
+    async get(key) { return stored.get(key); },
+    async remove(key) { stored.delete(key); },
+  };
+  const service = new QualityControlService(repository, storage, 1024);
+  const session = await repository.createSession(manager, {
+    shopId: 'shop_main', externalSessionId: 'scheduler-failure',
+    startedAt: '2026-08-02T12:00:00.000Z',
+  });
+  const buffer = wav();
+  const file = { originalname: 'test.wav', mimetype: 'audio/wav', buffer, size: buffer.length };
+  const schedule = repository.ensureInitialTranscription.bind(repository);
+  repository.ensureInitialTranscription = async () => {
+    throw new Error('Transcription scheduling failed');
+  };
+  try {
+    await assert.rejects(service.uploadAudio(manager, session.id, file), /Transcription scheduling failed/);
+    const download = await service.downloadAudio(manager, session.id);
+    assert.deepEqual(download.audio, buffer);
+    assert.equal((await service.getStatus(manager, session.id)).status, 'created');
+
+    repository.ensureInitialTranscription = schedule;
+    const retry = await service.uploadAudio(manager, session.id, file);
+    assert.equal(retry.media.id, download.media.id);
+    assert.equal(retry.job.status, 'queued');
+  } finally {
+    await db.query('DELETE FROM qc_sessions WHERE id = $1', [session.id]);
+  }
+});
+
 test('QC audio MVP runs asynchronously end-to-end, preserves history and aggregates SQL analytics', async () => {
   const repository = new QualityControlRepository(db);
   const stored = new Map();

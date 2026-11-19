@@ -5,7 +5,7 @@ import { CreateSessionInput, QcError, QcFilters, QcMedia, QcStorage } from '../q
 
 export type QcUpload = { originalname: string; mimetype: string; buffer: Buffer; size: number };
 export type QualityControlData = Pick<QualityControlRepository,
-  'createSession' | 'getSession' | 'listSessions' | 'attachAudio' | 'enqueue' | 'getStatus' |
+  'createSession' | 'getSession' | 'listSessions' | 'attachAudio' | 'ensureInitialTranscription' | 'enqueue' | 'getStatus' |
   'getTranscript' | 'getAnalysis' | 'getAudioInfo' | 'setAudioPinned' | 'analytics'>;
 
 const formats: Record<string, { extension: string; mime: string; valid: (buffer: Buffer) => boolean }> = {
@@ -59,14 +59,15 @@ export class QualityControlService {
       storageKey: `quality-control/shops/${session.shopId}/sessions/${id}/audio/${sha256}.${format.extension}`,
       storageBucket: this.storage.bucket, originalFilename: format.originalFilename,
       mimeType: format.mime, size: audio.buffer.length, duration: null, sha256,
-      retentionClass: 'standard', retentionReason: 'Awaiting Quality Control analysis.',
+      retentionClass: 'standard', retentionReason: 'Standard audio retention.',
       expiresAt: new Date(Date.now() + this.standardRetentionMs).toISOString(), pinnedAt: null, pinnedBy: null, deletedAt: null,
     };
     await this.storage.put(media.storageKey, audio.buffer, media.mimeType);
     // A failed/ambiguous DB commit must not delete an object another retry already attached.
     // Repeating the upload uses the same key; repository enforces one immutable audio per session.
+    let attached: QcMedia;
     try {
-      return await this.repository.attachAudio(user, id, media);
+      attached = await this.repository.attachAudio(user, id, media);
     } catch (error) {
       // A domain rejection happens before commit, so this newly written key is
       // unreferenced. Unknown database errors can be ambiguous and retain the
@@ -74,6 +75,9 @@ export class QualityControlService {
       if (error instanceof QcError) await this.storage.remove(media.storageKey).catch(() => undefined);
       throw error;
     }
+    // The file remains available to managers even if scheduling transcription fails.
+    const job = await this.repository.ensureInitialTranscription(user, id);
+    return { media: attached, job };
   }
 
   enqueue(user: SessionUser, id: string, reanalyze = false, key?: string) { return this.repository.enqueue(user, id, reanalyze, key); }

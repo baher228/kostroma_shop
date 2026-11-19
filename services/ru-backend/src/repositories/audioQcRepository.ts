@@ -513,9 +513,18 @@ export const listAudioQcRecordings = async (
           a.quality_class,
           a.analyzed_at
         FROM audio_qc_recordings r
-        LEFT JOIN qc_sessions q
-          ON q.id = r.ml_session_id
-          AND q.shop_id = r.shop_id
+        LEFT JOIN qc_sessions linked ON linked.id = r.ml_session_id AND linked.shop_id = r.shop_id
+        LEFT JOIN LATERAL (
+          SELECT s.id
+          FROM qc_sessions s
+          WHERE s.shop_id = r.shop_id
+            AND s.started_at = r.started_at
+            AND s.external_session_id = r.local_recording_id
+            AND linked.id IS NULL
+          ORDER BY s.created_at DESC, s.id DESC
+          LIMIT 1
+        ) recovered ON TRUE
+        LEFT JOIN qc_sessions q ON q.id = COALESCE(linked.id, recovered.id)
         LEFT JOIN LATERAL (
           SELECT ar.id, ar.version, ar.overall_score, ar.quality_class, ar.analyzed_at
           FROM qc_analysis_results ar

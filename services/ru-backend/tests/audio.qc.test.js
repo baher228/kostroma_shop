@@ -155,7 +155,9 @@ test('Audio QC recording history is paginated and includes only the latest linke
     calls.push({ sql, params });
     if (sql.includes('COUNT(*)::int AS total')) return { rows: [{ total: 31 }] };
     assert.equal(sql.includes('LEFT JOIN qc_sessions q'), true);
-    assert.equal(sql.includes('q.shop_id = r.shop_id'), true);
+    assert.equal(sql.includes('linked.shop_id = r.shop_id'), true);
+    assert.equal(sql.includes('s.shop_id = r.shop_id'), true);
+    assert.equal(sql.includes('s.external_session_id = r.local_recording_id'), true);
     assert.equal(sql.includes('ORDER BY ar.version DESC'), true);
     assert.equal(sql.includes('r.started_at DESC, r.local_recording_id DESC'), true);
     return { rows: [{

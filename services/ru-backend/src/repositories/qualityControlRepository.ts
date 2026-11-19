@@ -144,15 +144,21 @@ export class QualityControlRepository {
       const existing = await client.query("SELECT * FROM qc_media WHERE session_id=$1 AND type='audio'", [sessionId]);
       if (existing.rows[0]) {
         if (existing.rows[0].sha256 !== media.sha256) throw new QcError('AUDIO_EXISTS', 'Session audio is immutable; create another session.', 409);
-        const jobs = await client.query('SELECT * FROM qc_processing_jobs WHERE session_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1', [sessionId]);
-        return { media: mapMedia(existing.rows[0]), job: mapJob(jobs.rows[0]) };
+        return mapMedia(existing.rows[0]);
       }
       await client.query(`INSERT INTO qc_media(id,session_id,type,storage_key,storage_bucket,original_filename,mime_type,size,duration,sha256,
         retention_class,retention_reason,expires_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [media.id, sessionId, 'audio', media.storageKey, media.storageBucket,
         media.originalFilename, media.mimeType, media.size, media.duration, media.sha256, media.retentionClass, media.retentionReason, media.expiresAt]);
-      const job = await this.insertJob(client, sessionId, 'transcription', null, 'transcription');
-      return { media, job };
+      return media;
+    });
+  }
+
+  async ensureInitialTranscription(user: SessionUser, sessionId: string): Promise<QcJob> {
+    return this.transaction(async client => {
+      await this.session(user, sessionId, client, true);
+      const jobs = await client.query('SELECT * FROM qc_processing_jobs WHERE session_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1', [sessionId]);
+      return jobs.rows[0] ? mapJob(jobs.rows[0]) : this.insertJob(client, sessionId, 'transcription', null, 'transcription');
     });
   }
 

@@ -139,6 +139,7 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
   }, [activeShopId, policies, shops]);
   const dirty = Boolean(draft && activePolicy && (policyKey(draft) !== policyKey(activePolicy) || (allShops && fleetEdited)));
   const range = useMemo(() => toRange(period, customFrom, customTo), [period, customFrom, customTo]);
+  const openRecording = recordings.find(recording => recording.localRecordingId === selected?.localRecordingId) ?? selected;
 
   const loadBase = useCallback(async (showLoading = false) => {
     if (showLoading) setLoadingBase(true);
@@ -173,23 +174,29 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
     }
     const interval = intervalFor(range);
     const shopFilter = activeShopId === ALL_SHOPS ? {} : { shopId: activeShopId };
-    const [recordingsResult, overviewResult, trendsResult] = await Promise.allSettled([
-      api.audioQc.recordings(session.token, { ...shopFilter, ...range, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
+    const recordingsRequest = api.audioQc.recordings(session.token, { ...shopFilter, ...range, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE })
+      .then(result => {
+        if (requestId !== dataRequestRef.current) return;
+        setRecordings(result.recordings);
+        setRecordingsTotal(result.total);
+        setRecordingsError('');
+      }, error => {
+        if (requestId === dataRequestRef.current) setRecordingsError(messageOf(error));
+      })
+      .finally(() => {
+        if (requestId === dataRequestRef.current) setLoadingRecordings(false);
+      });
+    const [overviewResult, trendsResult] = await Promise.allSettled([
       api.qualityControl.overview(session.token, { ...shopFilter, ...range }),
       api.qualityControl.trends(session.token, { ...shopFilter, ...range, interval }),
     ]);
     if (requestId !== dataRequestRef.current) return;
-    if (recordingsResult.status === 'fulfilled') {
-      setRecordings(recordingsResult.value.recordings);
-      setRecordingsTotal(recordingsResult.value.total);
-      setRecordingsError('');
-    } else setRecordingsError(messageOf(recordingsResult.reason));
     if (overviewResult.status === 'fulfilled') setOverview(overviewResult.value);
     if (trendsResult.status === 'fulfilled') setTrends(fillDailyTrends(trendsResult.value, range, interval));
     const statsFailures = [overviewResult, trendsResult].filter((result) => result.status === 'rejected') as PromiseRejectedResult[];
     setStatsError(statsFailures.length ? messageOf(statsFailures[0].reason) : '');
-    setLoadingRecordings(false);
     setLoadingStats(false);
+    await recordingsRequest;
   }, [activeShopId, page, range, session.token]);
 
   useEffect(() => { void loadBase(true); }, [loadBase]);
@@ -321,11 +328,11 @@ export const AudioQcPanel = ({ session }: { session: Session }) => {
       />
       <AudioQcStatistics overview={overview} trends={trends} loading={loadingStats} error={statsError} />
 
-      {selected && (
+      {openRecording && (
         <AudioQcRecordingDetails
-          recording={selected}
+          recording={openRecording}
           session={session}
-          shopName={shops.find((shop) => shop.id === selected.shopId)?.name ?? selected.shopId}
+          shopName={shops.find((shop) => shop.id === openRecording.shopId)?.name ?? openRecording.shopId}
           onClose={closeDetails}
           onDataChanged={handleDetailDataChanged}
         />

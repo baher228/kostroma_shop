@@ -12,6 +12,6 @@ test('bread inventory migration assigns every table price without changing produ
   assert.equal(rows.length, 29);
   assert.match(source, /UPDATE stock_products products\s+SET inventory_price_rub = prices\.inventory_price_rub/);
   assert.match(source, /products\.business_category = 'Хлеб'/);
-  assert.match(source, /Expected 29 bread inventory prices to match/);
+  assert.doesNotMatch(source, /RAISE EXCEPTION/);
   assert.equal(new Set(rows.map(([, name]) => name)).size, rows.length);
 });

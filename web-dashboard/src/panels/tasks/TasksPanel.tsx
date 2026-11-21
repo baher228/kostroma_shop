@@ -4,6 +4,7 @@ import { Feedback, RefreshButton } from '../../components/ui';
 import { formatDateTime, messageOf } from '../../shared/format';
 import type { Session, Shop, StoreTablet, Task, TaskRepeat, TaskSeries, TaskWeekdayRepeat } from '../../types';
 import { groupTasksByUrgency, taskDueLabel, taskTimeParts } from '../../../../shared/task-timeline';
+import { resolveTaskDeadlineAtSubmission } from '../../../../shared/task-deadline';
 
 const TASK_REPEAT_OPTIONS: { value: TaskRepeat; label: string }[] = [
   { value: 'daily', label: 'Каждый день' },
@@ -270,8 +271,13 @@ const TimeCarousel = ({ value, onSelect }: { value: string; onSelect: (value: st
   );
 };
 
-const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
-  const selectedDateKey = value.slice(0, 10);
+const DeadlinePicker = ({ value, isNow, onChange, onSelectNow }: {
+  value: string;
+  isNow: boolean;
+  onChange: (value: string) => void;
+  onSelectNow: () => void;
+}) => {
+  const selectedDateKey = isNow ? '' : value.slice(0, 10);
   const selectedTime = value.slice(11, 16) || '09:00';
   const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(selectedDateKey) ? dateFromKey(selectedDateKey) : null;
   const [open, setOpen] = useState<'date' | 'time' | null>(null);
@@ -320,7 +326,7 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
           setOpen((current) => current === 'date' ? null : 'date');
         }}
       >
-        <span>{selectedDate ? dateLabel(selectedDateKey) : 'Выберите дату'}</span>
+        <span>{isNow ? 'Сейчас' : selectedDate ? dateLabel(selectedDateKey) : 'Выберите дату'}</span>
         <span className="deadline-picker-icon" aria-hidden="true">▾</span>
       </button>
       {open === 'date' && (
@@ -352,6 +358,15 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
               onChange('');
               close();
             }}>Очистить</button>
+            <button
+              type="button"
+              className={`deadline-now-option${isNow ? ' selected' : ''}`}
+              aria-pressed={isNow}
+              onClick={() => {
+                onSelectNow();
+                close();
+              }}
+            >Сейчас</button>
             <button type="button" className="secondary" onClick={close}>Готово</button>
           </div>
         </section>
@@ -361,14 +376,14 @@ const DeadlinePicker = ({ value, onChange }: { value: string; onChange: (value: 
         className="deadline-time-trigger"
         aria-label="Выбрать время дедлайна"
         aria-expanded={open === 'time'}
-        title={selectedDate ? undefined : 'Сначала выберите дату'}
-        disabled={!selectedDate}
+        title={isNow ? 'Дедлайн будет установлен при отправке' : selectedDate ? undefined : 'Сначала выберите дату'}
+        disabled={!selectedDate || isNow}
         onClick={() => setOpen((current) => current === 'time' ? null : 'time')}
       >
-        <span>{selectedTime}</span>
+        <span>{isNow ? 'при отправке' : selectedTime}</span>
         <span className="deadline-picker-icon" aria-hidden="true">▾</span>
       </button>
-      {open === 'time' && selectedDate && (
+      {open === 'time' && selectedDate && !isNow && (
         <section className="deadline-time-menu" role="dialog" aria-label="Выбор времени дедлайна">
           <header>
             <strong>Время</strong>
@@ -659,6 +674,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
   const [storeTablets, setStoreTablets] = useState<StoreTablet[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [deadlineNow, setDeadlineNow] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -721,7 +737,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       setError('Выберите хотя бы один магазин.');
       return;
     }
-    if (form.repeat !== 'none' && !form.deadlineAt) {
+    if (form.repeat !== 'none' && !form.deadlineAt && !deadlineNow) {
       setError('Для повторяющейся задачи укажите дедлайн.');
       return;
     }
@@ -731,11 +747,13 @@ export const TasksPanel = ({ session }: { session: Session }) => {
     }
     try {
       setSaving(true);
-      const deadline = form.deadlineAt ? new Date(alignDeadlineToRepeat(form.deadlineAt, form.repeat, form.repeatWeekdays)) : null;
+      const scheduledDeadlineAt = form.deadlineAt ? alignDeadlineToRepeat(form.deadlineAt, form.repeat, form.repeatWeekdays) : null;
+      const deadlineAt = resolveTaskDeadlineAtSubmission(deadlineNow, scheduledDeadlineAt);
+      const deadline = deadlineAt ? new Date(deadlineAt) : null;
       const createdTasks = await api.tasks.create(session.token, {
         title: form.title.trim(),
         assigneeIds,
-        deadlineAt: deadline ? deadline.toISOString() : null,
+        deadlineAt,
         requiresPhotoConfirmation: form.requiresPhotoConfirmation,
         repeat: form.repeat,
         ...(form.repeat === 'weekdays' && deadline
@@ -746,6 +764,7 @@ export const TasksPanel = ({ session }: { session: Session }) => {
       setTasks((current) => [...createdTasks, ...current]);
       if (form.repeat !== 'none') setSeries(await api.tasks.listSeries(session.token));
       setForm({ ...emptyForm, assigneeIds });
+      setDeadlineNow(false);
       setNotice(createdTasks.length > 1 ? `Задача назначена магазинам: ${createdTasks.length}.` : 'Задача назначена.');
     } catch (err) {
       setError(messageOf(err));
@@ -883,7 +902,15 @@ export const TasksPanel = ({ session }: { session: Session }) => {
           <div className="task-deadline-row">
             <label className="task-field task-deadline-field">
               <span>Дедлайн <small>{form.repeat === 'none' ? 'необязательно' : 'первой задачи'}</small></span>
-              <DeadlinePicker value={form.deadlineAt} onChange={(deadlineAt) => setForm({ ...form, deadlineAt: deadlineAt && alignDeadlineToRepeat(deadlineAt, form.repeat, form.repeatWeekdays) })} />
+              <DeadlinePicker
+                value={form.deadlineAt}
+                isNow={deadlineNow}
+                onSelectNow={() => setDeadlineNow(true)}
+                onChange={(deadlineAt) => {
+                  setDeadlineNow(false);
+                  setForm({ ...form, deadlineAt: deadlineAt && alignDeadlineToRepeat(deadlineAt, form.repeat, form.repeatWeekdays) });
+                }}
+              />
             </label>
             <div className="task-field task-repeat-field" role="group" aria-label="Повтор">
               <span>Повтор</span>

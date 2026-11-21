@@ -753,14 +753,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         };
       });
 
-      if (!advancesOptimistically && continueToNext && nextRow) {
-        setEditingCell({
-          productId: nextRow.productId,
-          date: currentCell.date,
-          productName: nextRow.name,
-        });
-        setEditingValue(nextRow.values[currentCell.date] ?? '');
-      } else {
+      if (!advancesOptimistically) {
         setEditingCell(null);
       }
       setError('');
@@ -785,7 +778,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       }
     } finally {
       setPending(key, false);
-      setSavingEdit(false);
+      if (!advancesOptimistically) {
+        setSavingEdit(false);
+      }
     }
   };
 

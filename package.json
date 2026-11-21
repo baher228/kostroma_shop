@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "start": "expo start",
+    "start": "node init && expo start",
     "android": "expo run:android",
     "android:reverse": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-reverse.ps1",
     "stack:up": "docker compose up -d --build",

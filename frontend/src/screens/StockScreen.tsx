@@ -702,7 +702,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     try {
       setSavingEdit(true);
       setPending(key, true);
-      if (!advancesOptimistically && continueToNext && nextRow) {
+      if (continueToNext && nextRow) {
         setTable((current) => {
           if (!current) {
             return current;
@@ -753,7 +753,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         };
       });
 
-      if (continueToNext && nextRow) {
+      if (!advancesOptimistically && continueToNext && nextRow) {
         setEditingCell({
           productId: nextRow.productId,
           date: currentCell.date,

@@ -22,6 +22,7 @@ import {
   taskDueLabel,
   taskTimeParts,
 } from "../../../shared/task-timeline";
+import { resolveTaskDeadlineAtSubmission } from "../../../shared/task-deadline";
 
 type TasksPanelProps = {
   session: Session;
@@ -179,6 +180,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
   const [title, setTitle] = useState("");
   const [selectedTabletId, setSelectedTabletId] = useState("");
   const [savingTask, setSavingTask] = useState(false);
+  const [deadlineNow, setDeadlineNow] = useState(false);
   const [deadlineDate, setDeadlineDate] = useState<string | null>(null);
   const [pendingDeadlineDate, setPendingDeadlineDate] = useState<string | null>(null);
   const [deadlineTime, setDeadlineTime] = useState("09:00");
@@ -262,17 +264,22 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
     }
     try {
       setSavingTask(true);
+      const deadlineAt = resolveTaskDeadlineAtSubmission(
+        deadlineNow,
+        buildDeadlineIso(deadlineDate, deadlineTime),
+      );
       const created = await tasksApi.create(
         session.token,
         normalizedTitle,
         selectedTabletId,
-        buildDeadlineIso(deadlineDate, deadlineTime),
+        deadlineAt,
         requiresPhotoConfirmation,
       );
       setTasks((current) => [created, ...current]);
       setTitle("");
       setDeadlineDate(null);
       setDeadlineTime("09:00");
+      setDeadlineNow(false);
       setRequiresPhotoConfirmation(false);
       closeSelectors();
       setError("");
@@ -418,7 +425,8 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
               setShowCalendar((current) => {
                 const next = !current;
                 if (next) {
-                  setPendingDeadlineDate(deadlineDate);
+                  setPendingDeadlineDate(deadlineNow ? null : deadlineDate);
+                  if (deadlineNow) setCalendarMonthCursor(new Date());
                 } else {
                   setPendingDeadlineDate(null);
                 }
@@ -429,7 +437,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
             }}
           >
             <Text style={styles.dropdownText}>
-              {deadlineDate ? formatDateKey(deadlineDate) : "Без дедлайна"}
+              {deadlineNow ? "Сейчас" : deadlineDate ? formatDateKey(deadlineDate) : "Без дедлайна"}
             </Text>
             <Text style={styles.dropdownArrow}>{showCalendar ? "▲" : "▼"}</Text>
           </Pressable>
@@ -437,14 +445,15 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
         <View style={[styles.selectorGroup, styles.selectorHalf]}>
           <Text style={styles.selectorLabel}>Время</Text>
           <Pressable
-            style={styles.dropdownTrigger}
+            style={[styles.dropdownTrigger, deadlineNow && styles.dropdownTriggerDisabled]}
+            disabled={deadlineNow}
             onPress={() => {
               setShowTimeDropdown((current) => !current);
               setShowAssigneeDropdown(false);
               setShowCalendar(false);
             }}
           >
-            <Text style={styles.dropdownText}>{deadlineTime}</Text>
+            <Text style={styles.dropdownText}>{deadlineNow ? "При отправке" : deadlineTime}</Text>
             <Text style={styles.dropdownArrow}>{showTimeDropdown ? "▲" : "▼"}</Text>
           </Pressable>
         </View>
@@ -520,9 +529,24 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
               <Text style={styles.calendarClearButtonText}>Очистить</Text>
             </Pressable>
             <Pressable
+              style={[styles.deadlineNowButton, deadlineNow && styles.deadlineNowButtonActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: deadlineNow }}
+              onPress={() => {
+                setDeadlineNow(true);
+                setShowCalendar(false);
+                setPendingDeadlineDate(null);
+              }}
+            >
+              <Text style={[styles.deadlineNowButtonText, deadlineNow && styles.deadlineNowButtonTextActive]}>
+                Сейчас
+              </Text>
+            </Pressable>
+            <Pressable
               style={styles.calendarConfirmButton}
               onPress={() => {
                 setDeadlineDate(pendingDeadlineDate);
+                setDeadlineNow(false);
                 setShowCalendar(false);
                 setPendingDeadlineDate(null);
               }}
@@ -533,7 +557,7 @@ export const TasksPanel = ({ session, fullHeight = false, onTasksViewed }: Tasks
         </View>
       )}
 
-      {showTimeDropdown && (
+      {showTimeDropdown && !deadlineNow && (
         <View style={[styles.dropdownMenu, styles.timeMenu]}>
           <TimeCarousel value={deadlineTime} onSelect={setDeadlineTime} />
           <View style={styles.timeCarouselFooter}>
@@ -804,6 +828,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  dropdownTriggerDisabled: {
+    opacity: 0.6,
+  },
   dropdownText: {
     color: "#1f2f26",
     fontSize: 14,
@@ -970,6 +997,25 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "700",
+  },
+  deadlineNowButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2f6f4f",
+    backgroundColor: "#edf3ee",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  deadlineNowButtonActive: {
+    backgroundColor: "#2f6f4f",
+  },
+  deadlineNowButtonText: {
+    color: "#2f6f4f",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  deadlineNowButtonTextActive: {
+    color: "#ffffff",
   },
   workerChip: {
     borderRadius: 12,

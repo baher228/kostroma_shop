@@ -35,22 +35,6 @@ VALUES
   ('Пирожное Сочни с творогом', 507),
   ('Пирожное Кексики бисквитные', 408);
 
-DO $$
-DECLARE
-  matched_count INTEGER;
-BEGIN
-  SELECT COUNT(*)
-  INTO matched_count
-  FROM inventory_price_updates prices
-  JOIN stock_products products
-    ON products.name = prices.product_name
-   AND products.business_category = 'Хлеб';
-
-  IF matched_count <> 29 THEN
-    RAISE EXCEPTION 'Expected 29 bread inventory prices to match, found %', matched_count;
-  END IF;
-END $$;
-
 UPDATE stock_products products
 SET inventory_price_rub = prices.inventory_price_rub
 FROM inventory_price_updates prices

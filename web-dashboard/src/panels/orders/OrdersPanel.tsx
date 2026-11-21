@@ -16,6 +16,7 @@ import {
 } from '../../dateUtils';
 import { safeFileName } from '../../export/csv';
 import { makeCheeseOrderXlsx } from '../../export/cheeseOrderXlsx';
+import { prefixOrderFileName } from '../../export/orderFileName';
 import { makeXlsxBlob, xlsxColumnName, type XlsxCell } from '../../export/xlsx';
 import { sortProductsLikeImage } from '../../productOrdering';
 import { formatWeight, messageOf } from '../../shared/format';
@@ -273,7 +274,7 @@ export const OrdersPanel = ({ session }: { session: Session }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(baseName)}.xlsx`;
+    link.download = `${safeFileName(prefixOrderFileName(activeBusinessCategory, baseName))}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

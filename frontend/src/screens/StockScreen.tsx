@@ -696,10 +696,34 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     const key = `${currentCell.productId}:${currentCell.date}`;
     const nextValue = sanitizeStockValue(editingValue, maxCellValue);
     const nextRow = continueToNext ? getNextRow(currentCell.productId) : null;
+    const previousValue = table.rows.find((row) => row.productId === currentCell.productId)?.values[currentCell.date] ?? '';
+    const advancesOptimistically = Boolean(continueToNext && nextRow);
 
     try {
       setSavingEdit(true);
       setPending(key, true);
+      if (continueToNext && nextRow) {
+        setTable((current) => {
+          if (!current) {
+            return current;
+          }
+          return {
+            ...current,
+            rows: current.rows.map((row) =>
+              row.productId === currentCell.productId
+                ? { ...row, values: { ...row.values, [currentCell.date]: nextValue } }
+                : row,
+            ),
+          };
+        });
+        setEditingCell({
+          productId: nextRow.productId,
+          date: currentCell.date,
+          productName: nextRow.name,
+        });
+        setEditingValue(nextRow.values[currentCell.date] ?? '');
+        setSavingEdit(false);
+      }
       await stockApi.updateValue(session.token, {
         shopId: canManage ? selectedShopId ?? table.shop.id : undefined,
         productId: currentCell.productId,
@@ -729,7 +753,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         };
       });
 
-      if (continueToNext && nextRow) {
+      if (!advancesOptimistically && continueToNext && nextRow) {
         setEditingCell({
           productId: nextRow.productId,
           date: currentCell.date,
@@ -742,7 +766,23 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       setError('');
     } catch (saveError) {
       setError(errorMessage(saveError));
-      await loadTable();
+      if (advancesOptimistically) {
+        setTable((current) => {
+          if (!current) {
+            return current;
+          }
+          return {
+            ...current,
+            rows: current.rows.map((row) =>
+              row.productId === currentCell.productId
+                ? { ...row, values: { ...row.values, [currentCell.date]: previousValue } }
+                : row,
+            ),
+          };
+        });
+      } else {
+        await loadTable();
+      }
     } finally {
       setPending(key, false);
       setSavingEdit(false);

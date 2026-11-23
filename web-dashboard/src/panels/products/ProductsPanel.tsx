@@ -30,8 +30,9 @@ import {
   sanitizeOrderValue,
   sanitizeStock,
 } from '../../domain/inventory/dashboard';
+import { inventoryHistoryCell } from '../../domain/inventory/history';
 import { intOrZero, messageOf, normalizeText, numberOrZero } from '../../shared/format';
-import type { Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
+import type { InventorySnapshotItem, Product, ProductCategory, ProductPayload, Session, Shop, StockTable } from '../../types';
 import type { BusinessCategory } from '../../types';
 import { isBreadSectionBreakProduct, managerProductName } from '../../../../shared/product-display';
 import { sortProductsLikeImage } from '../../productOrdering';
@@ -248,13 +249,6 @@ const formatInventoryMoney = (value: number): string => {
   return fraction === '00' ? grouped : `${grouped},${fraction}`;
 };
 
-const inventorySumFor = (price: number | null | undefined, quantity: string | undefined): number | null => {
-  if (price === null || price === undefined || !quantity) {
-    return null;
-  }
-  return price * Number.parseInt(quantity, 10);
-};
-
 const formatInventoryTime = (iso: string | undefined): string => {
   if (!iso) {
     return '';
@@ -413,6 +407,35 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   }, [query, table]);
 
   const orderedRows = useMemo(() => sortProductsLikeImage(visibleRows), [visibleRows]);
+  const submittedInventoryByDate = useMemo(() => new Map(
+    Object.entries(table?.inventorySubmissions ?? {}).map(([date, submission]) => [
+      date, new Map((submission.items ?? []).map((item) => [item.productId, item])),
+    ]),
+  ), [table?.inventorySubmissions]);
+  const inventoryRows = useMemo(() => {
+    if (!isInventory) return [];
+    const products = new Set(table?.rows.map((product) => product.productId));
+    const archivedItems = new Map<string, InventorySnapshotItem>();
+    const filter = normalizeText(query);
+    for (const date of inventoryDates) {
+      for (const item of submittedInventoryByDate.get(date)?.values() ?? []) {
+        if (!products.has(item.productId) && !archivedItems.has(item.productId)) archivedItems.set(item.productId, item);
+      }
+    }
+    return [
+      ...orderedRows.map((product) => ({ productId: product.productId, name: product.name, product })),
+      ...Array.from(archivedItems.values())
+        .filter((item) => !filter || normalizeText(item.name).includes(filter))
+        .map((item) => ({ productId: item.productId, name: item.name, product: undefined })),
+    ];
+  }, [inventoryDates, isInventory, orderedRows, query, submittedInventoryByDate, table?.rows]);
+  const cellForInventoryDate = (row: typeof inventoryRows[number], date: string) =>
+    inventoryHistoryCell(row.product?.values[date], row.product?.inventoryPrice, submittedInventoryByDate.get(date), row.productId);
+  const inventoryDateStatus = (date: string) => {
+    const submittedAt = table?.inventorySubmissions?.[date]?.submittedAt;
+    if (submittedAt) return `Отправлено ${formatInventoryTime(submittedAt)}`;
+    return ['Не отправлено', formatInventoryTime(table?.inventoryCounts?.[date])].filter(Boolean).join(', ');
+  };
 
   const activeSubcategories = useMemo(
     () => table?.subcategories?.length ? table.subcategories : subcategories[activeBusinessCategory] ?? [DEFAULT_PRODUCT_CATEGORY],
@@ -642,22 +665,22 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
       const inventoryHeaders = [
         'Категория',
         'Товар',
-        'Цена',
+        'Текущая цена',
         ...inventoryDates.flatMap((date) => {
-          const label = `Инвентаризация ${formatDateShort(date)} ${formatInventoryTime(table.inventoryCounts?.[date])}`.trim();
+          const label = `Инвентаризация ${formatDateShort(date)} ${inventoryDateStatus(date)}`;
           return [`${label}: Количество`, `${label}: Сумма`];
         }),
       ];
-      const inventoryRows = orderedRows.map((row) => [
-        row.category,
+      const exportRows = inventoryRows.map((row) => [
+        row.product?.category ?? '',
         row.name,
-        row.inventoryPrice === null || row.inventoryPrice === undefined ? '' : String(row.inventoryPrice),
+        row.product?.inventoryPrice == null ? '' : String(row.product.inventoryPrice),
         ...inventoryDates.flatMap((date) => {
-          const sum = inventorySumFor(row.inventoryPrice, row.values[date]);
-          return [row.values[date] ?? '', sum === null ? '' : String(Math.round(sum * 100) / 100)];
+          const { quantity, sum } = cellForInventoryDate(row, date);
+          return [String(quantity), sum === null ? '' : String(Math.round(sum * 100) / 100)];
         }),
       ]);
-      const inventoryBlob = new Blob([`\uFEFF${buildCsv([inventoryHeaders, ...inventoryRows])}`], { type: 'text/csv;charset=utf-8;' });
+      const inventoryBlob = new Blob([`\uFEFF${buildCsv([inventoryHeaders, ...exportRows])}`], { type: 'text/csv;charset=utf-8;' });
       const inventoryUrl = URL.createObjectURL(inventoryBlob);
       const inventoryLink = document.createElement('a');
       inventoryLink.href = inventoryUrl;
@@ -886,7 +909,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     return computeStockWithOrder(row.values[date], orderUnits);
   };
 
-  const renderInventoryTable = (rows: Product[]) => (
+  const renderInventoryTable = () => (
     <section className="manager-category-block">
       {renderTopScrollbar()}
       <div
@@ -908,11 +931,13 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
           <thead>
             <tr>
               <th className="manager-name-col dashboard-name-header" rowSpan={2}>Товар</th>
-              <th rowSpan={2}>Цена</th>
+              <th rowSpan={2}>Текущая цена</th>
               {inventoryDates.map((date) => (
                 <th key={date} colSpan={2} className="inventory-date-start">
                   Инвентаризация {formatDateShort(date)}
-                  <small>{[formatWeekdayName(date), formatInventoryTime(table?.inventoryCounts?.[date])].filter(Boolean).join(', ')}</small>
+                  <small>
+                    {formatWeekdayName(date)}, {inventoryDateStatus(date)}
+                  </small>
                 </th>
               ))}
             </tr>
@@ -926,46 +951,46 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {inventoryRows.length === 0 ? (
               <tr><td colSpan={inventoryDates.length * 2 + 2} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
-            ) : rows.map((row, index) => (
+            ) : inventoryRows.map((row, index) => (
               <tr
                 key={row.productId}
                 className={[
-                  startsNewSubcategory(rows, index) ? 'subcategory-start-row' : '',
-                  isBreadSectionBreakProduct(row) ? 'bread-section-end-row' : '',
+                  row.product && startsNewSubcategory(orderedRows, index) ? 'subcategory-start-row' : '',
+                  row.product && isBreadSectionBreakProduct(row.product) ? 'bread-section-end-row' : '',
                 ].filter(Boolean).join(' ') || undefined}
               >
                 <td className="manager-name-col">
-                  <button
+                  {row.product ? <button
                     type="button"
                     className="manager-name-button"
                     title="Изменить или удалить товар"
-                    onClick={() => openEditProduct(row)}
+                    onClick={() => openEditProduct(row.product)}
                   >
                     <strong>{managerProductName(row.name)}</strong>
-                    <small>{productReferenceLabel(row)}</small>
-                  </button>
+                    <small>{productReferenceLabel(row.product)}</small>
+                  </button> : <strong>{managerProductName(row.name)}</strong>}
                 </td>
                 <td>
-                  <InventoryPriceInput
-                    value={row.inventoryPrice}
+                  {row.product && <InventoryPriceInput
+                    value={row.product.inventoryPrice}
                     label={`Цена: ${row.name}`}
                     onCommit={(raw) => void saveInventoryPrice(row.productId, raw)}
-                  />
+                  />}
                 </td>
                 {inventoryDates.map((date) => {
-                  const sum = inventorySumFor(row.inventoryPrice, row.values[date]);
+                  const { quantity, price, sum } = cellForInventoryDate(row, date);
                   return (
                     <React.Fragment key={date}>
-                      <td className="inventory-date-start inventory-value-cell">{row.values[date] || ''}</td>
-                      <td className="inventory-value-cell">{sum === null ? '' : formatInventoryMoney(sum)}</td>
+                      <td className="inventory-date-start inventory-value-cell">{quantity}</td>
+                      <td className="inventory-value-cell" title={price === null ? undefined : `Цена: ${formatInventoryMoney(price)}`}>{sum === null ? '' : formatInventoryMoney(sum)}</td>
                     </React.Fragment>
                   );
                 })}
               </tr>
             ))}
-            {rows.length > 0 && inventoryDates.length > 0 && (
+            {inventoryRows.length > 0 && inventoryDates.length > 0 && (
               <tr className="inventory-total-row">
                 <td className="manager-name-col"><strong>Итого</strong></td>
                 <td />
@@ -973,7 +998,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                   <React.Fragment key={date}>
                     <td className="inventory-date-start" />
                     <td className="inventory-value-cell">
-                      <strong>{formatInventoryMoney(rows.reduce((total, row) => total + (inventorySumFor(row.inventoryPrice, row.values[date]) ?? 0), 0))}</strong>
+                      <strong>{formatInventoryMoney(inventoryRows.reduce((total, row) => total + (cellForInventoryDate(row, date).sum ?? 0), 0))}</strong>
                     </td>
                   </React.Fragment>
                 ))}
@@ -1145,7 +1170,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
         {loading
           ? <p className="manager-loading">{isInventory ? 'Загружаем инвентаризацию...' : 'Загружаем остатки...'}</p>
           : isInventory
-            ? renderInventoryTable(orderedRows)
+            ? renderInventoryTable()
             : isMilkTable
             ? renderDashboardTable(orderedRows)
             : renderDailyTable(orderedRows)}

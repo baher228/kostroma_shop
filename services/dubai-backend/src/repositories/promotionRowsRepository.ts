@@ -61,6 +61,7 @@ type PromotionTableRowDb = {
   invoice_document_file_name: string | null;
   plan_document_id: string | null;
   plan_document_file_name: string | null;
+  manual_overrides?: Partial<PromotionRowInput>;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -277,12 +278,20 @@ const recalculatePromotionRowsForClient = async (
          interval.id DESC
      )
      UPDATE promotion_table_rows aggregate
-     SET status = latest.status,
-         product_name = COALESCE(price.product_name_clean, price.product_name, latest.product_name),
-         start_date = bounds.start_date,
-         end_date = bounds.end_date,
-         promo_price = promo.promo_price,
-         regular_price = regular.regular_price,
+     SET status = COALESCE(aggregate.manual_overrides->>'status', latest.status),
+         product_name = COALESCE(aggregate.manual_overrides->>'productName', price.product_name_clean, price.product_name, latest.product_name),
+         start_date = CASE
+           WHEN aggregate.manual_overrides ? 'startDate' THEN (aggregate.manual_overrides->>'startDate')::date
+           WHEN bounds.start_date IS NOT NULL THEN LEAST(bounds.start_date, (aggregate.manual_overrides->>'endDate')::date)
+           ELSE NULL END,
+         end_date = CASE
+           WHEN aggregate.manual_overrides ? 'endDate' THEN (aggregate.manual_overrides->>'endDate')::date
+           WHEN bounds.end_date IS NOT NULL THEN GREATEST(bounds.end_date, (aggregate.manual_overrides->>'startDate')::date)
+           ELSE NULL END,
+         promo_price = CASE WHEN aggregate.manual_overrides ? 'promoPrice'
+           THEN (aggregate.manual_overrides->>'promoPrice')::numeric ELSE promo.promo_price END,
+         regular_price = CASE WHEN aggregate.manual_overrides ? 'regularPrice'
+           THEN (aggregate.manual_overrides->>'regularPrice')::numeric ELSE regular.regular_price END,
          source_document_id = latest.source_document_id,
          source_document_file_name = latest.source_document_file_name,
          source_product_name = latest.source_product_name,
@@ -459,19 +468,17 @@ export const upsertPromotionDocumentRows = async (
           ? await client.query<PromotionTableRowDb>(
             `SELECT aggregate.*
              FROM promotion_table_rows aggregate
-             WHERE (
-               ($1::text IS NOT NULL AND aggregate.price_list_item_id = $1) OR
-               ($1::text IS NULL AND aggregate.price_list_item_id IS NULL
-                 AND LOWER(aggregate.product_name) = LOWER($2))
-             )
-               AND aggregate.start_date IS NOT NULL
-               AND aggregate.end_date IS NOT NULL
-               AND aggregate.start_date <= ($4::date + 1)
-               AND $3::date <= (aggregate.end_date + 1)
-               AND EXISTS (
+             WHERE EXISTS (
                  SELECT 1
                  FROM promotion_row_intervals interval
                  WHERE interval.promotion_row_id = aggregate.id
+                   AND (
+                     ($1::text IS NOT NULL AND interval.price_list_item_id = $1) OR
+                     ($1::text IS NULL AND interval.price_list_item_id IS NULL
+                       AND LOWER(interval.product_name) = LOWER($2))
+                   )
+                   AND interval.start_date <= ($4::date + 1)
+                   AND $3::date <= (interval.end_date + 1)
                )
              ORDER BY aggregate.row_number, aggregate.id
              FOR UPDATE;`,
@@ -484,6 +491,19 @@ export const upsertPromotionDocumentRows = async (
           aggregateRowId = existing.rows[0].id;
           const loserIds = existing.rows.slice(1).map((row: PromotionTableRowDb) => row.id);
           if (loserIds.length) {
+            const priority: Partial<PromotionRowInput>[] = existing.rows.map((row: PromotionTableRowDb) => row.manual_overrides ?? {});
+            const overrides: Partial<PromotionRowInput> = Object.assign({}, ...[...priority].reverse());
+            if (overrides.startDate && overrides.endDate && overrides.startDate > overrides.endDate) {
+              const preferredDates = priority.find((entry) => entry.startDate || entry.endDate);
+              if (preferredDates?.startDate) delete overrides.endDate;
+              else delete overrides.startDate;
+            }
+            if (Object.keys(overrides).length) {
+              await client.query(
+                'UPDATE promotion_table_rows SET manual_overrides = $2::jsonb WHERE id = $1;',
+                [aggregateRowId, JSON.stringify(overrides)],
+              );
+            }
             await client.query(
               `UPDATE promotion_row_intervals
                SET promotion_row_id = $1,
@@ -582,25 +602,30 @@ export const updatePromotionRowByNumber = async (rowNumber: number, input: Promo
   return opsDb.withClient(async (client) => {
     await client.query('BEGIN');
     try {
-      const target = await client.query<{ id: string; has_sources: boolean }>(
-        `SELECT
-           aggregate.id,
+      const target = await client.query<PromotionTableRowDb & { has_sources: boolean }>(
+        `SELECT aggregate.*,
            EXISTS (
-             SELECT 1
-             FROM promotion_row_intervals interval
-             WHERE interval.promotion_row_id = aggregate.id
+             SELECT 1 FROM promotion_row_intervals interval WHERE interval.promotion_row_id = aggregate.id
            ) AS has_sources
          FROM promotion_table_rows aggregate
          WHERE aggregate.row_number = $1
          FOR UPDATE;`,
         [rowNumber],
       );
-      if (!target.rows[0]) {
+      const stored = target.rows[0];
+      if (!stored) {
         await client.query('ROLLBACK');
         return null;
       }
-      if (target.rows[0].has_sources) {
-        throw new Error('Импортированную строку акции нельзя редактировать вручную. Измените или замените исходный документ.');
+      const manualOverrides: Partial<PromotionRowInput> = {};
+      if (stored.has_sources) {
+        const current = mapRow(stored);
+        if (input.status !== current.status) manualOverrides.status = input.status;
+        if (input.productName !== current.productName) manualOverrides.productName = input.productName;
+        if (input.startDate !== current.startDate) manualOverrides.startDate = input.startDate;
+        if (input.endDate !== current.endDate) manualOverrides.endDate = input.endDate;
+        if (input.promoPrice !== current.promoPrice) manualOverrides.promoPrice = input.promoPrice;
+        if (input.regularPrice !== current.regularPrice) manualOverrides.regularPrice = input.regularPrice;
       }
       const result = await client.query<PromotionTableRowDb>(
         `UPDATE promotion_table_rows
@@ -610,6 +635,7 @@ export const updatePromotionRowByNumber = async (rowNumber: number, input: Promo
              end_date = $4::date,
              promo_price = $5,
              regular_price = $6,
+             manual_overrides = manual_overrides || $8::jsonb,
              updated_at = NOW()
          WHERE id = $7
          RETURNING *;`,
@@ -620,7 +646,8 @@ export const updatePromotionRowByNumber = async (rowNumber: number, input: Promo
           input.endDate,
           input.promoPrice,
           input.regularPrice,
-          target.rows[0].id,
+          stored.id,
+          JSON.stringify(manualOverrides),
         ],
       );
       await client.query('COMMIT');

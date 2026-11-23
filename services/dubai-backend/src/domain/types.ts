@@ -95,6 +95,20 @@ export type StockTableRow = {
   dashboardOverrides?: Record<string, string>;
 };
 
+export type InventorySubmissionItem = {
+  productId: string;
+  name: string;
+  inventoryPrice: number | null;
+  quantity: number | null;
+};
+
+export type InventorySubmission = {
+  id: string;
+  dayDate: string;
+  submittedAt: string;
+  items: InventorySubmissionItem[];
+};
+
 export type StockTable = {
   shop: Shop;
   businessCategory: BusinessCategory;
@@ -104,6 +118,7 @@ export type StockTable = {
   dates: string[];
   rows: StockTableRow[];
   inventoryCounts?: Record<string, string>;
+  inventorySubmissions?: Record<string, { submittedAt: string; items?: InventorySubmissionItem[] }>;
 };
 
 export type TaskStatus = 'open' | 'done';

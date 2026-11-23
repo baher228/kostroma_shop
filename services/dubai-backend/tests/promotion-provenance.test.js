@@ -85,11 +85,18 @@ test('bridge upsert locks and merges every adjacent aggregate before adding prov
         if (sql.includes('SELECT aggregate.*')) {
           return {
             rows: [
-              promotionDbRow(),
-              promotionDbRow({ id: 'aggregate_right', row_number: 11, start_date: '2026-09-05', end_date: '2026-09-07' }),
+              promotionDbRow({ manual_overrides: { promoPrice: 450 } }),
+              promotionDbRow({
+                id: 'aggregate_right',
+                row_number: 11,
+                start_date: '2026-09-05',
+                end_date: '2026-09-07',
+                manual_overrides: { promoPrice: 475, regularPrice: null },
+              }),
             ],
           };
         }
+        if (sql.includes('UPDATE promotion_table_rows SET manual_overrides')) return { rows: [] };
         if (sql.includes('UPDATE promotion_row_intervals') && sql.includes('promotion_row_id = ANY')) return { rows: [] };
         if (sql.includes('DELETE FROM promotion_table_rows WHERE id = ANY')) return { rows: [], rowCount: 1 };
         if (sql.includes('INSERT INTO promotion_row_intervals')) return { rows: [] };
@@ -131,6 +138,13 @@ test('bridge upsert locks and merges every adjacent aggregate before adding prov
   const lookup = calls.find((call) => call.sql.includes('SELECT aggregate.*'));
   assert.doesNotMatch(lookup.sql, /LIMIT 1/);
   assert.match(lookup.sql, /ORDER BY aggregate\.row_number, aggregate\.id/);
+  assert.match(lookup.sql, /LOWER\(interval\.product_name\)/);
+  assert.match(lookup.sql, /interval\.start_date <= \(\$4::date \+ 1\)/);
+  assert.match(lookup.sql, /\$3::date <= \(interval\.end_date \+ 1\)/);
+  assert.doesNotMatch(lookup.sql, /aggregate\.(?:product_name|start_date|end_date)/);
+  const retained = calls.find((call) => call.sql.includes('SET manual_overrides'));
+  assert.equal(retained.params[0], 'aggregate_left');
+  assert.deepEqual(JSON.parse(retained.params[1]), { promoPrice: 450, regularPrice: null });
   const repoint = calls.find((call) => call.sql.includes('promotion_row_id = ANY'));
   assert.deepEqual(repoint.params, ['aggregate_left', ['aggregate_right']]);
   const loserDelete = calls.find((call) => call.sql.includes('DELETE FROM promotion_table_rows WHERE id = ANY'));
@@ -229,14 +243,24 @@ test('deleting the final constituent removes the empty aggregate only', async (t
   assert.equal(calls.at(-1).sql, 'COMMIT');
 });
 
-test('manual edits are rejected for source-backed aggregate rows', async (t) => {
+test('manual edits update source-backed aggregate rows without removing provenance', async (t) => {
   const calls = [];
+  const updatedRow = promotionDbRow({
+    product_name: 'Changed',
+    start_date: '2099-08-30',
+    end_date: '2099-09-03',
+    promo_price: 400,
+    regular_price: null,
+  });
   installOpsDbMock(t, {
     withClient: async (callback) => callback({
       query: async (sql, params = []) => {
         calls.push({ sql, params });
-        if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
-        if (sql.includes('AS has_sources')) return { rows: [{ id: 'aggregate_left', has_sources: true }] };
+        if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [] };
+        if (sql.includes('FROM promotion_table_rows aggregate') && sql.includes('FOR UPDATE')) {
+          return { rows: [promotionDbRow({ start_date: '2099-09-01', end_date: '2099-09-03', has_sources: true })] };
+        }
+        if (sql.includes('UPDATE promotion_table_rows')) return { rows: [updatedRow] };
         throw new Error(`Unexpected SQL: ${sql}`);
       },
     }),
@@ -245,17 +269,26 @@ test('manual edits are rejected for source-backed aggregate rows', async (t) => 
   delete require.cache[repositoryPath];
   const { updatePromotionRowByNumber } = require(repositoryPath);
 
-  await assert.rejects(
-    updatePromotionRowByNumber(10, {
-      status: 'future',
-      productName: 'Changed',
-      startDate: '2026-09-01',
-      endDate: '2026-09-03',
-      promoPrice: 400,
-      regularPrice: 700,
-    }),
-    /исходный документ/,
-  );
-  assert.equal(calls.some((call) => call.sql.includes('UPDATE promotion_table_rows')), false);
-  assert.equal(calls.at(-1).sql, 'ROLLBACK');
+  const row = await updatePromotionRowByNumber(10, {
+    status: 'future',
+    productName: 'Changed',
+    startDate: '2099-08-30',
+    endDate: '2099-09-03',
+    promoPrice: 400,
+    regularPrice: null,
+  });
+
+  assert.equal(row.productName, 'Changed');
+  assert.equal(row.promoPrice, 400);
+  assert.equal(row.sourceDocumentId, 'invoice_left');
+  assert.equal(row.invoiceDocumentId, 'invoice_left');
+  const write = calls.find((call) => call.sql.includes('UPDATE promotion_table_rows'));
+  assert.deepEqual(JSON.parse(write.params[7]), {
+    productName: 'Changed',
+    startDate: '2099-08-30',
+    promoPrice: 400,
+    regularPrice: null,
+  });
+  assert.equal(calls.some((call) => call.sql.includes('UPDATE promotion_row_intervals')), false);
+  assert.equal(calls.at(-1).sql, 'COMMIT');
 });

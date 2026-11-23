@@ -263,13 +263,16 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
 
     const rowsToSubmit = table.rows
       .map((row) => {
-        const requestedPacks = Number.parseInt((packsByProduct[row.productId] ?? '').trim(), 10);
-        return Number.isFinite(requestedPacks) && requestedPacks > 0 ? { row, requestedPacks } : null;
-      })
-      .filter((item): item is { row: StockTable['rows'][number]; requestedPacks: number } => item !== null);
+        const raw = (packsByProduct[row.productId] ?? '').trim();
+        const requestedPacks = raw ? Number.parseInt(raw, 10) : 0;
+        return {
+          row,
+          requestedPacks: Number.isFinite(requestedPacks) && requestedPacks >= 0 ? requestedPacks : 0,
+        };
+      });
 
     if (rowsToSubmit.length === 0) {
-      setError('Введите хотя бы одну позицию заказа.');
+      setError('В списке нет позиций для отправки.');
       return;
     }
 

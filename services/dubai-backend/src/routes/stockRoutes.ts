@@ -4,6 +4,7 @@ import { AuthorizedOpsRequest, requireOpsRole, requireOpsScope } from '../auth/m
 import {
   createStockProduct,
   addProductSubcategory,
+  getPreviousInventory,
   getShopOrderValues,
   getProductSubcategories,
   getVisibleStockTable,
@@ -11,6 +12,7 @@ import {
   removeStockProduct,
   setShopOrderValue,
   setStockValue,
+  submitInventory,
   updateStockProduct,
   updateStockProductMeta,
 } from '../services/stockService';
@@ -18,7 +20,9 @@ import { toStringParam, toValidationMessage } from '../http/http';
 import {
   createRowSchema,
   idParamSchema,
+  inventorySubmissionSchema,
   listStockTableQuerySchema,
+  previousInventorySubmissionQuerySchema,
   subcategorySchema,
   updateProductMetaSchema,
   updateProductSchema,
@@ -50,6 +54,48 @@ export const registerStockRoutes = (app: Express) => {
         return;
       }
       res.status(500).json({ message: 'Failed to load stock table.' });
+    }
+  });
+
+  app.post('/api/stock/inventory-submissions', requireOpsScope('stock:write'), async (req: Request, res: Response) => {
+    try {
+      const viewer = (req as AuthorizedOpsRequest).ops;
+      const payload = inventorySubmissionSchema.parse(req.body);
+      const submission = await submitInventory(viewer, payload);
+      if (!submission) {
+        res.status(404).json({ message: 'Unable to submit inventory for selected shop.' });
+        return;
+      }
+      res.status(201).json({ submission });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to submit inventory.' });
+    }
+  });
+
+  app.get('/api/stock/inventory-submissions/previous', requireOpsScope('stock:read'), async (req: Request, res: Response) => {
+    try {
+      const viewer = (req as AuthorizedOpsRequest).ops;
+      const query = previousInventorySubmissionQuerySchema.parse({
+        shopId: toStringParam(req.query.shopId),
+        businessCategory: toStringParam(req.query.businessCategory),
+        beforeDate: toStringParam(req.query.beforeDate),
+      });
+      const submission = await getPreviousInventory(viewer, query);
+      if (!submission && viewer.role === 'worker' && query.shopId && !viewer.shopIds.includes(query.shopId)) {
+        res.status(404).json({ message: 'Inventory submission not found for selected shop.' });
+        return;
+      }
+      res.json({ submission });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        res.status(400).json({ message: toValidationMessage(error) });
+        return;
+      }
+      res.status(500).json({ message: 'Failed to load previous inventory.' });
     }
   });
 

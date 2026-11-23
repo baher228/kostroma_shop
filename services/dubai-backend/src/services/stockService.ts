@@ -2,9 +2,11 @@ import { listOrderSheetValues, upsertOrderSheetValue } from '../repositories/ord
 import {
   createProduct,
   createProductSubcategory,
+  createInventorySubmission,
   deleteProduct,
   deleteProductSubcategory,
   getStockTable,
+  getPreviousInventorySubmission,
   listProductSubcategories,
   updateProduct,
   updateProductMeta,
@@ -13,7 +15,9 @@ import {
 import type { BusinessCategory, OpsTokenClaims } from '../domain/types';
 import {
   createRowSchema,
+  inventorySubmissionSchema,
   listStockTableQuerySchema,
+  previousInventorySubmissionQuerySchema,
   subcategorySchema,
   updateProductMetaSchema,
   updateProductSchema,
@@ -53,6 +57,16 @@ export const setStockValue = (
   viewer: OpsTokenClaims,
   payload: z.infer<typeof upsertStockValueSchema>,
 ) => upsertStockValue(viewer, payload);
+
+export const submitInventory = (
+  viewer: OpsTokenClaims,
+  payload: z.infer<typeof inventorySubmissionSchema>,
+) => createInventorySubmission(viewer, payload);
+
+export const getPreviousInventory = (
+  viewer: OpsTokenClaims,
+  query: z.infer<typeof previousInventorySubmissionQuerySchema>,
+) => getPreviousInventorySubmission(viewer, query);
 
 export const getShopOrderValues = (
   viewer: OpsTokenClaims,

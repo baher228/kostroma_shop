@@ -229,14 +229,24 @@ test('deleting the final constituent removes the empty aggregate only', async (t
   assert.equal(calls.at(-1).sql, 'COMMIT');
 });
 
-test('manual edits are rejected for source-backed aggregate rows', async (t) => {
+test('manual edits update source-backed aggregate rows without removing provenance', async (t) => {
   const calls = [];
+  const updatedRow = promotionDbRow({
+    product_name: 'Changed',
+    start_date: '2026-09-01',
+    end_date: '2026-09-03',
+    promo_price: 400,
+    regular_price: 700,
+  });
   installOpsDbMock(t, {
     withClient: async (callback) => callback({
       query: async (sql, params = []) => {
         calls.push({ sql, params });
-        if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
-        if (sql.includes('AS has_sources')) return { rows: [{ id: 'aggregate_left', has_sources: true }] };
+        if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [] };
+        if (sql.includes('FROM promotion_table_rows aggregate') && sql.includes('FOR UPDATE')) {
+          return { rows: [{ id: 'aggregate_left' }] };
+        }
+        if (sql.includes('UPDATE promotion_table_rows')) return { rows: [updatedRow] };
         throw new Error(`Unexpected SQL: ${sql}`);
       },
     }),
@@ -245,17 +255,20 @@ test('manual edits are rejected for source-backed aggregate rows', async (t) => 
   delete require.cache[repositoryPath];
   const { updatePromotionRowByNumber } = require(repositoryPath);
 
-  await assert.rejects(
-    updatePromotionRowByNumber(10, {
-      status: 'future',
-      productName: 'Changed',
-      startDate: '2026-09-01',
-      endDate: '2026-09-03',
-      promoPrice: 400,
-      regularPrice: 700,
-    }),
-    /исходный документ/,
-  );
-  assert.equal(calls.some((call) => call.sql.includes('UPDATE promotion_table_rows')), false);
-  assert.equal(calls.at(-1).sql, 'ROLLBACK');
+  const row = await updatePromotionRowByNumber(10, {
+    status: 'future',
+    productName: 'Changed',
+    startDate: '2026-09-01',
+    endDate: '2026-09-03',
+    promoPrice: 400,
+    regularPrice: 700,
+  });
+
+  assert.equal(row.productName, 'Changed');
+  assert.equal(row.promoPrice, 400);
+  assert.equal(row.sourceDocumentId, 'invoice_left');
+  assert.equal(row.invoiceDocumentId, 'invoice_left');
+  assert.equal(calls.some((call) => call.sql.includes('UPDATE promotion_table_rows')), true);
+  assert.equal(calls.some((call) => call.sql.includes('UPDATE promotion_row_intervals')), false);
+  assert.equal(calls.at(-1).sql, 'COMMIT');
 });

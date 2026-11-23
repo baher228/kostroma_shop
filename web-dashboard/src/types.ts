@@ -294,6 +294,7 @@ export type StockTable = {
   dates: string[];
   rows: Product[];
   inventoryCounts?: Record<string, string>;
+  inventorySubmissions?: Record<string, { submittedAt: string }>;
 };
 
 export type OrderValueEntry = {

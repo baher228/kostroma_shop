@@ -912,7 +912,15 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
               {inventoryDates.map((date) => (
                 <th key={date} colSpan={2} className="inventory-date-start">
                   Инвентаризация {formatDateShort(date)}
-                  <small>{[formatWeekdayName(date), formatInventoryTime(table?.inventoryCounts?.[date])].filter(Boolean).join(', ')}</small>
+                  <small>
+                    {[
+                      formatWeekdayName(date),
+                      formatInventoryTime(table?.inventoryCounts?.[date]),
+                      table?.inventorySubmissions?.[date]?.submittedAt
+                        ? `Отправлено ${formatInventoryTime(table.inventorySubmissions[date].submittedAt)}`
+                        : '',
+                    ].filter(Boolean).join(', ')}
+                  </small>
                 </th>
               ))}
             </tr>

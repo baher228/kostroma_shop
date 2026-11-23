@@ -1,8 +1,16 @@
-import { BusinessCategory, OrderValueEntry, ProductCategory, StockTable } from '../types/models';
+import { BusinessCategory, InventorySubmission, OrderValueEntry, ProductCategory, StockTable } from '../types/models';
 import { request } from './http';
 
 type StockTableResponse = {
   table: StockTable;
+};
+
+type InventorySubmissionResponse = {
+  submission: InventorySubmission;
+};
+
+type PreviousInventorySubmissionResponse = {
+  submission: InventorySubmission | null;
 };
 
 type ProductResponse = {
@@ -73,6 +81,33 @@ export const stockApi = {
   list: async (token: string, query: StockListQuery = {}): Promise<StockTable> => {
     const result = await request<StockTableResponse>(`/api/stock${toQueryString(query)}`, { token });
     return result.table;
+  },
+
+  submitInventory: async (
+    token: string,
+    payload: { shopId?: string; businessCategory: BusinessCategory; dayDate: string },
+  ): Promise<InventorySubmission> => {
+    const result = await request<InventorySubmissionResponse>('/api/stock/inventory-submissions', {
+      method: 'POST',
+      token,
+      body: payload,
+    });
+    return result.submission;
+  },
+
+  previousInventorySubmission: async (
+    token: string,
+    params: { shopId?: string; businessCategory: BusinessCategory; beforeDate: string },
+  ): Promise<InventorySubmission | null> => {
+    const query = new URLSearchParams({ businessCategory: params.businessCategory, beforeDate: params.beforeDate });
+    if (params.shopId) {
+      query.set('shopId', params.shopId);
+    }
+    const result = await request<PreviousInventorySubmissionResponse>(
+      `/api/stock/inventory-submissions/previous?${query.toString()}`,
+      { token },
+    );
+    return result.submission;
   },
 
   createProduct: async (

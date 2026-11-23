@@ -1,6 +1,6 @@
 import { opsDb } from '../db/opsDb';
 import { DEFAULT_BUSINESS_CATEGORY, DEFAULT_PRODUCT_CATEGORY, BUSINESS_CATEGORIES } from '../domain/types';
-import type { BusinessCategory, OpsTokenClaims, ProductCategory, Shop, StockProduct, StockTable, StockTableRow } from '../domain/types';
+import type { BusinessCategory, InventorySubmission, OpsTokenClaims, ProductCategory, Shop, StockProduct, StockTable, StockTableRow } from '../domain/types';
 
 type ShopDbRow = {
   id: string;
@@ -38,6 +38,13 @@ type DashboardOverrideDbRow = {
 
 type SubcategoryDbRow = {
   name: string;
+};
+
+type InventorySubmissionDbRow = {
+  id: string | number;
+  day_date: string;
+  submitted_at: Date | string;
+  snapshot: InventorySubmission['items'];
 };
 
 type DateRange = {
@@ -642,9 +649,30 @@ export const getStockTable = async (
       inventoryCounts[item.day_date] = new Date(item.counted_at).toISOString();
     }
   }
+  const inventorySubmissions: Record<string, { submittedAt: string }> = {};
+  if (isInventory) {
+    const submissionsResult = await opsDb.query<{ day_date: string; submitted_at: Date }>(
+      `
+        SELECT DISTINCT ON (day_date)
+          day_date::text AS day_date,
+          submitted_at
+        FROM inventory_submissions
+        WHERE shop_id = $1
+          AND business_category = $2
+          AND day_date >= $3::date
+          AND day_date <= $4::date
+        ORDER BY day_date ASC, submitted_at DESC, id DESC;
+      `,
+      [shop.id, businessCategory, range.from, range.to],
+    );
+    for (const item of submissionsResult.rows) {
+      inventorySubmissions[item.day_date] = { submittedAt: new Date(item.submitted_at).toISOString() };
+    }
+  }
   const dates = isInventory && viewer.role === 'manager' && !(params.from && params.to && params.from === params.to)
     ? [...new Set([
         ...Object.keys(inventoryCounts),
+        ...Object.keys(inventorySubmissions),
         ...valuesResult.rows.filter((item: ValueDbRow) => productIds.has(item.product_id)).map((item: ValueDbRow) => item.day_date),
       ])].sort()
     : buildDateRange(range.from, range.to);
@@ -691,7 +719,93 @@ export const getStockTable = async (
     dates,
     rows,
     ...(isInventory ? { inventoryCounts } : {}),
+    ...(isInventory ? { inventorySubmissions } : {}),
   };
+};
+
+const mapInventorySubmission = (row: InventorySubmissionDbRow): InventorySubmission => ({
+  id: String(row.id),
+  dayDate: row.day_date,
+  submittedAt: new Date(row.submitted_at).toISOString(),
+  items: row.snapshot,
+});
+
+export const createInventorySubmission = async (
+  viewer: OpsTokenClaims,
+  params: { shopId?: string; businessCategory: BusinessCategory; dayDate: string },
+): Promise<InventorySubmission | null> => {
+  if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
+    return null;
+  }
+  const shop = viewer.role === 'manager' && params.shopId
+    ? await getShopById(params.shopId)
+    : await resolveRequestedShop(viewer, params.shopId);
+  if (!shop || (viewer.role === 'worker' && !viewer.shopIds.includes(shop.id))) {
+    return null;
+  }
+
+  const result = await opsDb.query<InventorySubmissionDbRow>(
+    `
+      INSERT INTO inventory_submissions (shop_id, business_category, day_date, snapshot)
+      SELECT
+        $1,
+        $2,
+        $3::date,
+        COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'productId', products.id,
+              'name', products.name,
+              'inventoryPrice', products.inventory_price_rub,
+            'quantity', inventory_value.value
+            )
+            ORDER BY products.display_order ASC NULLS LAST, products.created_at ASC, products.name ASC
+          ),
+          '[]'::jsonb
+        )
+      FROM stock_products products
+      LEFT JOIN inventory_values inventory_value
+        ON inventory_value.shop_id = $1
+        AND inventory_value.product_id = products.id
+        AND inventory_value.day_date = $3::date
+      WHERE products.business_category = $2
+        AND (products.is_active = TRUE OR inventory_value.product_id IS NOT NULL)
+      RETURNING id::text AS id, day_date::text AS day_date, submitted_at, snapshot;
+    `,
+    [shop.id, params.businessCategory, params.dayDate],
+  );
+  const row = result.rows[0];
+  return row ? mapInventorySubmission(row) : null;
+};
+
+export const getPreviousInventorySubmission = async (
+  viewer: OpsTokenClaims,
+  params: { shopId?: string; businessCategory: BusinessCategory; beforeDate: string },
+): Promise<InventorySubmission | null> => {
+  if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
+    return null;
+  }
+  const shop = viewer.role === 'manager' && params.shopId
+    ? await getShopById(params.shopId)
+    : await resolveRequestedShop(viewer, params.shopId);
+  if (!shop || (viewer.role === 'worker' && !viewer.shopIds.includes(shop.id))) {
+    return null;
+  }
+
+  const result = await opsDb.query<InventorySubmissionDbRow>(
+    `
+      SELECT id::text AS id, day_date::text AS day_date, submitted_at, snapshot
+      FROM inventory_submissions
+      WHERE shop_id = $1
+        AND business_category = $2
+        AND day_date < $3::date
+      ORDER BY day_date DESC, submitted_at DESC, id DESC
+      LIMIT 1;
+    `,
+    [shop.id, params.businessCategory, params.beforeDate],
+  );
+  const row = result.rows[0];
+  return row ? mapInventorySubmission(row) : null;
 };
 
 const MAX_STOCK_VALUE = 50;

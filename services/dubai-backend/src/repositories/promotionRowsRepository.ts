@@ -582,14 +582,9 @@ export const updatePromotionRowByNumber = async (rowNumber: number, input: Promo
   return opsDb.withClient(async (client) => {
     await client.query('BEGIN');
     try {
-      const target = await client.query<{ id: string; has_sources: boolean }>(
+      const target = await client.query<{ id: string }>(
         `SELECT
-           aggregate.id,
-           EXISTS (
-             SELECT 1
-             FROM promotion_row_intervals interval
-             WHERE interval.promotion_row_id = aggregate.id
-           ) AS has_sources
+           aggregate.id
          FROM promotion_table_rows aggregate
          WHERE aggregate.row_number = $1
          FOR UPDATE;`,
@@ -598,9 +593,6 @@ export const updatePromotionRowByNumber = async (rowNumber: number, input: Promo
       if (!target.rows[0]) {
         await client.query('ROLLBACK');
         return null;
-      }
-      if (target.rows[0].has_sources) {
-        throw new Error('Импортированную строку акции нельзя редактировать вручную. Измените или замените исходный документ.');
       }
       const result = await client.query<PromotionTableRowDb>(
         `UPDATE promotion_table_rows

@@ -20,5 +20,6 @@ require('./generated-poster-pdf.test');
 require('./promotion-rules.test');
 require('./promotion-provenance.test');
 require('./product.creation.test');
+require('./inventory.submissions.test');
 require('./management.mutations.test');
 require('./deliveries.test');

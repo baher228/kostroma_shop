@@ -56,7 +56,7 @@ import {
   sanitizeOrderValue,
 } from '../../../shared/dashboard-calculations';
 import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/product-display';
-import { ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
+import { InventorySubmission, ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 import { BusinessCategoryTabs } from '../components/BusinessCategoryTabs';
 import {
   InventoryDateTimeBar,
@@ -72,6 +72,8 @@ type EditingCell = {
   date: string;
   productName: string;
 };
+
+type PreviousInventoryView = InventorySubmission & { businessCategory: BusinessCategory };
 
 type LoadedDateRange = {
   from: string;
@@ -94,6 +96,20 @@ const formatInventoryMoney = (value: number): string => {
   const [whole, fraction] = (Math.round(value * 100) / 100).toFixed(2).split('.');
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   return fraction === '00' ? grouped : `${grouped},${fraction}`;
+};
+
+const formatInventorySubmissionDateTime = (iso: string): string => {
+  const date = new Date(iso);
+  return Number.isNaN(date.valueOf())
+    ? ''
+    : new Intl.DateTimeFormat('ru-RU', {
+        timeZone: 'Europe/Moscow',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date);
 };
 
 const inventorySumFor = (price: number | null | undefined, quantity: string): number | null => {
@@ -340,6 +356,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const maxCellValue = isInventory ? MAX_INVENTORY_VALUE : MAX_STOCK_VALUE;
   const [inventoryDate, setInventoryDate] = useState(() => toInventoryDateKey(new Date()));
   const [inventoryTime, setInventoryTime] = useState(() => roundedInventoryTime(new Date()));
+  const [submittingInventory, setSubmittingInventory] = useState(false);
+  const [loadingPreviousInventory, setLoadingPreviousInventory] = useState(false);
+  const [previousInventory, setPreviousInventory] = useState<PreviousInventoryView | null>(null);
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
@@ -784,6 +803,69 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
   };
 
+  const sendInventory = async () => {
+    if (!table || !isInventory || submittingInventory) {
+      return;
+    }
+    const hasPendingValues = table.rows.some((row) => pendingKeys[`${row.productId}:${inventoryDate}`]);
+    if (hasPendingValues) {
+      Alert.alert('Подождите', 'Сначала дождитесь сохранения введённых количеств.');
+      return;
+    }
+
+    const submissionCategory = activeBusinessCategory;
+    const submissionShopId = canManage ? selectedShopId ?? table.shop.id : table.shop.id;
+    const submissionDate = inventoryDate;
+    try {
+      setSubmittingInventory(true);
+      setError('');
+      const submission = await stockApi.submitInventory(session.token, {
+        shopId: canManage ? submissionShopId : undefined,
+        businessCategory: submissionCategory,
+        dayDate: submissionDate,
+      });
+      setTable((current) => current && current.shop.id === submissionShopId && current.businessCategory === submissionCategory
+        ? {
+            ...current,
+            inventorySubmissions: {
+              ...current.inventorySubmissions,
+              [submission.dayDate]: { submittedAt: submission.submittedAt },
+            },
+          }
+        : current);
+      Alert.alert('Инвентаризация отправлена', 'Данные сохранены в панели администратора.');
+    } catch (sendError) {
+      setError(errorMessage(sendError));
+    } finally {
+      setSubmittingInventory(false);
+    }
+  };
+
+  const loadPreviousInventory = async () => {
+    if (!table || loadingPreviousInventory) {
+      return;
+    }
+    const submissionCategory = activeBusinessCategory;
+    const submissionShopId = canManage ? selectedShopId ?? table.shop.id : table.shop.id;
+    try {
+      setLoadingPreviousInventory(true);
+      const submission = await stockApi.previousInventorySubmission(session.token, {
+        shopId: canManage ? submissionShopId : undefined,
+        businessCategory: submissionCategory,
+        beforeDate: inventoryDate,
+      });
+      if (!submission) {
+        Alert.alert('Нет прошлой инвентаризации', 'Для этой категории до выбранной даты ещё не отправляли данные.');
+        return;
+      }
+      setPreviousInventory({ ...submission, businessCategory: submissionCategory });
+    } catch (loadError) {
+      setError(errorMessage(loadError));
+    } finally {
+      setLoadingPreviousInventory(false);
+    }
+  };
+
   const resetProductForm = () => {
     setNewProductName('');
     setNewProductCategory(null);
@@ -901,6 +983,8 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const renderInventoryTable = (rows: StockTableRow[]) => {
     const total = rows.reduce((sum, row) => sum + (inventorySumFor(row.inventoryPrice, row.values[inventoryDate] ?? '') ?? 0), 0);
+    const lastSubmissionAt = table?.inventorySubmissions?.[inventoryDate]?.submittedAt;
+    const hasPendingValues = rows.some((row) => pendingKeys[`${row.productId}:${inventoryDate}`]);
     return (
       <View style={styles.categoryBlock}>
         <View style={styles.headerRow}>
@@ -970,6 +1054,35 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             </View>
           </View>
         )}
+        <View style={styles.inventoryActions}>
+          <View style={styles.inventorySubmissionInfo}>
+            <Text style={styles.inventorySubmissionStatus}>
+              {lastSubmissionAt
+                ? `Последняя отправка: ${formatInventorySubmissionDateTime(lastSubmissionAt)}`
+                : 'За этот день ещё не отправляли'}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Отправить инвентаризацию за выбранный день"
+            style={[styles.primaryButton, (submittingInventory || hasPendingValues) && styles.modalSaveButtonDisabled]}
+            onPress={() => void sendInventory()}
+            disabled={submittingInventory || hasPendingValues}
+          >
+            <Text style={styles.primaryButtonText}>{submittingInventory ? 'Отправка...' : 'Отправить'}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Показать прошлую отправленную инвентаризацию"
+            style={[styles.secondaryButton, loadingPreviousInventory && styles.modalSaveButtonDisabled]}
+            onPress={() => void loadPreviousInventory()}
+            disabled={loadingPreviousInventory}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {loadingPreviousInventory ? 'Загрузка...' : 'Прошлая инвентаризация'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   };
@@ -1795,6 +1908,64 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       </Modal>
 
       <Modal
+        visible={previousInventory !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviousInventory(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, styles.previousInventoryModalCard]}>
+            <Text style={styles.modalTitle}>Прошлая инвентаризация</Text>
+            {previousInventory && (
+              <Text style={styles.modalMeta}>
+                {previousInventory.businessCategory} · {formatDate(previousInventory.dayDate)} · отправлено {formatInventorySubmissionDateTime(previousInventory.submittedAt)}
+              </Text>
+            )}
+            <View style={styles.previousInventoryHeaderRow}>
+              <Text style={styles.previousInventoryName}>Товар</Text>
+              <Text style={styles.previousInventoryNumber}>Цена</Text>
+              <Text style={styles.previousInventoryNumber}>Количество</Text>
+              <Text style={styles.previousInventoryNumber}>Сумма</Text>
+            </View>
+            <ScrollView style={styles.previousInventoryList} keyboardShouldPersistTaps="handled">
+              {previousInventory?.items.length ? previousInventory.items.map((item) => {
+                const total = item.inventoryPrice !== null && item.quantity !== null
+                  ? item.inventoryPrice * item.quantity
+                  : null;
+                return (
+                  <View key={item.productId} style={styles.previousInventoryItem}>
+                    <Text style={styles.previousInventoryName}>{item.name}</Text>
+                    <Text style={styles.previousInventoryNumber}>
+                      {item.inventoryPrice === null ? '—' : formatInventoryMoney(item.inventoryPrice)}
+                    </Text>
+                    <Text style={styles.previousInventoryNumber}>
+                      {item.quantity === null ? '—' : String(item.quantity)}
+                    </Text>
+                    <Text style={styles.previousInventoryNumber}>
+                      {total === null ? '—' : formatInventoryMoney(total)}
+                    </Text>
+                  </View>
+                );
+              }) : (
+                <Text style={styles.emptyRowText}>В отправленной инвентаризации нет товаров.</Text>
+              )}
+            </ScrollView>
+            {previousInventory && (
+              <Text style={styles.inventorySubmissionStatus}>
+                Итого: {formatInventoryMoney(previousInventory.items.reduce((sum, item) =>
+                  sum + (item.inventoryPrice !== null && item.quantity !== null ? item.inventoryPrice * item.quantity : 0), 0))}
+              </Text>
+            )}
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancelButton} onPress={() => setPreviousInventory(null)}>
+                <Text style={styles.modalCancelText}>Закрыть</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={isShopPickerOpen}
         transparent
         animationType="fade"
@@ -1942,6 +2113,23 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
+  },
+  inventoryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    padding: 8,
+  },
+  inventorySubmissionInfo: {
+    flexGrow: 1,
+    flexBasis: 220,
+  },
+  inventorySubmissionStatus: {
+    color: '#4d6052',
+    fontSize: 14,
+    fontWeight: '700',
   },
   primaryButton: {
     backgroundColor: '#2f6f4f',
@@ -2515,6 +2703,45 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
     maxHeight: '75%',
+  },
+  previousInventoryModalCard: {
+    width: '100%',
+    maxWidth: 760,
+    maxHeight: '90%',
+    alignSelf: 'center',
+  },
+  previousInventoryList: {
+    flexShrink: 1,
+    maxHeight: 560,
+  },
+  previousInventoryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingBottom: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#c5d1c7',
+  },
+  previousInventoryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#d7e0d8',
+  },
+  previousInventoryName: {
+    flex: 1,
+    color: '#1f2f26',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  previousInventoryNumber: {
+    width: 74,
+    color: '#2f4235',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   modalTitle: {
     color: '#1f2f26',

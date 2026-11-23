@@ -174,6 +174,18 @@ export const listStockTableQuerySchema = z.object({
   kind: stockValueKindSchema,
 });
 
+export const inventorySubmissionSchema = z.object({
+  shopId: z.string().trim().min(1).max(100).optional(),
+  businessCategory: businessCategorySchema,
+  dayDate: dateKeySchema,
+}).strict();
+
+export const previousInventorySubmissionQuerySchema = z.object({
+  shopId: z.string().trim().min(1).max(100).optional(),
+  businessCategory: businessCategorySchema,
+  beforeDate: dateKeySchema,
+}).strict();
+
 export const upsertStockValueSchema = z.object({
   kind: stockValueKindSchema,
   shopId: z.string().trim().min(1).max(100).optional(),
@@ -268,8 +280,8 @@ export const createSellerOrderSchema = z.object({
   businessCategory: businessCategorySchema.optional().default(DEFAULT_BUSINESS_CATEGORY),
   productId: z.string().trim().min(1).max(100),
   stockOnHand: z.number().int().min(0).max(9999).optional().nullable(),
-  requestedPacks: z.number().int().min(1).max(9999),
-  requestedUnits: z.number().int().min(1).max(99999),
+  requestedPacks: z.number().int().min(0).max(9999),
+  requestedUnits: z.number().int().min(0).max(99999),
   autoSuggested: z.boolean().optional().default(false),
   orderDate: dateKeySchema.optional(),
 }).strict()
@@ -280,8 +292,8 @@ export const createSellerOrderSchema = z.object({
 const sellerOrderItemSchema = z.object({
   productId: z.string().trim().min(1).max(100),
   stockOnHand: z.number().int().min(0).max(9999).optional().nullable(),
-  requestedPacks: z.number().int().min(1).max(9999),
-  requestedUnits: z.number().int().min(1).max(99999),
+  requestedPacks: z.number().int().min(0).max(9999),
+  requestedUnits: z.number().int().min(0).max(99999),
   autoSuggested: z.boolean().optional().default(false),
 }).strict();
 

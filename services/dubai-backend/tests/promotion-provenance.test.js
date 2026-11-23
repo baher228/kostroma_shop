@@ -247,8 +247,8 @@ test('manual edits update source-backed aggregate rows without removing provenan
   const calls = [];
   const updatedRow = promotionDbRow({
     product_name: 'Changed',
-    start_date: '2026-09-08',
-    end_date: '2026-09-10',
+    start_date: '2099-09-08',
+    end_date: '2099-09-10',
     promo_price: 400,
     regular_price: null,
   });
@@ -258,7 +258,7 @@ test('manual edits update source-backed aggregate rows without removing provenan
         calls.push({ sql, params });
         if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [] };
         if (sql.includes('FROM promotion_table_rows aggregate') && sql.includes('FOR UPDATE')) {
-          return { rows: [promotionDbRow({ has_sources: true })] };
+          return { rows: [promotionDbRow({ start_date: '2099-09-01', end_date: '2099-09-03', has_sources: true })] };
         }
         if (sql.includes('UPDATE promotion_table_rows')) return { rows: [updatedRow] };
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -272,8 +272,8 @@ test('manual edits update source-backed aggregate rows without removing provenan
   const row = await updatePromotionRowByNumber(10, {
     status: 'future',
     productName: 'Changed',
-    startDate: '2026-09-08',
-    endDate: '2026-09-10',
+    startDate: '2099-09-08',
+    endDate: '2099-09-10',
     promoPrice: 400,
     regularPrice: null,
   });
@@ -283,11 +283,10 @@ test('manual edits update source-backed aggregate rows without removing provenan
   assert.equal(row.sourceDocumentId, 'invoice_left');
   assert.equal(row.invoiceDocumentId, 'invoice_left');
   const write = calls.find((call) => call.sql.includes('UPDATE promotion_table_rows'));
-  const { status, ...overrides } = JSON.parse(write.params[7]);
-  assert.deepEqual(overrides, {
+  assert.deepEqual(JSON.parse(write.params[7]), {
     productName: 'Changed',
-    startDate: '2026-09-08',
-    endDate: '2026-09-10',
+    startDate: '2099-09-08',
+    endDate: '2099-09-10',
     promoPrice: 400,
     regularPrice: null,
   });

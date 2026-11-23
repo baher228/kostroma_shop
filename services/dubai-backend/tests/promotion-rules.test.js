@@ -145,8 +145,8 @@ test('adjacent plan period extends the existing invoice promotion into one row',
   }], 'plan');
 
   const lookup = calls.find((call) => call.sql.includes('SELECT aggregate.*'));
-  assert.match(lookup.sql, /start_date <= \(\$4::date \+ 1\)/);
-  assert.match(lookup.sql, /\$3::date <= \(aggregate\.end_date \+ 1\)/);
+  assert.match(lookup.sql, /interval\.start_date <= \(\$4::date \+ 1\)/);
+  assert.match(lookup.sql, /\$3::date <= \(interval\.end_date \+ 1\)/);
   assert.doesNotMatch(lookup.sql, /LIMIT 1/);
   const intervalInsert = calls.find((call) => call.sql.includes('INSERT INTO promotion_row_intervals'));
   assert.deepEqual(intervalInsert.params.slice(2, 5), ['plan_1', 'plan', 'plan.xlsx']);

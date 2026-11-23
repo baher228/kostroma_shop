@@ -285,6 +285,13 @@ export type Product = {
   dashboardOverrides?: Record<string, string>;
 };
 
+export type InventorySnapshotItem = {
+  productId: string;
+  name: string;
+  inventoryPrice: number | null;
+  quantity: number | null;
+};
+
 export type StockTable = {
   shop: Shop;
   businessCategory: BusinessCategory;
@@ -294,7 +301,7 @@ export type StockTable = {
   dates: string[];
   rows: Product[];
   inventoryCounts?: Record<string, string>;
-  inventorySubmissions?: Record<string, { submittedAt: string }>;
+  inventorySubmissions?: Record<string, { submittedAt: string; items?: InventorySnapshotItem[] }>;
 };
 
 export type OrderValueEntry = {

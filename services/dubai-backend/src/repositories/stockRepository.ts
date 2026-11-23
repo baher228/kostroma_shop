@@ -649,13 +649,14 @@ export const getStockTable = async (
       inventoryCounts[item.day_date] = new Date(item.counted_at).toISOString();
     }
   }
-  const inventorySubmissions: Record<string, { submittedAt: string }> = {};
+  const inventorySubmissions: NonNullable<StockTable['inventorySubmissions']> = {};
   if (isInventory) {
-    const submissionsResult = await opsDb.query<{ day_date: string; submitted_at: Date }>(
+    const submissionsResult = await opsDb.query<Pick<InventorySubmissionDbRow, 'day_date' | 'submitted_at'> & { snapshot: InventorySubmission['items'] | null }>(
       `
         SELECT DISTINCT ON (day_date)
           day_date::text AS day_date,
-          submitted_at
+          submitted_at,
+          ${viewer.role === 'manager' ? 'snapshot' : 'NULL::jsonb AS snapshot'}
         FROM inventory_submissions
         WHERE shop_id = $1
           AND business_category = $2
@@ -666,7 +667,10 @@ export const getStockTable = async (
       [shop.id, businessCategory, range.from, range.to],
     );
     for (const item of submissionsResult.rows) {
-      inventorySubmissions[item.day_date] = { submittedAt: new Date(item.submitted_at).toISOString() };
+      inventorySubmissions[item.day_date] = {
+        submittedAt: new Date(item.submitted_at).toISOString(),
+        ...(item.snapshot ? { items: item.snapshot } : {}),
+      };
     }
   }
   const dates = isInventory && viewer.role === 'manager' && !(params.from && params.to && params.from === params.to)
@@ -757,7 +761,7 @@ export const createInventorySubmission = async (
               'productId', products.id,
               'name', products.name,
               'inventoryPrice', products.inventory_price_rub,
-            'quantity', inventory_value.value
+              'quantity', inventory_value.value
             )
             ORDER BY products.display_order ASC NULLS LAST, products.created_at ASC, products.name ASC
           ),

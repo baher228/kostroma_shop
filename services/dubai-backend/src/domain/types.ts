@@ -118,7 +118,7 @@ export type StockTable = {
   dates: string[];
   rows: StockTableRow[];
   inventoryCounts?: Record<string, string>;
-  inventorySubmissions?: Record<string, { submittedAt: string }>;
+  inventorySubmissions?: Record<string, { submittedAt: string; items?: InventorySubmissionItem[] }>;
 };
 
 export type TaskStatus = 'open' | 'done';

@@ -14,6 +14,8 @@ import { stockApi } from '../api/stock';
 import { BUSINESS_CATEGORIES, DEFAULT_BUSINESS_CATEGORY } from '../constants/dashboard';
 import { BusinessCategory, Session, SellerOrder, StockTable } from '../types/models';
 import { BusinessCategoryTabs } from './BusinessCategoryTabs';
+import { isTabletEntryOpenToday } from '../../../shared/entry-window';
+import { useMinuteClock } from '../hooks/useMinuteClock';
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Ошибка сервера.';
@@ -149,6 +151,8 @@ type OrdersPanelProps = {
 
 export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   const canManage = session.user.role === 'manager';
+  const now = useMinuteClock();
+  const entryLocked = !canManage && !isTabletEntryOpenToday(now);
   const [loading, setLoading] = useState(true);
   const [savingByProduct, setSavingByProduct] = useState<Record<string, boolean>>({});
   const [submittingOrder, setSubmittingOrder] = useState(false);
@@ -218,7 +222,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
 
   useEffect(() => {
     void loadData();
-  }, [session.token, activeBusinessCategory]);
+  }, [session.token, activeBusinessCategory, canManage ? null : orderDate]);
 
   const stockDate = useMemo(() => (table ? preferredDate(table.dates) : null), [table]);
   const orderTargetLabel = `Заказ упаковок на ${formatTargetWeekday(orderDate)} ${formatDateShort(orderDate)}`;
@@ -255,6 +259,10 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
   };
 
   const submitWorkerOrder = async () => {
+    if (!isTabletEntryOpenToday()) {
+      Alert.alert('Ещё рано', 'Заказ можно вносить с 18:00.');
+      return;
+    }
     const assignedShopId = session.user.shopId ?? table?.shop.id ?? null;
     if (!table || !assignedShopId) {
       setError('Для создания заказа сотрудник должен быть привязан к магазину.');
@@ -330,6 +338,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
       {!canManage && (
         <View style={[styles.block, styles.workerOrderBlock]}>
           <Text style={styles.orderTitle}>{orderTargetLabel}</Text>
+          {entryLocked && <Text style={styles.entryLockNotice}>Заказ можно вносить с 18:00.</Text>}
           <Text style={styles.blockMeta}>
             {stockDate ? `Текущий остаток для расчета: ${formatDateFull(stockDate)}` : 'Нет дат для расчета остатков'}
           </Text>
@@ -357,7 +366,8 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
                             [row.productId]: value.replace(/[^0-9]/g, '').slice(0, 4),
                           }));
                         }}
-                        style={styles.orderValueInput}
+                        editable={!entryLocked}
+                        style={[styles.orderValueInput, entryLocked && styles.lockedInput]}
                         keyboardType="number-pad"
                         placeholder="Коробки"
                         placeholderTextColor="#7a8b7f"
@@ -374,9 +384,9 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
           </ScrollView>
           <View style={styles.submitBar}>
             <Pressable
-              style={[styles.submitAllButton, submittingOrder && styles.saveButtonDisabled]}
+              style={[styles.submitAllButton, (submittingOrder || entryLocked) && styles.saveButtonDisabled]}
               onPress={() => void submitWorkerOrder()}
-              disabled={submittingOrder}
+              disabled={submittingOrder || entryLocked}
             >
               <Text style={styles.submitAllButtonText}>{submittingOrder ? 'Отправляем...' : 'Отправить заказ'}</Text>
             </Pressable>
@@ -674,5 +684,13 @@ const styles = StyleSheet.create({
     color: '#8c3434',
     fontSize: 12,
     fontWeight: '700',
+  },
+  entryLockNotice: {
+    color: '#8c3434',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  lockedInput: {
+    backgroundColor: '#d6d6d6',
   },
 });

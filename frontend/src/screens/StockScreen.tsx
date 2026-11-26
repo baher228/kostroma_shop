@@ -62,6 +62,8 @@ import {
   sanitizeOrderValue,
 } from '../../../shared/dashboard-calculations';
 import { isBreadSectionBreakProduct, managerProductName } from '../../../shared/product-display';
+import { isTabletEntryOpenForDate, isTabletEntryOpenToday } from '../../../shared/entry-window';
+import { useMinuteClock } from '../hooks/useMinuteClock';
 import { InventorySubmission, ProductCategory, Session, Shop, StockTable, StockTableRow } from '../types/models';
 import { BusinessCategoryTabs } from '../components/BusinessCategoryTabs';
 import {
@@ -363,6 +365,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const isInventory = stockKind !== 'stock';
   const countKind = stockKind === 'markdown' ? 'markdown' : 'inventory';
   const isMarkdown = countKind === 'markdown';
+  const now = useMinuteClock();
+  const isStockEntryLocked = (date: string) =>
+    !canManage && stockKind === 'stock' && !isTabletEntryOpenForDate(date, now);
+  const alertStockEntryLocked = (date: string) =>
+    Alert.alert('Ещё рано', `Остатки за ${formatDate(date)} можно вносить с 18:00.`);
   const maxCellValue = isInventory ? MAX_INVENTORY_VALUE : MAX_STOCK_VALUE;
   const [inventoryDate, setInventoryDate] = useState(() => toInventoryDateKey(new Date()));
   const [inventoryTime, setInventoryTime] = useState(() => roundedInventoryTime(new Date()));
@@ -730,6 +737,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     }
 
     const currentCell = editingCell;
+    if (isStockEntryLocked(currentCell.date)) {
+      setEditingCell(null);
+      alertStockEntryLocked(currentCell.date);
+      return;
+    }
     const key = `${currentCell.productId}:${currentCell.date}`;
     const nextValue = sanitizeStockValue(editingValue, maxCellValue);
     const nextRow = continueToNext ? getNextRow(currentCell.productId) : null;
@@ -1193,8 +1205,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                           secondWeekBoundaryStyle(date),
                           isMilkTable && isTuesday(date) && styles.workerTuesdayBoundary,
                           pending && styles.pendingCell,
+                          isStockEntryLocked(date) && styles.lockedCell,
                         ]}
-                        onPress={() => openEditCell(row, date)}
+                        onPress={() => (isStockEntryLocked(date) ? alertStockEntryLocked(date) : openEditCell(row, date))}
                       >
                         <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.valueText, styles.workerValueText]}>{value || '-'}</Text>
                       </Pressable>
@@ -1598,6 +1611,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       </View>
 
       {!!error && <Text style={styles.error}>{error}</Text>}
+      {!canManage && !isInventory && !isTabletEntryOpenToday(now) && (
+        <Text style={styles.entryLockNotice}>Остатки за сегодня можно вносить с 18:00.</Text>
+      )}
 
       <View style={styles.tableWrap}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tableVerticalContent}>
@@ -2608,6 +2624,15 @@ const styles = StyleSheet.create({
   },
   pendingCell: {
     opacity: 0.6,
+  },
+  lockedCell: {
+    backgroundColor: '#d6d6d6',
+  },
+  entryLockNotice: {
+    color: '#8c3434',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
   },
   valueText: {
     color: '#223528',

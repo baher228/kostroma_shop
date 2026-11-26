@@ -326,6 +326,21 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
   const centeredWeekRef = useRef('');
 
+  const loadMarkdownValues = async (shopId: string, from: string, to: string): Promise<Record<string, string>> => {
+    try {
+      const markdownTable = await api.stock.table(session.token, { shopId, businessCategory: activeBusinessCategory, from, to, kind: 'markdown' });
+      const loaded: Record<string, string> = {};
+      for (const markdownRow of markdownTable.rows) {
+        for (const [date, value] of Object.entries(markdownRow.values)) {
+          if (value !== '' && value !== null && value !== undefined) loaded[`${markdownRow.productId}:${date}`] = String(value);
+        }
+      }
+      return loaded;
+    } catch {
+      return {};
+    }
+  };
+
   const load = async (shopId = selectedShopId, nextWindowStart = windowStart, force = false) => {
     const cachedShopId = shopId || shops[0]?.id || '';
     const cachedLoadedKey = cachedShopId ? `${cachedShopId}:${activeBusinessCategory}` : '';
@@ -356,8 +371,13 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
 
       const from = targetRange.from;
       const to = targetRange.to;
+      const markdownRequest = !isInventory && activeBusinessCategory === 'Хлеб'
+        ? loadMarkdownValues(resolvedShopId, addDays(from, -1), to)
+        : Promise.resolve({});
       const nextTable = await api.stock.table(session.token, { shopId: resolvedShopId, businessCategory: activeBusinessCategory, from, to, kind: valueKind });
+      const nextMarkdownValues = await markdownRequest;
       setTable(nextTable);
+      setMarkdownValues(nextMarkdownValues);
       setLoadedRange(targetRange);
       setLoadedKey(nextLoadedKey);
       const nextSubcategories = await api.stock.listSubcategories(session.token);
@@ -366,28 +386,6 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
       if (isInventory) {
         setOrderValues({});
         return;
-      }
-      if (activeBusinessCategory === 'Хлеб') {
-        try {
-          const markdownTable = await api.stock.table(session.token, {
-            shopId: resolvedShopId,
-            businessCategory: activeBusinessCategory,
-            from: addDays(from, -1),
-            to,
-            kind: 'markdown',
-          });
-          const loadedMarkdown: Record<string, string> = {};
-          for (const markdownRow of markdownTable.rows) {
-            for (const [date, value] of Object.entries(markdownRow.values)) {
-              if (value !== '' && value !== null && value !== undefined) loadedMarkdown[`${markdownRow.productId}:${date}`] = String(value);
-            }
-          }
-          setMarkdownValues(loadedMarkdown);
-        } catch {
-          setMarkdownValues({});
-        }
-      } else {
-        setMarkdownValues({});
       }
       try {
         const loaded: Record<string, string> = {};

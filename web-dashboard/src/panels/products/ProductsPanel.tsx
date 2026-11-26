@@ -303,6 +303,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   const [loadedRange, setLoadedRange] = useState<LoadedWeekRange | null>(null);
   const [loadedKey, setLoadedKey] = useState('');
   const [orderValues, setOrderValues] = useState<Record<string, string>>({});
+  const [markdownValues, setMarkdownValues] = useState<Record<string, string>>({});
   const [form, setForm] = useState<ProductPayload>(productToForm());
   const [subcategories, setSubcategories] = useState<Record<BusinessCategory, string[]>>({
     Хлеб: [],
@@ -365,6 +366,28 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
       if (isInventory) {
         setOrderValues({});
         return;
+      }
+      if (activeBusinessCategory === 'Хлеб') {
+        try {
+          const markdownTable = await api.stock.table(session.token, {
+            shopId: resolvedShopId,
+            businessCategory: activeBusinessCategory,
+            from: addDays(from, -1),
+            to,
+            kind: 'markdown',
+          });
+          const loadedMarkdown: Record<string, string> = {};
+          for (const markdownRow of markdownTable.rows) {
+            for (const [date, value] of Object.entries(markdownRow.values)) {
+              if (value !== '' && value !== null && value !== undefined) loadedMarkdown[`${markdownRow.productId}:${date}`] = String(value);
+            }
+          }
+          setMarkdownValues(loadedMarkdown);
+        } catch {
+          setMarkdownValues({});
+        }
+      } else {
+        setMarkdownValues({});
       }
       try {
         const loaded: Record<string, string> = {};
@@ -446,6 +469,10 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
 
   const isMilkTable = activeBusinessCategory === 'Молоко';
   const usesMilkTones = (['Хлеб', 'Деликатесы', 'Сыр', 'Мороженое', 'Курица'] as BusinessCategory[]).includes(activeBusinessCategory);
+  const showsMarkdownColumns = !isInventory && activeBusinessCategory === 'Хлеб';
+  // Уценка is entered for the previous day, so it sits after that evening's stock column.
+  const markdownDateForStockDate = (date: string) => addDays(date, -1);
+  const markdownFor = (productId: string, stockDate: string) => markdownValues[`${productId}:${markdownDateForStockDate(stockDate)}`] ?? '';
   const usesEveningStockHeaders = activeBusinessCategory === 'Хлеб' || activeBusinessCategory === 'Деликатесы' || activeBusinessCategory === 'Сыр';
   const isBreadTable = activeBusinessCategory === 'Хлеб';
   // Хлеб: a thick line after every Saturday's «Продано». The «Остаток» column there (Saturday stock + order on Sunday) is switched off.
@@ -718,6 +745,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
             : dailyOrderDateForStockDate(date, activeBusinessCategory));
           return [
             `${usesEveningStockHeaders ? 'Остаток вечер' : 'Остаток'} (${stockDateLabel})`,
+            ...(showsMarkdownColumns ? [`Уценка (${eveningHeaderDate(markdownDateForStockDate(date))})`] : []),
             `${usesEveningStockHeaders ? 'Заказ на' : 'Заказ'} (${orderDateLabel})`,
             `Продано (${stockDateLabel})`,
             ...(isWeekStockDate(date) ? [`Остаток (${stockDateLabel})`] : []),
@@ -744,6 +772,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
             const orderDate = dailyOrderDateForStockDate(date, activeBusinessCategory);
             return [
               row.values[date] ?? '',
+              ...(showsMarkdownColumns ? [markdownFor(row.productId, date)] : []),
               orderPacksForDate(row.productId, orderDate),
               soldFor(row, date),
               ...(isWeekStockDate(date) ? [weekStockFor(row, date)] : []),
@@ -1025,6 +1054,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
             {loadedDates.flatMap((date) => (
               <React.Fragment key={date}>
                 <col className="dashboard-col-stock-width" />
+                {showsMarkdownColumns && <col className="dashboard-col-metric-width" />}
                 <col className="dashboard-col-order-width" />
                 <col className="dashboard-col-metric-width" />
                 {isWeekStockDate(date) && <col className="dashboard-col-stock-width" />}
@@ -1040,6 +1070,12 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                     {usesEveningStockHeaders ? 'Остаток вечер' : 'Остаток'}
                     <small>{eveningHeaderLines(date)}</small>
                   </th>
+                  {showsMarkdownColumns && (
+                    <th className="markdown-col">
+                      Уценка
+                      <small>{eveningHeaderLines(markdownDateForStockDate(date))}</small>
+                    </th>
+                  )}
                   <th className={usesMilkTones ? 'dashboard-tone-order' : undefined}>
                     {usesEveningStockHeaders ? 'Заказ на' : 'Заказ'}
                     <small>{eveningHeaderLines(usesEveningStockHeaders ? orderHeaderDateForStockDate(date, activeBusinessCategory) : dailyOrderDateForStockDate(date, activeBusinessCategory))}</small>
@@ -1060,7 +1096,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={loadedDates.length * 3 + loadedDates.filter(isWeekStockDate).length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
+              <tr><td colSpan={loadedDates.length * (showsMarkdownColumns ? 4 : 3) + loadedDates.filter(isWeekStockDate).length + 1} className="manager-empty-row">Нет товаров в этой таблице</td></tr>
             ) : rows.map((row, index) => (
               <tr
                 key={row.productId}
@@ -1087,6 +1123,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
                           onCommit={(nextValue) => void saveStockCell(row.productId, date, nextValue)}
                         />
                       </td>
+                      {showsMarkdownColumns && <td className="markdown-col">{markdownFor(row.productId, date) || '-'}</td>}
                       <td className={usesMilkTones ? 'dashboard-value-order' : undefined}>
                         <input
                           className="dashboard-order-input"

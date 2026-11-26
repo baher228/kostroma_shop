@@ -2803,6 +2803,15 @@ td.sticky {
   font-weight: 700;
 }
 
+.manager-stock-table td.markdown-col {
+  background: #fff6e5;
+  text-align: center;
+}
+
+.manager-stock-table th.markdown-col {
+  background: #fbe9c6;
+}
+
 .manager-stock-table th {
   background: #f0f4f1;
   color: #233228;

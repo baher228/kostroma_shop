@@ -43,8 +43,17 @@ export const useAppUpdate = () => {
     }
   };
 
+  const applyAppUpdate = async () => {
+    if (isUpdatePending) {
+      await Updates.reloadAsync();
+      return;
+    }
+    await checkForAppUpdate();
+  };
+
   return {
     checkingUpdate,
+    applyAppUpdate,
     checkForAppUpdate,
     versionLabel: installedVersionLabel(),
     versionDetail: installedVersionDetail(),

@@ -355,7 +355,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [newProductMinStockUnits, setNewProductMinStockUnits] = useState('');
   const [newProductMaxStockUnits, setNewProductMaxStockUnits] = useState('');
   const [addingProduct, setAddingProduct] = useState(false);
-  const { checkingUpdate, checkForAppUpdate, versionDetail, updateAvailable } = useAppUpdate();
+  const { checkingUpdate, checkForAppUpdate, applyAppUpdate, versionDetail, updateAvailable } = useAppUpdate();
   const homePreferences = useHomePreferences(session.user.id);
   const fontScale = fontScaleFor(homePreferences.fontSize);
 
@@ -1622,7 +1622,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           fontScale={fontScale}
           refreshKey={taskNotificationVersion}
           updateAvailable={updateAvailable}
-          onApplyUpdate={() => void checkForAppUpdate()}
+          onApplyUpdate={() => void applyAppUpdate()}
           onOpenSection={setActiveTab}
           onSearchProducts={(nextQuery) => {
             setQuery(nextQuery);

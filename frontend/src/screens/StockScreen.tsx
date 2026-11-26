@@ -489,11 +489,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       nextRows = nextRows.filter(
         (row) =>
           normalizeText(row.name).includes(normalizedQuery) ||
-          normalizeText(managerProductName(row.name)).includes(normalizedQuery),
+          (canManage && normalizeText(managerProductName(row.name)).includes(normalizedQuery)),
       );
     }
     return nextRows;
-  }, [table, query]);
+  }, [table, query, canManage]);
 
   const activeSubcategories = useMemo(
     () => (table?.subcategories?.length ? table.subcategories : [...PRODUCT_CATEGORIES]),

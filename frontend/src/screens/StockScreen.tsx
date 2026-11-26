@@ -474,6 +474,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     void loadTable();
   }, [session.token, canManage, selectedShopId, managerWindowStart, activeBusinessCategory, stockKind, inventoryDate]);
 
+  useEffect(() => {
+    if (activeTab !== 'stock') setQuery('');
+  }, [activeTab]);
+
   const visibleRows = useMemo(() => {
     if (!table) {
       return [];

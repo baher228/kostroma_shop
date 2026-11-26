@@ -482,7 +482,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     let nextRows = table.rows;
 
     if (normalizedQuery) {
-      nextRows = nextRows.filter((row) => normalizeText(row.name).includes(normalizedQuery));
+      nextRows = nextRows.filter(
+        (row) =>
+          normalizeText(row.name).includes(normalizedQuery) ||
+          normalizeText(managerProductName(row.name)).includes(normalizedQuery),
+      );
     }
     return nextRows;
   }, [table, query]);

@@ -92,17 +92,14 @@ export const HomePanel = ({
         style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
         onPress={() => onOpenSection(section.key)}
       >
-        <View style={styles.cardTop}>
-          <AppIcon name={section.icon} size={Math.round(26 * fontScale)} color={t.accent} />
-          {badge > 0 && (
-            <View style={styles.badge}>
-              <Text style={[styles.badgeText, { fontSize: fs(12) }]}>{badge}</Text>
-            </View>
-          )}
-        </View>
-        <Text style={[styles.cardLabel, { fontSize: fs(17) }]} numberOfLines={2}>
+        <Text style={[styles.cardLabel, { fontSize: fs(21) }]} numberOfLines={2}>
           {section.label}
         </Text>
+        {badge > 0 && (
+          <View style={styles.badge}>
+            <Text style={[styles.badgeText, { fontSize: fs(15) }]}>{badge}</Text>
+          </View>
+        )}
       </Pressable>
     );
   };
@@ -111,10 +108,10 @@ export const HomePanel = ({
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text style={[styles.greeting, { fontSize: fs(26) }]} numberOfLines={1}>
+          <Text style={[styles.greeting, { fontSize: fs(28) }]} numberOfLines={1}>
             {greetingFor(new Date())}, {name}
           </Text>
-          <Text style={[styles.subtitle, { fontSize: fs(15) }]}>{subtitle}</Text>
+          <Text style={[styles.subtitle, { fontSize: fs(17) }]}>{subtitle}</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Открыть «Ещё»" style={styles.avatar} onPress={onOpenMore}>
           <Text style={[styles.avatarText, { fontSize: fs(17) }]}>{initialsOf(session.user.fullName)}</Text>
@@ -128,7 +125,7 @@ export const HomePanel = ({
           onChangeText={setSearch}
           placeholder="Найти раздел или товар"
           placeholderTextColor="#8a8984"
-          style={[styles.searchInput, { fontSize: fs(16) }]}
+          style={[styles.searchInput, { fontSize: fs(18) }]}
           returnKeyType="search"
           onSubmitEditing={() => {
             if (matches[0]) onOpenSection(matches[0].key);
@@ -140,11 +137,11 @@ export const HomePanel = ({
       {updateAvailable && (
         <View style={styles.banner}>
           <View style={styles.bannerText}>
-            <Text style={[styles.bannerTitle, { fontSize: fs(15) }]}>Доступно обновление</Text>
-            <Text style={[styles.bannerSubtitle, { fontSize: fs(14) }]}>Новая версия приложения готова</Text>
+            <Text style={[styles.bannerTitle, { fontSize: fs(17) }]}>Доступно обновление</Text>
+            <Text style={[styles.bannerSubtitle, { fontSize: fs(16) }]}>Новая версия приложения готова</Text>
           </View>
           <Pressable accessibilityRole="button" style={styles.bannerButton} onPress={onApplyUpdate}>
-            <Text style={[styles.bannerButtonText, { fontSize: fs(15) }]}>Обновить</Text>
+            <Text style={[styles.bannerButtonText, { fontSize: fs(17) }]}>Обновить</Text>
           </Pressable>
         </View>
       )}
@@ -152,24 +149,23 @@ export const HomePanel = ({
       {summary.todayCount > 0 && (
         <View style={styles.banner}>
           <View style={styles.bannerText}>
-            <Text style={[styles.bannerTitle, { fontSize: fs(15) }]}>
+            <Text style={[styles.bannerTitle, { fontSize: fs(17) }]}>
               {summary.todayCount} {tasksWord(summary.todayCount)} на сегодня
             </Text>
-            <Text style={[styles.bannerSubtitle, { fontSize: fs(14) }]}>{summary.firstLabel}</Text>
+            <Text style={[styles.bannerSubtitle, { fontSize: fs(16) }]}>{summary.firstLabel}</Text>
           </View>
           <Pressable accessibilityRole="button" style={styles.bannerButton} onPress={() => onOpenSection('tasks')}>
-            <Text style={[styles.bannerButtonText, { fontSize: fs(15) }]}>Открыть</Text>
+            <Text style={[styles.bannerButtonText, { fontSize: fs(17) }]}>Открыть</Text>
           </Pressable>
         </View>
       )}
 
       {normalizedSearch ? (
         <View style={styles.group}>
-          <Text style={[styles.groupTitle, { fontSize: fs(13) }]}>РЕЗУЛЬТАТЫ ПОИСКА</Text>
+          <Text style={[styles.groupTitle, { fontSize: fs(15) }]}>РЕЗУЛЬТАТЫ ПОИСКА</Text>
           {matches.length > 0 && <View style={styles.grid}>{matches.map(renderCard)}</View>}
           <Pressable style={styles.productSearch} onPress={() => onSearchProducts(search.trim())}>
-            <AppIcon name="list" size={20} color={t.accent} />
-            <Text style={[styles.productSearchText, { fontSize: fs(15) }]} numberOfLines={1}>
+            <Text style={[styles.productSearchText, { fontSize: fs(17) }]} numberOfLines={1}>
               Найти товар «{search.trim()}» в остатках
             </Text>
             <AppIcon name="chevronRight" size={20} color={t.muted} />
@@ -178,7 +174,7 @@ export const HomePanel = ({
       ) : (
         groups.map((group) => (
           <View key={group.key} style={styles.group}>
-            <Text style={[styles.groupTitle, { fontSize: fs(13) }]}>{group.title.toLocaleUpperCase('ru')}</Text>
+            <Text style={[styles.groupTitle, { fontSize: fs(15) }]}>{group.title.toLocaleUpperCase('ru')}</Text>
             <View style={styles.grid}>{group.sections.map(renderCard)}</View>
           </View>
         ))
@@ -229,20 +225,21 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: '45%',
     maxWidth: '49%',
-    minHeight: 110,
+    minHeight: 92,
     backgroundColor: t.card,
     borderWidth: 1,
     borderColor: t.border,
     borderRadius: 16,
     padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 14,
+    gap: 10,
   },
   cardPressed: { opacity: 0.75 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  badge: { minWidth: 26, borderRadius: 10, backgroundColor: t.badgeBg, paddingHorizontal: 7, paddingVertical: 2, alignItems: 'center' },
+  badge: { minWidth: 32, borderRadius: 12, backgroundColor: t.badgeBg, paddingHorizontal: 9, paddingVertical: 3, alignItems: 'center' },
   badgeText: { color: t.badgeText, fontWeight: '800' },
-  cardLabel: { color: t.text, fontWeight: '700' },
+  cardLabel: { flex: 1, color: t.text, fontWeight: '800' },
   productSearch: {
     flexDirection: 'row',
     alignItems: 'center',

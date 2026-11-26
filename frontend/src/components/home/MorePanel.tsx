@@ -54,19 +54,19 @@ export const MorePanel = ({
 
       <View style={[styles.cardBlock, styles.profile]}>
         <View style={styles.avatar}>
-          <Text style={[styles.avatarText, { fontSize: fs(19) }]}>{initialsOf(user.fullName)}</Text>
+          <Text style={[styles.avatarText, { fontSize: fs(21) }]}>{initialsOf(user.fullName)}</Text>
         </View>
         <View style={styles.flex}>
-          <Text style={[styles.profileName, { fontSize: fs(17) }]}>{user.fullName}</Text>
-          {profileDetails ? <Text style={[styles.muted, { fontSize: fs(14) }]}>{profileDetails}</Text> : null}
+          <Text style={[styles.profileName, { fontSize: fs(19) }]}>{user.fullName}</Text>
+          {profileDetails ? <Text style={[styles.muted, { fontSize: fs(16) }]}>{profileDetails}</Text> : null}
         </View>
       </View>
 
       <View style={styles.cardBlock}>
         <View style={styles.row}>
           <View style={styles.flex}>
-            <Text style={[styles.rowLabel, { fontSize: fs(16) }]}>Версия приложения</Text>
-            <Text style={[styles.muted, { fontSize: fs(13) }]}>
+            <Text style={[styles.rowLabel, { fontSize: fs(18) }]}>Версия приложения</Text>
+            <Text style={[styles.muted, { fontSize: fs(15) }]}>
               {versionDetail ? `${versionDetail} · ${versionStatus}` : versionStatus}
             </Text>
           </View>
@@ -76,44 +76,42 @@ export const MorePanel = ({
             disabled={checkingUpdate}
             onPress={onCheckUpdate}
           >
-            <Text style={[styles.outlineButtonText, { fontSize: fs(15) }]}>{checkingUpdate ? 'Проверка...' : 'Проверить'}</Text>
+            <Text style={[styles.outlineButtonText, { fontSize: fs(17) }]}>{checkingUpdate ? 'Проверка...' : 'Проверить'}</Text>
           </Pressable>
         </View>
         <Pressable style={[styles.row, styles.rowDivider]} onPress={() => setOrderOpen(true)}>
-          <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(16) }]}>Порядок разделов на главной</Text>
+          <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(18) }]}>Порядок разделов на главной</Text>
           <AppIcon name="chevronRight" size={20} color={t.muted} />
         </Pressable>
         <Pressable style={[styles.row, styles.rowDivider]} onPress={() => setFontOpen(true)}>
-          <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(16) }]}>Размер шрифта</Text>
-          <Text style={[styles.muted, { fontSize: fs(15) }]}>{FONT_SIZE_LABELS[fontSize]}</Text>
+          <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(18) }]}>Размер шрифта</Text>
+          <Text style={[styles.muted, { fontSize: fs(17) }]}>{FONT_SIZE_LABELS[fontSize]}</Text>
           <AppIcon name="chevronRight" size={20} color={t.muted} />
         </Pressable>
         <Pressable style={[styles.row, styles.rowDivider]} onPress={onOpenSupport}>
-          <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(16) }]}>Поддержка</Text>
+          <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(18) }]}>Поддержка</Text>
         </Pressable>
       </View>
 
       <Pressable accessibilityRole="button" style={[styles.cardBlock, styles.row]} onPress={onLogout}>
-        <AppIcon name="logOut" size={20} color={t.danger} />
-        <Text style={[styles.logoutText, { fontSize: fs(16) }]}>Выйти из аккаунта</Text>
+        <Text style={[styles.logoutText, { fontSize: fs(18) }]}>Выйти из аккаунта</Text>
       </Pressable>
 
-      <Text style={[styles.footnote, { fontSize: fs(13) }]}>
+      <Text style={[styles.footnote, { fontSize: fs(15) }]}>
         Когда выйдет новая версия, на главной появится баннер «Доступно обновление» — отдельная кнопка больше не нужна.
       </Text>
 
       <Modal visible={orderOpen} transparent animationType="fade" onRequestClose={() => setOrderOpen(false)}>
         <View style={styles.backdrop}>
           <View style={styles.sheet}>
-            <Text style={[styles.sheetTitle, { fontSize: fs(19) }]}>Порядок разделов на главной</Text>
+            <Text style={[styles.sheetTitle, { fontSize: fs(21) }]}>Порядок разделов на главной</Text>
             <ScrollView style={styles.sheetBody}>
               {groups.map((group) => (
                 <View key={group.key} style={styles.orderGroup}>
-                  <Text style={[styles.groupTitle, { fontSize: fs(13) }]}>{group.title.toLocaleUpperCase('ru')}</Text>
+                  <Text style={[styles.groupTitle, { fontSize: fs(15) }]}>{group.title.toLocaleUpperCase('ru')}</Text>
                   {group.sections.map((section, index) => (
                     <View key={section.key} style={styles.orderRow}>
-                      <AppIcon name={section.icon} size={22} color={t.accent} />
-                      <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(16) }]}>{section.label}</Text>
+                      <Text style={[styles.rowLabel, styles.flex, { fontSize: fs(18) }]}>{section.label}</Text>
                       <Pressable
                         accessibilityLabel={`Поднять «${section.label}»`}
                         style={[styles.arrowButton, index === 0 && styles.disabled]}
@@ -137,10 +135,10 @@ export const MorePanel = ({
             </ScrollView>
             <View style={styles.sheetActions}>
               <Pressable style={styles.outlineButton} onPress={() => onChangeSectionOrder([])}>
-                <Text style={[styles.outlineButtonText, { fontSize: fs(15) }]}>Сбросить</Text>
+                <Text style={[styles.outlineButtonText, { fontSize: fs(17) }]}>Сбросить</Text>
               </Pressable>
               <Pressable style={styles.primaryButton} onPress={() => setOrderOpen(false)}>
-                <Text style={[styles.primaryButtonText, { fontSize: fs(15) }]}>Готово</Text>
+                <Text style={[styles.primaryButtonText, { fontSize: fs(17) }]}>Готово</Text>
               </Pressable>
             </View>
           </View>
@@ -150,7 +148,7 @@ export const MorePanel = ({
       <Modal visible={fontOpen} transparent animationType="fade" onRequestClose={() => setFontOpen(false)}>
         <View style={styles.backdrop}>
           <View style={styles.sheet}>
-            <Text style={[styles.sheetTitle, { fontSize: fs(19) }]}>Размер шрифта</Text>
+            <Text style={[styles.sheetTitle, { fontSize: fs(21) }]}>Размер шрифта</Text>
             {(Object.keys(FONT_SIZE_LABELS) as HomeFontSize[]).map((size) => (
               <Pressable
                 key={size}
@@ -160,7 +158,7 @@ export const MorePanel = ({
                   setFontOpen(false);
                 }}
               >
-                <Text style={[styles.rowLabel, styles.flex, { fontSize: size === 'large' ? 19 : 16 }]}>{FONT_SIZE_LABELS[size]}</Text>
+                <Text style={[styles.rowLabel, styles.flex, { fontSize: size === 'large' ? 21 : 18 }]}>{FONT_SIZE_LABELS[size]}</Text>
                 {size === fontSize && <AppIcon name="squareCheck" size={20} color={t.accent} />}
               </Pressable>
             ))}

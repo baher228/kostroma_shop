@@ -26,7 +26,7 @@ import { FobQrCard } from '../components/FobQrCard';
 import { FobScannerPanel } from '../components/FobScannerPanel';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import { useHomePreferences } from '../hooks/useHomePreferences';
-import { AppIcon, AppIconName } from '../components/home/AppIcon';
+import { AppIcon } from '../components/home/AppIcon';
 import { HomePanel } from '../components/home/HomePanel';
 import { MorePanel } from '../components/home/MorePanel';
 import { applySectionOrder, buildHomeGroups } from '../components/home/sections';
@@ -1726,12 +1726,12 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const homeGroups = applySectionOrder(buildHomeGroups({ canManage, isWorker, isStoreTablet }), homePreferences.sectionOrder);
   const sectionLabel = homeGroups.flatMap((group) => group.sections).find((section) => section.key === activeTab)?.label ?? '';
-  const bottomNav: Array<{ key: ScreenTab; label: string; icon: AppIconName }> = [
-    { key: 'home', label: 'Главная', icon: 'home' },
-    { key: 'stock', label: 'Остатки', icon: 'list' },
-    canManage ? { key: 'orderSheet', label: 'Заказ', icon: 'cart' } : { key: 'orders', label: 'Заказы', icon: 'truck' },
-    { key: 'tasks', label: 'Задачи', icon: 'clipboardCheck' },
-    { key: 'more', label: 'Ещё', icon: 'menu' },
+  const bottomNav: Array<{ key: ScreenTab; label: string }> = [
+    { key: 'home', label: 'Главная' },
+    { key: 'stock', label: 'Остатки' },
+    canManage ? { key: 'orderSheet', label: 'Заказ' } : { key: 'orders', label: 'Заказы' },
+    { key: 'tasks', label: 'Задачи' },
+    { key: 'more', label: 'Ещё' },
   ];
   const activeNavKey: ScreenTab = bottomNav.some((item) => item.key === activeTab) ? activeTab : 'home';
 
@@ -1758,18 +1758,16 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       <View style={styles.bottomTabs}>
         {bottomNav.map((tab) => {
           const active = activeNavKey === tab.key;
-          const color = active ? homeTheme.accent : '#5f5e5a';
           return (
             <Pressable
               key={tab.key}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
-              style={styles.bottomTabButton}
+              style={[styles.bottomTabButton, active && styles.bottomTabButtonActive]}
               onPress={() => setActiveTab(tab.key)}
             >
               {tab.key === 'tasks' && hasUnreadTasks && <View style={styles.taskBadge} />}
-              <AppIcon name={tab.icon} size={24} color={color} />
-              <Text style={[styles.bottomTabButtonText, { color, fontSize: Math.round(12 * fontScale) }, active && styles.bottomTabButtonTextActive]}>
+              <Text style={[styles.bottomTabButtonText, { fontSize: Math.round(18 * fontScale) }, active && styles.bottomTabButtonTextActive]}>
                 {tab.label}
               </Text>
             </Pressable>
@@ -2645,33 +2643,38 @@ const styles = StyleSheet.create({
   },
   bottomTabs: {
     flexDirection: 'row',
-    marginHorizontal: -16,
-    marginBottom: -8,
-    paddingTop: 8,
-    paddingBottom: 10,
-    borderTopWidth: 1,
-    borderTopColor: homeTheme.border,
-    backgroundColor: homeTheme.card,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#c8d4cb',
+    borderRadius: 12,
+    backgroundColor: '#f3f7f3',
+    padding: 5,
   },
   bottomTabButton: {
     position: 'relative',
+    minHeight: 58,
     flex: 1,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  bottomTabButtonActive: {
+    backgroundColor: '#1f4f37',
   },
   bottomTabButtonText: {
-    fontWeight: '500',
+    color: '#2f4437',
+    fontWeight: '700',
     textAlign: 'center',
   },
   bottomTabButtonTextActive: {
-    fontWeight: '800',
+    color: '#ffffff',
   },
   taskBadge: {
     position: 'absolute',
-    top: 0,
-    right: '30%',
+    top: 5,
+    right: '22%',
     width: 9,
     height: 9,
     borderRadius: 5,

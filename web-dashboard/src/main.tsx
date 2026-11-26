@@ -15,7 +15,7 @@ import { UsersPanel } from './panels/users/UsersPanel';
 import './styles.css';
 import { Session } from './types';
 
-type Section = 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'inventory' | 'orders' | 'deliveries' | 'promotions' | 'app';
+type Section = 'attendance' | 'audioQc' | 'users' | 'tasks' | 'shops' | 'products' | 'inventory' | 'markdown' | 'orders' | 'deliveries' | 'promotions' | 'app';
 
 const STORAGE_KEY = 'analitika_dashboard_session_v1';
 
@@ -78,6 +78,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
     { key: 'shops', label: 'Магазины' },
     { key: 'products', label: 'Остатки' },
     { key: 'inventory', label: 'Инвентаризация' },
+    { key: 'markdown', label: 'Уценка' },
     { key: 'orders', label: 'Заказ' },
     { key: 'deliveries', label: 'Приёмка' },
     { key: 'promotions', label: 'Акции' },
@@ -105,7 +106,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         </div>
       </header>
 
-      <main className={section === 'products' || section === 'inventory' ? 'content stock-content' : 'content'}>
+      <main className={section === 'products' || section === 'inventory' || section === 'markdown' ? 'content stock-content' : 'content'}>
         {section === 'attendance' && <AttendancePanel session={session} />}
         {section === 'audioQc' && <AudioQcPanel session={session} />}
         {section === 'users' && <UsersPanel session={session} />}
@@ -113,6 +114,7 @@ const Dashboard = ({ session, onLogout }: { session: Session; onLogout: () => vo
         {section === 'shops' && <ShopsPanel session={session} />}
         {section === 'products' && <ProductsPanel session={session} />}
         {section === 'inventory' && <ProductsPanel session={session} mode="inventory" />}
+        {section === 'markdown' && <ProductsPanel session={session} mode="markdown" />}
         {section === 'orders' && <OrdersPanel session={session} />}
         {section === 'deliveries' && <DeliveriesPanel session={session} />}
         {section === 'promotions' && <PromotionsPanel session={session} />}

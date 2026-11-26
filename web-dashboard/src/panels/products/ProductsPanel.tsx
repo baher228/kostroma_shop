@@ -288,9 +288,11 @@ const InventoryPriceInput = ({ value, label, onCommit }: { value: number | null 
 
 const SHOW_BREAD_WEEK_STOCK_COLUMN = false;
 
-export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; mode?: 'stock' | 'inventory' }) => {
-  const isInventory = mode === 'inventory';
-  const valueKind = isInventory ? 'inventory' : undefined;
+export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; mode?: 'stock' | 'inventory' | 'markdown' }) => {
+  const isInventory = mode !== 'stock';
+  const isMarkdown = mode === 'markdown';
+  const valueKind = isInventory ? mode : undefined;
+  const countTitle = isMarkdown ? 'Уценка' : 'Инвентаризация';
   const currentWeekStart = startOfWeek();
   const [activeBusinessCategory, setActiveBusinessCategory] = useState<BusinessCategory>(DEFAULT_BUSINESS_CATEGORY);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -667,7 +669,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
         'Товар',
         'Текущая цена',
         ...inventoryDates.flatMap((date) => {
-          const label = `Инвентаризация ${formatDateShort(date)} ${inventoryDateStatus(date)}`;
+          const label = `${countTitle} ${formatDateShort(date)} ${inventoryDateStatus(date)}`;
           return [`${label}: Количество`, `${label}: Сумма`];
         }),
       ];
@@ -753,7 +755,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeFileName(`${isInventory ? 'inventory' : 'manager_dashboard'}_${table.shop.name}_${loadedDates[0]}_${loadedDates[loadedDates.length - 1]}`)}.csv`;
+    link.download = `${safeFileName(`${isInventory ? mode : 'manager_dashboard'}_${table.shop.name}_${loadedDates[0]}_${loadedDates[loadedDates.length - 1]}`)}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -934,7 +936,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
               <th rowSpan={2}>Текущая цена</th>
               {inventoryDates.map((date) => (
                 <th key={date} colSpan={2} className="inventory-date-start">
-                  Инвентаризация {formatDateShort(date)}
+                  {countTitle} {formatDateShort(date)}
                   <small>
                     {formatWeekdayName(date)}, {inventoryDateStatus(date)}
                   </small>
@@ -1008,7 +1010,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
         </table>
       </div>
       {inventoryDates.length === 0 && (
-        <p className="manager-loading">Планшеты ещё не отправляли инвентаризацию по категории «{activeBusinessCategory}» в этом магазине.</p>
+        <p className="manager-loading">Планшеты ещё не отправляли {isMarkdown ? 'уценку' : 'инвентаризацию'} по категории «{activeBusinessCategory}» в этом магазине.</p>
       )}
     </section>
   );
@@ -1123,8 +1125,8 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
   return (
     <section className="page-section stock-page-section">
       <PageHeader
-        title={isInventory ? 'Инвентаризация' : 'Остатки'}
-        subtitle={isInventory ? 'История инвентаризаций с планшетов по магазину и категории. Цену меняет только администратор.' : 'Менеджерская таблица остатков, заказов и продаж по магазину.'}
+        title={isInventory ? countTitle : 'Остатки'}
+        subtitle={isInventory ? `История ${isMarkdown ? 'уценок' : 'инвентаризаций'} с планшетов по магазину и категории. Цену меняет только администратор.` : 'Менеджерская таблица остатков, заказов и продаж по магазину.'}
         action={<RefreshButton onClick={() => load(selectedShopId, windowStart, true)} />} />
       <Feedback error={error} />
 
@@ -1162,13 +1164,13 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
 
       <div className="manager-meta-row">
         <strong>Позиций: {visibleRows.length}</strong>
-        <strong>{isInventory ? `${activeBusinessCategory}: инвентаризаций ${inventoryDates.length}` : loadedRange ? `${activeBusinessCategory}: ${activeViewDates[0]} - ${activeViewDates[activeViewDates.length - 1]}` : ''}</strong>
+        <strong>{isInventory ? `${activeBusinessCategory}: ${isMarkdown ? 'уценок' : 'инвентаризаций'} ${inventoryDates.length}` : loadedRange ? `${activeBusinessCategory}: ${activeViewDates[0]} - ${activeViewDates[activeViewDates.length - 1]}` : ''}</strong>
         {loadingMore && <strong>Подгружаем период...</strong>}
       </div>
 
       <div className="manager-table-wrap">
         {loading
-          ? <p className="manager-loading">{isInventory ? 'Загружаем инвентаризацию...' : 'Загружаем остатки...'}</p>
+          ? <p className="manager-loading">{isInventory ? (isMarkdown ? 'Загружаем уценку...' : 'Загружаем инвентаризацию...') : 'Загружаем остатки...'}</p>
           : isInventory
             ? renderInventoryTable()
             : isMilkTable

@@ -83,6 +83,7 @@ export const registerStockRoutes = (app: Express) => {
         shopId: toStringParam(req.query.shopId),
         businessCategory: toStringParam(req.query.businessCategory),
         beforeDate: toStringParam(req.query.beforeDate),
+        kind: toStringParam(req.query.kind),
       });
       const submission = await getPreviousInventory(viewer, query);
       if (!submission && viewer.role === 'worker' && query.shopId && !viewer.shopIds.includes(query.shopId)) {

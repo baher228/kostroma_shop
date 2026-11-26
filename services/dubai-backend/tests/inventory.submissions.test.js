@@ -56,7 +56,8 @@ test('inventory submissions snapshot selected day and return the latest earlier 
     items: [{ productId: 'prod_a', name: 'Молоко', inventoryPrice: 80, quantity: 3 }],
   });
   const insert = captured.find(({ sql }) => sql.includes('INSERT INTO inventory_submissions'));
-  assert.deepEqual(insert.params, ['shop_a', 'Молоко', '2026-11-20']);
+  assert.deepEqual(insert.params, ['shop_a', 'Молоко', '2026-11-20', 'inventory']);
+  assert.match(insert.sql, /LEFT JOIN inventory_values inventory_value/);
   assert.match(insert.sql, /jsonb_agg/);
   assert.match(insert.sql, /inventory_value\.day_date = \$3::date/);
 
@@ -69,7 +70,17 @@ test('inventory submissions snapshot selected day and return the latest earlier 
   const previousQuery = captured.find(({ sql }) => sql.includes('FROM inventory_submissions'));
   assert.match(previousQuery.sql, /day_date < \$3::date/);
   assert.match(previousQuery.sql, /ORDER BY day_date DESC, submitted_at DESC, id DESC/);
-  assert.deepEqual(previousQuery.params, ['shop_a', 'Молоко', '2026-11-20']);
+  assert.match(previousQuery.sql, /AND kind = \$4/);
+  assert.deepEqual(previousQuery.params, ['shop_a', 'Молоко', '2026-11-20', 'inventory']);
+
+  captured.length = 0;
+  await createInventorySubmission(viewer, { businessCategory: 'Молоко', dayDate: '2026-11-20', kind: 'markdown' });
+  const markdownInsert = captured.find(({ sql }) => sql.includes('INSERT INTO inventory_submissions'));
+  assert.deepEqual(markdownInsert.params, ['shop_a', 'Молоко', '2026-11-20', 'markdown']);
+  assert.match(markdownInsert.sql, /LEFT JOIN markdown_values inventory_value/);
+  await getPreviousInventorySubmission(viewer, { businessCategory: 'Молоко', beforeDate: '2026-11-20', kind: 'markdown' });
+  const markdownPrevious = captured.find(({ sql }) => sql.includes('FROM inventory_submissions') && !sql.includes('INSERT'));
+  assert.deepEqual(markdownPrevious.params, ['shop_a', 'Молоко', '2026-11-20', 'markdown']);
 
   const queryCount = captured.length;
   assert.equal(await createInventorySubmission(viewer, {

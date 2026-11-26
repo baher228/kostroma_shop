@@ -65,7 +65,7 @@ import {
   toInventoryDateKey,
 } from '../components/InventoryDateTimeBar';
 
-type ScreenTab = 'stock' | 'inventory' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
+type ScreenTab = 'stock' | 'inventory' | 'markdown' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
 type EditingCell = {
   productId: string;
@@ -352,7 +352,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const { checkingUpdate, checkForAppUpdate, versionLabel } = useAppUpdate();
 
   const [stockKind, setStockKind] = useState<StockValueKind>('stock');
-  const isInventory = stockKind === 'inventory';
+  const isInventory = stockKind !== 'stock';
+  const countKind = stockKind === 'markdown' ? 'markdown' : 'inventory';
+  const isMarkdown = countKind === 'markdown';
   const maxCellValue = isInventory ? MAX_INVENTORY_VALUE : MAX_STOCK_VALUE;
   const [inventoryDate, setInventoryDate] = useState(() => toInventoryDateKey(new Date()));
   const [inventoryTime, setInventoryTime] = useState(() => roundedInventoryTime(new Date()));
@@ -364,7 +366,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
-    if (activeTab === 'stock' || activeTab === 'inventory') {
+    if (activeTab === 'stock' || activeTab === 'inventory' || activeTab === 'markdown') {
       setStockKind(activeTab);
     }
   }, [activeTab]);
@@ -640,7 +642,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     });
 
     const csv = `\uFEFF${buildCsv([headerRow, ...dataRows])}`;
-    const fileName = safeFileName(`${isInventory ? 'inventory' : 'manager_dashboard'}_${table.shop.name}_${table.from}_${table.to}.csv`);
+    const fileName = safeFileName(`${isInventory ? countKind : 'manager_dashboard'}_${table.shop.name}_${table.from}_${table.to}.csv`);
 
     if (Platform.OS === 'web') {
       const browser = globalThis as typeof globalThis & {
@@ -823,6 +825,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         shopId: canManage ? submissionShopId : undefined,
         businessCategory: submissionCategory,
         dayDate: submissionDate,
+        kind: countKind,
       });
       setTable((current) => current && current.shop.id === submissionShopId && current.businessCategory === submissionCategory
         ? {
@@ -833,7 +836,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
             },
           }
         : current);
-      Alert.alert('Инвентаризация отправлена', 'Данные сохранены в панели администратора.');
+      Alert.alert(isMarkdown ? 'Уценка отправлена' : 'Инвентаризация отправлена', 'Данные сохранены в панели администратора.');
     } catch (sendError) {
       setError(errorMessage(sendError));
     } finally {
@@ -853,9 +856,10 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
         shopId: canManage ? submissionShopId : undefined,
         businessCategory: submissionCategory,
         beforeDate: inventoryDate,
+        kind: countKind,
       });
       if (!submission) {
-        Alert.alert('Нет прошлой инвентаризации', 'Для этой категории до выбранной даты ещё не отправляли данные.');
+        Alert.alert(isMarkdown ? 'Нет прошлой уценки' : 'Нет прошлой инвентаризации', 'Для этой категории до выбранной даты ещё не отправляли данные.');
         return;
       }
       setPreviousInventory({ ...submission, businessCategory: submissionCategory });
@@ -1064,7 +1068,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Отправить инвентаризацию за выбранный день"
+            accessibilityLabel={isMarkdown ? 'Отправить уценку за выбранный день' : 'Отправить инвентаризацию за выбранный день'}
             style={[styles.primaryButton, (submittingInventory || hasPendingValues) && styles.modalSaveButtonDisabled]}
             onPress={() => void sendInventory()}
             disabled={submittingInventory || hasPendingValues}
@@ -1073,13 +1077,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Показать прошлую отправленную инвентаризацию"
+            accessibilityLabel={isMarkdown ? 'Показать прошлую отправленную уценку' : 'Показать прошлую отправленную инвентаризацию'}
             style={[styles.secondaryButton, loadingPreviousInventory && styles.modalSaveButtonDisabled]}
             onPress={() => void loadPreviousInventory()}
             disabled={loadingPreviousInventory}
           >
             <Text style={styles.secondaryButtonText}>
-              {loadingPreviousInventory ? 'Загрузка...' : 'Прошлая инвентаризация'}
+              {loadingPreviousInventory ? 'Загрузка...' : isMarkdown ? 'Прошлая уценка' : 'Прошлая инвентаризация'}
             </Text>
           </Pressable>
         </View>
@@ -1667,6 +1671,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     ? [
         { key: 'stock', label: 'Остатки' },
         { key: 'inventory', label: 'Инвентаризация' },
+        { key: 'markdown', label: 'Уценка' },
         { key: 'orderSheet', label: 'Заказ' },
         { key: 'audioQc', label: 'AI QC' },
         { key: 'tasks', label: 'Задачи' },
@@ -1676,6 +1681,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     : [
         { key: 'stock', label: 'Остатки' },
         { key: 'inventory', label: 'Инвентаризация' },
+        { key: 'markdown', label: 'Уценка' },
         { key: 'orders', label: 'Заказы' },
         { key: 'tasks', label: 'Задачи' },
         { key: 'support', label: 'Поддержка' },
@@ -1915,7 +1921,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       >
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, styles.previousInventoryModalCard]}>
-            <Text style={styles.modalTitle}>Прошлая инвентаризация</Text>
+            <Text style={styles.modalTitle}>{isMarkdown ? 'Прошлая уценка' : 'Прошлая инвентаризация'}</Text>
             {previousInventory && (
               <Text style={styles.modalMeta}>
                 {previousInventory.businessCategory} · {formatDate(previousInventory.dayDate)} · отправлено {formatInventorySubmissionDateTime(previousInventory.submittedAt)}
@@ -1947,7 +1953,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
                   </View>
                 );
               }) : (
-                <Text style={styles.emptyRowText}>В отправленной инвентаризации нет товаров.</Text>
+                <Text style={styles.emptyRowText}>{isMarkdown ? 'В отправленной уценке нет товаров.' : 'В отправленной инвентаризации нет товаров.'}</Text>
               )}
             </ScrollView>
             {previousInventory && (

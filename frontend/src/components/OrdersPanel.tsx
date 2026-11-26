@@ -222,7 +222,7 @@ export const OrdersPanel = ({ session }: OrdersPanelProps) => {
 
   useEffect(() => {
     void loadData();
-  }, [session.token, activeBusinessCategory, orderDate]);
+  }, [session.token, activeBusinessCategory, canManage ? null : orderDate]);
 
   const stockDate = useMemo(() => (table ? preferredDate(table.dates) : null), [table]);
   const orderTargetLabel = `Заказ упаковок на ${formatTargetWeekday(orderDate)} ${formatDateShort(orderDate)}`;

@@ -207,13 +207,15 @@ export const updateProductMetaSchema = z
     minStockUnits: nullablePositiveInt.optional(),
     maxStockUnits: nullablePositiveInt.optional(),
     inventoryPrice: z.union([z.number().min(0).max(10_000_000), z.null()]).optional(),
+    markdownPrice: z.union([z.number().min(0).max(10_000_000), z.null()]).optional(),
   })
   .refine(
     (payload) =>
       Object.prototype.hasOwnProperty.call(payload, 'unitsInPack') ||
       Object.prototype.hasOwnProperty.call(payload, 'minStockUnits') ||
       Object.prototype.hasOwnProperty.call(payload, 'maxStockUnits') ||
-      Object.prototype.hasOwnProperty.call(payload, 'inventoryPrice'),
+      Object.prototype.hasOwnProperty.call(payload, 'inventoryPrice') ||
+      Object.prototype.hasOwnProperty.call(payload, 'markdownPrice'),
     {
       message: 'Empty update payload.',
     },

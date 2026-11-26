@@ -255,6 +255,8 @@ test('Dubai stock schemas validate operational fields', () => {
     value: '12',
   }));
   assert.equal(updateProductMetaSchema.parse({ unitsInPack: 6 }).unitsInPack, 6);
+  assert.equal(updateProductMetaSchema.parse({ markdownPrice: 45.5 }).markdownPrice, 45.5);
+  assert.equal(updateProductMetaSchema.parse({ markdownPrice: null }).markdownPrice, null);
   assert.equal(updateProductSchema.parse({
     name: 'Updated apples',
     category: '\u041c\u043e\u043b\u043e\u043a\u043e',

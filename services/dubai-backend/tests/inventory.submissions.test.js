@@ -58,6 +58,7 @@ test('inventory submissions snapshot selected day and return the latest earlier 
   const insert = captured.find(({ sql }) => sql.includes('INSERT INTO inventory_submissions'));
   assert.deepEqual(insert.params, ['shop_a', 'Молоко', '2026-11-20', 'inventory']);
   assert.match(insert.sql, /LEFT JOIN inventory_values inventory_value/);
+  assert.match(insert.sql, /'inventoryPrice', products\.inventory_price_rub/);
   assert.match(insert.sql, /jsonb_agg/);
   assert.match(insert.sql, /inventory_value\.day_date = \$3::date/);
 
@@ -78,6 +79,8 @@ test('inventory submissions snapshot selected day and return the latest earlier 
   const markdownInsert = captured.find(({ sql }) => sql.includes('INSERT INTO inventory_submissions'));
   assert.deepEqual(markdownInsert.params, ['shop_a', 'Молоко', '2026-11-20', 'markdown']);
   assert.match(markdownInsert.sql, /LEFT JOIN markdown_values inventory_value/);
+  assert.match(markdownInsert.sql, /'inventoryPrice', products\.markdown_price_rub/);
+  assert.doesNotMatch(markdownInsert.sql, /inventory_price_rub/);
   await getPreviousInventorySubmission(viewer, { businessCategory: 'Молоко', beforeDate: '2026-11-20', kind: 'markdown' });
   const markdownPrevious = captured.find(({ sql }) => sql.includes('FROM inventory_submissions') && !sql.includes('INSERT'));
   assert.deepEqual(markdownPrevious.params, ['shop_a', 'Молоко', '2026-11-20', 'markdown']);

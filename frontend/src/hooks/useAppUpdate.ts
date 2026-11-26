@@ -11,8 +11,11 @@ const installedVersionLabel = () => {
   return `Версия от ${pad(createdAt.getDate())}.${pad(createdAt.getMonth() + 1)} ${pad(createdAt.getHours())}:${pad(createdAt.getMinutes())}`;
 };
 
+const installedVersionDetail = () => installedVersionLabel()?.replace(/^Версия /, '') ?? null;
+
 export const useAppUpdate = () => {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const { isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
 
   const checkForAppUpdate = async () => {
     if (Platform.OS === 'web' || !Updates.isEnabled) {
@@ -40,5 +43,11 @@ export const useAppUpdate = () => {
     }
   };
 
-  return { checkingUpdate, checkForAppUpdate, versionLabel: installedVersionLabel() };
+  return {
+    checkingUpdate,
+    checkForAppUpdate,
+    versionLabel: installedVersionLabel(),
+    versionDetail: installedVersionDetail(),
+    updateAvailable: isUpdateAvailable || isUpdatePending,
+  };
 };

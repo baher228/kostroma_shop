@@ -25,6 +25,12 @@ import { UsersPanel } from '../components/UsersPanel';
 import { FobQrCard } from '../components/FobQrCard';
 import { FobScannerPanel } from '../components/FobScannerPanel';
 import { useAppUpdate } from '../hooks/useAppUpdate';
+import { useHomePreferences } from '../hooks/useHomePreferences';
+import { AppIcon, AppIconName } from '../components/home/AppIcon';
+import { HomePanel } from '../components/home/HomePanel';
+import { MorePanel } from '../components/home/MorePanel';
+import { applySectionOrder, buildHomeGroups } from '../components/home/sections';
+import { fontScaleFor, homeTheme } from '../components/home/theme';
 import { useTaskNotifications } from '../hooks/useTaskNotifications';
 import { AudioQcAdminPanel } from '../features/audioQc/AudioQcAdminPanel';
 import {
@@ -65,7 +71,7 @@ import {
   toInventoryDateKey,
 } from '../components/InventoryDateTimeBar';
 
-type ScreenTab = 'stock' | 'inventory' | 'markdown' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
+type ScreenTab = 'home' | 'more' | 'stock' | 'inventory' | 'markdown' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
 type EditingCell = {
   productId: string;
@@ -320,7 +326,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const isWorker = session.user.role === 'worker';
   const isStoreTablet = session.user.role === 'store_tablet';
 
-  const [activeTab, setActiveTab] = useState<ScreenTab>('stock');
+  const [activeTab, setActiveTab] = useState<ScreenTab>('home');
   const openTasks = useCallback(() => setActiveTab('tasks'), []);
   const { hasUnreadTasks, markTasksViewed, taskNotificationVersion, unregisterPushToken } = useTaskNotifications(
     session,
@@ -349,7 +355,9 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   const [newProductMinStockUnits, setNewProductMinStockUnits] = useState('');
   const [newProductMaxStockUnits, setNewProductMaxStockUnits] = useState('');
   const [addingProduct, setAddingProduct] = useState(false);
-  const { checkingUpdate, checkForAppUpdate, versionLabel } = useAppUpdate();
+  const { checkingUpdate, checkForAppUpdate, versionDetail, updateAvailable } = useAppUpdate();
+  const homePreferences = useHomePreferences(session.user.id);
+  const fontScale = fontScaleFor(homePreferences.fontSize);
 
   const [stockKind, setStockKind] = useState<StockValueKind>('stock');
   const isInventory = stockKind !== 'stock';
@@ -373,7 +381,7 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   useEffect(() => {
     if (!canManage && activeTab === 'users') {
-      setActiveTab('stock');
+      setActiveTab('home');
     }
   }, [activeTab, canManage]);
 
@@ -1529,6 +1537,11 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
 
   const renderStockTab = () => (
     <>
+      {query ? (
+        <Pressable accessibilityRole="button" style={styles.searchChip} onPress={() => setQuery('')}>
+          <Text style={styles.searchChipText} numberOfLines={1}>Поиск: «{query}»  ✕</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.controls}>
         <BusinessCategoryTabs
           active={activeBusinessCategory}
@@ -1593,6 +1606,42 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
   );
 
   const renderContent = () => {
+    if (activeTab === 'home') {
+      return (
+        <HomePanel
+          session={session}
+          groups={homeGroups}
+          fontScale={fontScale}
+          refreshKey={taskNotificationVersion}
+          updateAvailable={updateAvailable}
+          onApplyUpdate={() => void checkForAppUpdate()}
+          onOpenSection={setActiveTab}
+          onSearchProducts={(nextQuery) => {
+            setQuery(nextQuery);
+            setActiveTab('stock');
+          }}
+          onOpenMore={() => setActiveTab('more')}
+        />
+      );
+    }
+    if (activeTab === 'more') {
+      return (
+        <MorePanel
+          session={session}
+          groups={homeGroups}
+          fontScale={fontScale}
+          fontSize={homePreferences.fontSize}
+          versionDetail={versionDetail}
+          updateAvailable={updateAvailable}
+          checkingUpdate={checkingUpdate}
+          onCheckUpdate={() => void checkForAppUpdate()}
+          onChangeFontSize={homePreferences.setFontSize}
+          onChangeSectionOrder={homePreferences.setSectionOrder}
+          onOpenSupport={() => setActiveTab('support')}
+          onLogout={() => void logout()}
+        />
+      );
+    }
     if (activeTab === 'fob') {
       return (
         <ScrollView
@@ -1667,68 +1716,54 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
     );
   }
 
-  const tabs: Array<{ key: ScreenTab; label: string }> = canManage
-    ? [
-        { key: 'stock', label: 'Остатки' },
-        { key: 'inventory', label: 'Инвентаризация' },
-        { key: 'markdown', label: 'Уценка' },
-        { key: 'orderSheet', label: 'Заказ' },
-        { key: 'audioQc', label: 'AI QC' },
-        { key: 'tasks', label: 'Задачи' },
-        { key: 'support', label: 'Поддержка' },
-        { key: 'users', label: 'Пользователи' },
-      ]
-    : [
-        { key: 'stock', label: 'Остатки' },
-        { key: 'inventory', label: 'Инвентаризация' },
-        { key: 'markdown', label: 'Уценка' },
-        { key: 'orders', label: 'Заказы' },
-        { key: 'tasks', label: 'Задачи' },
-        { key: 'support', label: 'Поддержка' },
-        ...((isWorker || isStoreTablet)
-          ? [{ key: 'fob' as ScreenTab, label: isStoreTablet ? 'FOB-сканер' : 'FOB' }]
-          : []),
-      ];
+  const homeGroups = applySectionOrder(buildHomeGroups({ canManage, isWorker, isStoreTablet }), homePreferences.sectionOrder);
+  const sectionLabel = homeGroups.flatMap((group) => group.sections).find((section) => section.key === activeTab)?.label ?? '';
+  const bottomNav: Array<{ key: ScreenTab; label: string; icon: AppIconName }> = [
+    { key: 'home', label: 'Главная', icon: 'home' },
+    { key: 'stock', label: 'Остатки', icon: 'list' },
+    canManage ? { key: 'orderSheet', label: 'Заказ', icon: 'cart' } : { key: 'orders', label: 'Заказы', icon: 'truck' },
+    { key: 'tasks', label: 'Задачи', icon: 'clipboardCheck' },
+    { key: 'more', label: 'Ещё', icon: 'menu' },
+  ];
+  const activeNavKey: ScreenTab = bottomNav.some((item) => item.key === activeTab) ? activeTab : 'home';
 
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Учет остатков</Text>
-          <Text style={styles.subtitle}>
-            {session.user.fullName} · {canManage ? 'Менеджер' : isStoreTablet ? 'Планшет магазина' : 'Сотрудник'}
-          </Text>
-        </View>
-        <View style={styles.headerActions}>
-          {versionLabel && <Text style={styles.versionLabel}>{versionLabel}</Text>}
+      {activeTab !== 'home' && activeTab !== 'more' && (
+        <View style={styles.sectionHeader}>
           <Pressable
-            style={[styles.updateButton, checkingUpdate && styles.buttonDisabled]}
-            onPress={() => void checkForAppUpdate()}
-            disabled={checkingUpdate}
+            accessibilityRole="button"
+            accessibilityLabel="На главную"
+            style={styles.sectionBackButton}
+            onPress={() => setActiveTab('home')}
           >
-            <Text style={styles.updateButtonText}>{checkingUpdate ? 'Проверка...' : 'Обновить приложение'}</Text>
+            <AppIcon name="chevronLeft" size={24} color={homeTheme.text} />
           </Pressable>
-          <Pressable style={styles.logoutButton} onPress={() => void logout()}>
-            <Text style={styles.logoutButtonText}>Выйти</Text>
-          </Pressable>
+          <Text style={[styles.sectionTitle, { fontSize: Math.round(22 * fontScale) }]} numberOfLines={1}>{sectionLabel}</Text>
         </View>
-      </View>
+      )}
 
       <View style={styles.contentWrap}>{renderContent()}</View>
 
       <View style={styles.bottomTabs}>
-        {tabs.map((tab) => {
-          const active = activeTab === tab.key;
+        {bottomNav.map((tab) => {
+          const active = activeNavKey === tab.key;
+          const color = active ? homeTheme.accent : '#5f5e5a';
           return (
             <Pressable
               key={tab.key}
-              style={[styles.bottomTabButton, active && styles.bottomTabButtonActive]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              style={styles.bottomTabButton}
               onPress={() => setActiveTab(tab.key)}
             >
               {tab.key === 'tasks' && hasUnreadTasks && <View style={styles.taskBadge} />}
-              <Text style={[styles.bottomTabButtonText, active && styles.bottomTabButtonTextActive]}>{tab.label}</Text>
+              <AppIcon name={tab.icon} size={24} color={color} />
+              <Text style={[styles.bottomTabButtonText, { color, fontSize: Math.round(12 * fontScale) }, active && styles.bottomTabButtonTextActive]}>
+                {tab.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -2022,65 +2057,10 @@ const styles = StyleSheet.create({
   },
   screen: {
     flex: 1,
-    backgroundColor: '#eef3ee',
+    backgroundColor: homeTheme.background,
     paddingHorizontal: 16,
     paddingTop: topInset + 8,
     paddingBottom: 8,
-  },
-  header: {
-    marginTop: 4,
-    marginBottom: 8,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: '#1f2f26',
-  },
-  subtitle: {
-    marginTop: 3,
-    fontSize: 14,
-    color: '#4f6155',
-    fontWeight: '600',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  updateButton: {
-    borderRadius: 11,
-    backgroundColor: '#2f6f4f',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  updateButtonText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  versionLabel: {
-    color: '#6b7a72',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  logoutButton: {
-    borderRadius: 11,
-    backgroundColor: '#dbe4dc',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  logoutButtonText: {
-    color: '#223529',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  buttonDisabled: {
-    opacity: 0.65,
   },
   contentWrap: {
     flex: 1,
@@ -2657,43 +2637,72 @@ const styles = StyleSheet.create({
   },
   bottomTabs: {
     flexDirection: 'row',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#c8d4cb',
-    borderRadius: 12,
-    backgroundColor: '#f3f7f3',
-    padding: 5,
+    marginHorizontal: -16,
+    marginBottom: -8,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderTopWidth: 1,
+    borderTopColor: homeTheme.border,
+    backgroundColor: homeTheme.card,
   },
   bottomTabButton: {
     position: 'relative',
-    minHeight: 50,
     flex: 1,
-    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 6,
-  },
-  bottomTabButtonActive: {
-    backgroundColor: '#1f4f37',
+    gap: 4,
+    paddingVertical: 4,
   },
   bottomTabButtonText: {
-    color: '#2f4437',
-    fontWeight: '700',
-    fontSize: 12,
+    fontWeight: '500',
     textAlign: 'center',
   },
   bottomTabButtonTextActive: {
-    color: '#ffffff',
+    fontWeight: '800',
   },
   taskBadge: {
     position: 'absolute',
-    top: 5,
-    right: '28%',
+    top: 0,
+    right: '30%',
     width: 9,
     height: 9,
     borderRadius: 5,
     backgroundColor: '#d4382f',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  sectionBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: homeTheme.card,
+    borderWidth: 1,
+    borderColor: homeTheme.border,
+  },
+  sectionTitle: {
+    flex: 1,
+    fontWeight: '800',
+    color: homeTheme.text,
+  },
+  searchChip: {
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    borderRadius: 999,
+    backgroundColor: homeTheme.accentSoft,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  searchChipText: {
+    color: homeTheme.accent,
+    fontWeight: '700',
+    fontSize: 14,
   },
   modalBackdrop: {
     flex: 1,

@@ -508,7 +508,7 @@ const resolveRequestedRange = (
   viewer: OpsTokenClaims,
   params: { from?: string; to?: string; range?: 'week' | 'year'; kind?: StockValueKind },
 ): DateRange => {
-  if (viewer.role === 'worker' && !(params.kind === 'inventory' && params.from && params.to)) {
+  if (viewer.role === 'worker' && !(isCountKind(params.kind) && params.from && params.to)) {
     return currentWeekRange();
   }
   if (params.from && params.to) {
@@ -544,10 +544,14 @@ const resolveRequestedShop = async (viewer: OpsTokenClaims, requestedShopId?: st
   return shops[0] ?? null;
 };
 
-export type StockValueKind = 'stock' | 'inventory';
+export type StockValueKind = 'stock' | 'inventory' | 'markdown';
+export type CountValueKind = Exclude<StockValueKind, 'stock'>;
+
+export const isCountKind = (kind: StockValueKind | undefined): kind is CountValueKind =>
+  kind === 'inventory' || kind === 'markdown';
 
 const valuesTableFor = (kind: StockValueKind | undefined): string =>
-  kind === 'inventory' ? 'inventory_values' : 'stock_values';
+  kind === 'inventory' ? 'inventory_values' : kind === 'markdown' ? 'markdown_values' : 'stock_values';
 
 export const getStockTable = async (
   viewer: OpsTokenClaims,
@@ -562,7 +566,8 @@ export const getStockTable = async (
     return null;
   }
 
-  const isInventory = params.kind === 'inventory';
+  const isInventory = isCountKind(params.kind);
+  const countKind = isInventory ? params.kind : 'inventory';
   const [productsResult, valuesResult, dashboardOverridesResult, subcategoriesResult] = await Promise.all([
     opsDb.query<ProductDbRow>(
       `
@@ -609,7 +614,7 @@ export const getStockTable = async (
       `,
       [shop.id, range.from, range.to],
     ),
-    params.kind === 'inventory' ? Promise.resolve({ rows: [] as DashboardOverrideDbRow[] }) : opsDb.query<DashboardOverrideDbRow>(
+    isInventory ? Promise.resolve({ rows: [] as DashboardOverrideDbRow[] }) : opsDb.query<DashboardOverrideDbRow>(
       `
         SELECT product_id, week_start::text AS week_start, cell_key, value
         FROM dashboard_overrides
@@ -641,9 +646,10 @@ export const getStockTable = async (
         WHERE shop_id = $1
           AND business_category = $2
           AND day_date >= $3::date
-          AND day_date <= $4::date;
+          AND day_date <= $4::date
+          AND kind = $5;
       `,
-      [shop.id, businessCategory, range.from, range.to],
+      [shop.id, businessCategory, range.from, range.to, countKind],
     );
     for (const item of countsResult.rows) {
       inventoryCounts[item.day_date] = new Date(item.counted_at).toISOString();
@@ -662,9 +668,10 @@ export const getStockTable = async (
           AND business_category = $2
           AND day_date >= $3::date
           AND day_date <= $4::date
+          AND kind = $5
         ORDER BY day_date ASC, submitted_at DESC, id DESC;
       `,
-      [shop.id, businessCategory, range.from, range.to],
+      [shop.id, businessCategory, range.from, range.to, countKind],
     );
     for (const item of submissionsResult.rows) {
       inventorySubmissions[item.day_date] = {
@@ -736,8 +743,9 @@ const mapInventorySubmission = (row: InventorySubmissionDbRow): InventorySubmiss
 
 export const createInventorySubmission = async (
   viewer: OpsTokenClaims,
-  params: { shopId?: string; businessCategory: BusinessCategory; dayDate: string },
+  params: { shopId?: string; businessCategory: BusinessCategory; dayDate: string; kind?: CountValueKind },
 ): Promise<InventorySubmission | null> => {
+  const kind = params.kind ?? 'inventory';
   if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
     return null;
   }
@@ -750,11 +758,12 @@ export const createInventorySubmission = async (
 
   const result = await opsDb.query<InventorySubmissionDbRow>(
     `
-      INSERT INTO inventory_submissions (shop_id, business_category, day_date, snapshot)
+      INSERT INTO inventory_submissions (shop_id, business_category, day_date, kind, snapshot)
       SELECT
         $1,
         $2,
         $3::date,
+        $4,
         COALESCE(
           jsonb_agg(
             jsonb_build_object(
@@ -768,7 +777,7 @@ export const createInventorySubmission = async (
           '[]'::jsonb
         )
       FROM stock_products products
-      LEFT JOIN inventory_values inventory_value
+      LEFT JOIN ${valuesTableFor(kind)} inventory_value
         ON inventory_value.shop_id = $1
         AND inventory_value.product_id = products.id
         AND inventory_value.day_date = $3::date
@@ -776,7 +785,7 @@ export const createInventorySubmission = async (
         AND (products.is_active = TRUE OR inventory_value.product_id IS NOT NULL)
       RETURNING id::text AS id, day_date::text AS day_date, submitted_at, snapshot;
     `,
-    [shop.id, params.businessCategory, params.dayDate],
+    [shop.id, params.businessCategory, params.dayDate, kind],
   );
   const row = result.rows[0];
   return row ? mapInventorySubmission(row) : null;
@@ -784,8 +793,9 @@ export const createInventorySubmission = async (
 
 export const getPreviousInventorySubmission = async (
   viewer: OpsTokenClaims,
-  params: { shopId?: string; businessCategory: BusinessCategory; beforeDate: string },
+  params: { shopId?: string; businessCategory: BusinessCategory; beforeDate: string; kind?: CountValueKind },
 ): Promise<InventorySubmission | null> => {
+  const kind = params.kind ?? 'inventory';
   if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
     return null;
   }
@@ -803,10 +813,11 @@ export const getPreviousInventorySubmission = async (
       WHERE shop_id = $1
         AND business_category = $2
         AND day_date < $3::date
+        AND kind = $4
       ORDER BY day_date DESC, submitted_at DESC, id DESC
       LIMIT 1;
     `,
-    [shop.id, params.businessCategory, params.beforeDate],
+    [shop.id, params.businessCategory, params.beforeDate, kind],
   );
   const row = result.rows[0];
   return row ? mapInventorySubmission(row) : null;
@@ -831,7 +842,8 @@ export const upsertStockValue = async (
   viewer: OpsTokenClaims,
   params: { shopId?: string; productId: string; date: string; value: string; kind?: StockValueKind; countedAt?: string },
 ): Promise<boolean> => {
-  const isInventory = params.kind === 'inventory';
+  const isInventory = isCountKind(params.kind);
+  const countKind = isInventory ? params.kind : 'inventory';
   const valuesTable = valuesTableFor(params.kind);
   if (viewer.role === 'worker' && params.shopId && !viewer.shopIds.includes(params.shopId)) {
     return false;
@@ -871,12 +883,12 @@ export const upsertStockValue = async (
   if (isInventory) {
     await opsDb.query(
       `
-        INSERT INTO inventory_counts (shop_id, business_category, day_date, counted_at, updated_at)
-        VALUES ($1, $2, $3::date, $4::timestamptz, NOW())
-        ON CONFLICT (shop_id, business_category, day_date)
+        INSERT INTO inventory_counts (shop_id, business_category, kind, day_date, counted_at, updated_at)
+        VALUES ($1, $2, $3, $4::date, $5::timestamptz, NOW())
+        ON CONFLICT (shop_id, business_category, kind, day_date)
         DO UPDATE SET counted_at = EXCLUDED.counted_at, updated_at = NOW();
       `,
-      [targetShop.id, product.business_category ?? DEFAULT_BUSINESS_CATEGORY, params.date, params.countedAt ?? new Date().toISOString()],
+      [targetShop.id, product.business_category ?? DEFAULT_BUSINESS_CATEGORY, countKind, params.date, params.countedAt ?? new Date().toISOString()],
     );
   }
 

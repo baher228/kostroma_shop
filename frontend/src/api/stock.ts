@@ -42,7 +42,8 @@ export type CreateProductPayload = {
   maxStockUnits: number;
 };
 
-export type StockValueKind = 'stock' | 'inventory';
+export type StockValueKind = 'stock' | 'inventory' | 'markdown';
+export type CountValueKind = Exclude<StockValueKind, 'stock'>;
 
 type StockListQuery = {
   shopId?: string;
@@ -85,7 +86,7 @@ export const stockApi = {
 
   submitInventory: async (
     token: string,
-    payload: { shopId?: string; businessCategory: BusinessCategory; dayDate: string },
+    payload: { shopId?: string; businessCategory: BusinessCategory; dayDate: string; kind?: CountValueKind },
   ): Promise<InventorySubmission> => {
     const result = await request<InventorySubmissionResponse>('/api/stock/inventory-submissions', {
       method: 'POST',
@@ -97,11 +98,14 @@ export const stockApi = {
 
   previousInventorySubmission: async (
     token: string,
-    params: { shopId?: string; businessCategory: BusinessCategory; beforeDate: string },
+    params: { shopId?: string; businessCategory: BusinessCategory; beforeDate: string; kind?: CountValueKind },
   ): Promise<InventorySubmission | null> => {
     const query = new URLSearchParams({ businessCategory: params.businessCategory, beforeDate: params.beforeDate });
     if (params.shopId) {
       query.set('shopId', params.shopId);
+    }
+    if (params.kind) {
+      query.set('kind', params.kind);
     }
     const result = await request<PreviousInventorySubmissionResponse>(
       `/api/stock/inventory-submissions/previous?${query.toString()}`,

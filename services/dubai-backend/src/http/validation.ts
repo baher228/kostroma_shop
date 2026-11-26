@@ -163,7 +163,8 @@ export const updateShopMachineSchema = z.object({
   machineNumber: machineNumberSchema,
 });
 
-const stockValueKindSchema = z.enum(['stock', 'inventory']).optional().default('stock');
+const stockValueKindSchema = z.enum(['stock', 'inventory', 'markdown']).optional().default('stock');
+const countValueKindSchema = z.enum(['inventory', 'markdown']).optional().default('inventory');
 
 export const listStockTableQuerySchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
@@ -178,12 +179,14 @@ export const inventorySubmissionSchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
   businessCategory: businessCategorySchema,
   dayDate: dateKeySchema,
+  kind: countValueKindSchema,
 }).strict();
 
 export const previousInventorySubmissionQuerySchema = z.object({
   shopId: z.string().trim().min(1).max(100).optional(),
   businessCategory: businessCategorySchema,
   beforeDate: dateKeySchema,
+  kind: countValueKindSchema,
 }).strict();
 
 export const upsertStockValueSchema = z.object({
@@ -194,7 +197,7 @@ export const upsertStockValueSchema = z.object({
   value: z.string().regex(/^\d{0,4}$/),
   countedAt: z.string().datetime({ offset: true }).optional(),
 }).refine(
-  (payload) => payload.value === '' || payload.kind === 'inventory' || Number.parseInt(payload.value, 10) <= 50,
+  (payload) => payload.value === '' || payload.kind !== 'stock' || Number.parseInt(payload.value, 10) <= 50,
   { message: 'Stock must be in range 0-50.', path: ['value'] },
 );
 

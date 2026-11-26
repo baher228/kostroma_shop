@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { tasksApi } from '../../api/tasks';
 import { Session, Task } from '../../types/models';
 import { AppIcon } from './AppIcon';
-import { greetingFor, HomeSection, HomeSectionGroup, HomeSectionKey, tasksWord } from './sections';
+import { greetingFor, HomeSection, HomeSectionGroup, HomeSectionKey } from './sections';
 import { homeTheme as t, initialsOf } from './theme';
 
 type HomePanelProps = {
@@ -16,29 +16,6 @@ type HomePanelProps = {
   onOpenSection: (key: HomeSectionKey) => void;
   onSearchProducts: (query: string) => void;
   onOpenMore: () => void;
-};
-
-const pad = (value: number) => String(value).padStart(2, '0');
-
-const isSameDay = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-
-export const summarizeTodayTasks = (tasks: Task[], now: Date) => {
-  const open = tasks.filter((task) => task.status === 'open');
-  const today = open
-    .map((task) => ({ task, deadline: task.deadlineAt ? new Date(task.deadlineAt) : null }))
-    .filter(({ deadline }) => deadline && (isSameDay(deadline, now) || deadline < now))
-    .sort((a, b) => (a.deadline as Date).getTime() - (b.deadline as Date).getTime());
-  const first = today[0]?.deadline ?? null;
-  return {
-    openCount: open.length,
-    todayCount: today.length,
-    firstLabel: !first
-      ? ''
-      : first < now
-        ? 'Есть просроченные'
-        : `Первая — до ${pad(first.getHours())}:${pad(first.getMinutes())}`,
-  };
 };
 
 export const HomePanel = ({
@@ -69,7 +46,7 @@ export const HomePanel = ({
     };
   }, [session.token, refreshKey]);
 
-  const summary = useMemo(() => summarizeTodayTasks(tasks, new Date()), [tasks]);
+  const openTaskCount = useMemo(() => tasks.filter((task) => task.status === 'open').length, [tasks]);
   const normalizedSearch = search.trim().toLocaleLowerCase('ru');
   const matches = useMemo(
     () =>
@@ -83,7 +60,7 @@ export const HomePanel = ({
   const subtitle = session.user.shopName ?? (session.user.role === 'manager' ? 'Менеджер' : 'Сотрудник');
 
   const renderCard = (section: HomeSection) => {
-    const badge = section.key === 'tasks' ? summary.openCount : section.badge ?? 0;
+    const badge = section.key === 'tasks' ? openTaskCount : section.badge ?? 0;
     return (
       <Pressable
         key={section.key}
@@ -142,20 +119,6 @@ export const HomePanel = ({
           </View>
           <Pressable accessibilityRole="button" style={styles.bannerButton} onPress={onApplyUpdate}>
             <Text style={[styles.bannerButtonText, { fontSize: fs(17) }]}>Обновить</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {summary.todayCount > 0 && (
-        <View style={styles.banner}>
-          <View style={styles.bannerText}>
-            <Text style={[styles.bannerTitle, { fontSize: fs(17) }]}>
-              {summary.todayCount} {tasksWord(summary.todayCount)} на сегодня
-            </Text>
-            <Text style={[styles.bannerSubtitle, { fontSize: fs(16) }]}>{summary.firstLabel}</Text>
-          </View>
-          <Pressable accessibilityRole="button" style={styles.bannerButton} onPress={() => onOpenSection('tasks')}>
-            <Text style={[styles.bannerButtonText, { fontSize: fs(17) }]}>Открыть</Text>
           </Pressable>
         </View>
       )}

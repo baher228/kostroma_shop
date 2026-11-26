@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { shopsApi } from '../api/shops';
+import { DeliveriesPanel } from '../components/DeliveriesPanel';
 import { CreateProductPayload, StockValueKind, stockApi } from '../api/stock';
 import { OrdersPanel } from '../components/OrdersPanel';
 import { OrderSheetPanel } from '../components/OrderSheetPanel';
@@ -71,7 +72,7 @@ import {
   toInventoryDateKey,
 } from '../components/InventoryDateTimeBar';
 
-type ScreenTab = 'home' | 'more' | 'stock' | 'inventory' | 'markdown' | 'orders' | 'orderSheet' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
+type ScreenTab = 'home' | 'more' | 'stock' | 'inventory' | 'markdown' | 'orders' | 'orderSheet' | 'deliveries' | 'tasks' | 'support' | 'users' | 'fob' | 'audioQc';
 
 type EditingCell = {
   productId: string;
@@ -1683,6 +1684,13 @@ export const StockScreen = ({ session, onLogout }: StockScreenProps) => {
       return (
         <View style={styles.tabContentWrap}>
           <OrdersPanel session={session} />
+        </View>
+      );
+    }
+    if (activeTab === 'deliveries') {
+      return (
+        <View style={styles.tabContentWrap}>
+          <DeliveriesPanel session={session} shops={shops} fontScale={fontScale} />
         </View>
       );
     }

@@ -6,6 +6,7 @@ export type HomeSectionKey =
   | 'markdown'
   | 'orders'
   | 'orderSheet'
+  | 'deliveries'
   | 'fob'
   | 'tasks'
   | 'support'
@@ -36,6 +37,7 @@ export const buildHomeGroups = ({ canManage, isWorker, isStoreTablet }: HomeRole
         canManage
           ? { key: 'orderSheet', label: 'Заказ', icon: 'cart' }
           : { key: 'orders', label: 'Заказы', icon: 'truck' },
+        { key: 'deliveries', label: 'Приёмка', icon: 'truck' },
         ...(isWorker || isStoreTablet
           ? [{ key: 'fob' as const, label: isStoreTablet ? 'FOB-сканер' : 'FOB', icon: 'scan' as const }]
           : []),

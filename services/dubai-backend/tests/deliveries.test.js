@@ -75,3 +75,9 @@ test('delivery receipt upsert keeps the stored photo unless a new one or removal
 
   delete require.cache[opsDbPath];
 });
+
+test('shop staff receipts are keyed to the current Moscow day', () => {
+  const { moscowTodayKey } = require('../dist/routes/deliveriesRoutes');
+  assert.equal(moscowTodayKey(new Date('2026-11-25T20:59:00.000Z')), '2026-11-25');
+  assert.equal(moscowTodayKey(new Date('2026-11-25T21:00:00.000Z')), '2026-11-26');
+});

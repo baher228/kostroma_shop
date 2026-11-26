@@ -239,3 +239,21 @@ export type OrderSheet = {
   shops: Shop[];
   rows: OrderSheetRow[];
 };
+
+export type DeliverySupplier = {
+  id: string;
+  shopId: string;
+  name: string;
+  windowStartMinutes: number;
+  windowEndMinutes: number;
+  weekdays: number[];
+  createdAt: string;
+};
+
+export type DeliveryReceipt = {
+  supplierId: string;
+  date: string;
+  receivedAt: string;
+  markedAt: string;
+  hasInvoicePhoto: boolean;
+};

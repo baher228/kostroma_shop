@@ -1,7 +1,7 @@
 import { Express, Request, Response } from 'express';
 import multer from 'multer';
 import { ZodError } from 'zod';
-import { requireOpsRole } from '../auth/middleware';
+import { AuthorizedOpsRequest, requireOpsRole } from '../auth/middleware';
 import { toValidationMessage } from '../http/http';
 import {
   createDeliverySupplierSchema,
@@ -15,7 +15,9 @@ import {
   createDeliverySupplier,
   deleteDeliveryReceipt,
   deleteDeliverySupplier,
+  getDeliveryReceipt,
   getDeliveryReceiptPhoto,
+  getDeliverySupplier,
   listDeliveryReceipts,
   listDeliverySuppliers,
   updateDeliverySupplier,
@@ -53,14 +55,29 @@ const sendError = (res: Response, error: unknown, fallback: string) => {
   res.status(500).json({ message: fallback });
 };
 
+const MOSCOW_OFFSET_MS = 3 * 60 * 60_000;
+
+export const moscowTodayKey = (now: Date = new Date()): string => new Date(now.getTime() + MOSCOW_OFFSET_MS).toISOString().slice(0, 10);
+
+const viewerOf = (req: Request) => (req as AuthorizedOpsRequest).ops;
+
+/** Shop staff (workers and shop tablets) only see and mark deliveries of their own shops. */
+const canAccessShop = (req: Request, shopId: string) => {
+  const viewer = viewerOf(req);
+  return viewer.role === 'manager' || viewer.shopIds.includes(shopId);
+};
+
 export const registerDeliveryRoutes = (app: Express) => {
-  app.get('/api/deliveries', requireOpsRole('manager'), async (req: Request, res: Response) => {
+  app.get('/api/deliveries', requireOpsRole('manager', 'worker'), async (req: Request, res: Response) => {
     try {
       const range = deliveriesQuerySchema.parse(req.query);
-      const [suppliers, receipts] = await Promise.all([
+      const [allSuppliers, allReceipts] = await Promise.all([
         listDeliverySuppliers(),
         listDeliveryReceipts(range.from, range.to),
       ]);
+      const suppliers = allSuppliers.filter((supplier) => canAccessShop(req, supplier.shopId));
+      const supplierIds = new Set(suppliers.map((supplier) => supplier.id));
+      const receipts = allReceipts.filter((receipt) => supplierIds.has(receipt.supplierId));
       res.json({ suppliers, receipts });
     } catch (error) {
       sendError(res, error, 'Не удалось загрузить приёмку.');
@@ -105,10 +122,26 @@ export const registerDeliveryRoutes = (app: Express) => {
     }
   });
 
-  app.post('/api/deliveries/receipts', requireOpsRole('manager'), upload.single('photo'), async (req: Request, res: Response) => {
+  app.post('/api/deliveries/receipts', requireOpsRole('manager', 'worker'), upload.single('photo'), async (req: Request, res: Response) => {
     try {
       const payload = upsertDeliveryReceiptSchema.parse(req.body);
-      let photo: { key: string; contentType: string } | null | undefined = payload.removePhoto === 'true' ? null : undefined;
+      const isManager = viewerOf(req).role === 'manager';
+      let receivedAt = payload.receivedAt;
+      if (!isManager) {
+        const supplier = await getDeliverySupplier(payload.supplierId);
+        if (!supplier || !canAccessShop(req, supplier.shopId)) {
+          res.status(403).json({ message: 'Поставщик другого магазина.' });
+          return;
+        }
+        if (payload.date !== moscowTodayKey()) {
+          res.status(400).json({ message: 'Отметить приёмку можно только за сегодня.' });
+          return;
+        }
+        // Shop staff can't pick the arrival time: it is the moment of the first mark.
+        const existing = await getDeliveryReceipt(payload.supplierId, payload.date);
+        receivedAt = existing?.receivedAt ?? new Date().toISOString();
+      }
+      let photo: { key: string; contentType: string } | null | undefined = isManager && payload.removePhoto === 'true' ? null : undefined;
       if (req.file) {
         const extension = PHOTO_EXTENSIONS[req.file.mimetype];
         if (!extension) {
@@ -127,7 +160,7 @@ export const registerDeliveryRoutes = (app: Express) => {
       const { receipt, replacedPhotoKey } = await upsertDeliveryReceipt({
         supplierId: payload.supplierId,
         date: payload.date,
-        receivedAt: new Date(payload.receivedAt).toISOString(),
+        receivedAt: new Date(receivedAt).toISOString(),
         photo,
       });
       await removePhotoQuietly(replacedPhotoKey);
@@ -152,9 +185,16 @@ export const registerDeliveryRoutes = (app: Express) => {
     }
   });
 
-  app.get('/api/deliveries/receipts/:supplierId/:date/photo', requireOpsRole('manager'), async (req: Request, res: Response) => {
+  app.get('/api/deliveries/receipts/:supplierId/:date/photo', requireOpsRole('manager', 'worker'), async (req: Request, res: Response) => {
     try {
       const { supplierId, date } = deliveryReceiptKeySchema.parse(req.params);
+      if (viewerOf(req).role !== 'manager') {
+        const supplier = await getDeliverySupplier(supplierId);
+        if (!supplier || !canAccessShop(req, supplier.shopId)) {
+          res.status(403).json({ message: 'Поставщик другого магазина.' });
+          return;
+        }
+      }
       const photo = await getDeliveryReceiptPhoto(supplierId, date);
       if (!photo) {
         res.status(404).json({ message: 'Фото накладной нет.' });

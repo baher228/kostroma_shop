@@ -66,6 +66,11 @@ export const listDeliverySuppliers = async (): Promise<DeliverySupplier[]> => {
   return result.rows.map(toSupplier);
 };
 
+export const getDeliverySupplier = async (id: string): Promise<DeliverySupplier | null> => {
+  const result = await opsDb.query<SupplierDbRow>(`SELECT ${SUPPLIER_COLUMNS} FROM delivery_suppliers WHERE id = $1;`, [id]);
+  return result.rows[0] ? toSupplier(result.rows[0]) : null;
+};
+
 export const createDeliverySupplier = async (input: DeliverySupplierInput): Promise<DeliverySupplier> => {
   const id = `dsup_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const result = await opsDb.query<SupplierDbRow>(
@@ -115,6 +120,14 @@ export const listDeliveryReceipts = async (from: string, to: string): Promise<De
     [from, to],
   );
   return result.rows.map(toReceipt);
+};
+
+export const getDeliveryReceipt = async (supplierId: string, date: string): Promise<DeliveryReceipt | null> => {
+  const result = await opsDb.query<ReceiptDbRow>(
+    `SELECT ${RECEIPT_COLUMNS} FROM delivery_receipts WHERE supplier_id = $1 AND day_date = $2::date;`,
+    [supplierId, date],
+  );
+  return result.rows[0] ? toReceipt(result.rows[0]) : null;
 };
 
 export const getDeliveryReceiptPhoto = async (

@@ -46,7 +46,7 @@ const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs =
 };
 
 const isDubaiPath = (path: string): boolean =>
-  path.startsWith('/api/shops') || path.startsWith('/api/stock') || path.startsWith('/api/orders');
+  path.startsWith('/api/shops') || path.startsWith('/api/stock') || path.startsWith('/api/orders') || path.startsWith('/api/deliveries');
 
 const parseJwtExp = (token: string): number => {
   try {

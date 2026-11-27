@@ -599,7 +599,7 @@ export const ProductsPanel = ({ session, mode = 'stock' }: { session: Session; m
     }
     const rounded = price === null ? null : Math.round(price * 100) / 100;
     try {
-      await api.stock.updateInventoryPrice(session.token, productId, rounded);
+      await api.stock.updateInventoryPrice(session.token, productId, rounded, mode === 'markdown' ? 'markdown' : 'inventory');
       setTable((current) => current
         ? { ...current, rows: current.rows.map((row) => row.productId === productId ? { ...row, inventoryPrice: rounded } : row) }
         : current);

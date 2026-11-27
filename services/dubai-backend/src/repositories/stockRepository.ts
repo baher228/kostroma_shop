@@ -21,6 +21,7 @@ type ProductDbRow = {
   min_stock_units: number | null;
   max_stock_units: number | null;
   inventory_price_rub?: number | string | null;
+  markdown_price_rub?: number | string | null;
 };
 
 type ValueDbRow = {
@@ -367,7 +368,7 @@ export const createProduct = async (input: CreateProductInput): Promise<StockPro
 
 export const updateProductMeta = async (
   productId: string,
-  patch: { unitsInPack?: number | null; minStockUnits?: number | null; maxStockUnits?: number | null; inventoryPrice?: number | null },
+  patch: { unitsInPack?: number | null; minStockUnits?: number | null; maxStockUnits?: number | null; inventoryPrice?: number | null; markdownPrice?: number | null },
 ): Promise<StockProduct | null> => {
   const updates: string[] = [];
   const params: unknown[] = [];
@@ -388,6 +389,10 @@ export const updateProductMeta = async (
   if (Object.prototype.hasOwnProperty.call(patch, 'inventoryPrice')) {
     updates.push(`inventory_price_rub = $${index++}`);
     params.push(patch.inventoryPrice ?? null);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'markdownPrice')) {
+    updates.push(`markdown_price_rub = $${index++}`);
+    params.push(patch.markdownPrice ?? null);
   }
 
   if (!updates.length) {
@@ -550,6 +555,9 @@ export type CountValueKind = Exclude<StockValueKind, 'stock'>;
 export const isCountKind = (kind: StockValueKind | undefined): kind is CountValueKind =>
   kind === 'inventory' || kind === 'markdown';
 
+const priceColumnFor = (kind: CountValueKind): string =>
+  kind === 'markdown' ? 'markdown_price_rub' : 'inventory_price_rub';
+
 const valuesTableFor = (kind: StockValueKind | undefined): string =>
   kind === 'inventory' ? 'inventory_values' : kind === 'markdown' ? 'markdown_values' : 'stock_values';
 
@@ -572,7 +580,7 @@ export const getStockTable = async (
     opsDb.query<ProductDbRow>(
       `
         SELECT id, name, business_category, category, pack_type, units_in_pack, pack_weight_kg, shelf_life_days, unit_price_rub_vat
-               , min_stock_units, max_stock_units, inventory_price_rub
+               , min_stock_units, max_stock_units, inventory_price_rub, markdown_price_rub
         FROM stock_products
         WHERE business_category = $1
           AND (
@@ -715,7 +723,13 @@ export const getStockTable = async (
       unitPriceRubVat: toNullableNumber(product.unit_price_rub_vat),
       minStockUnits: product.min_stock_units,
       maxStockUnits: product.max_stock_units,
-      ...(isInventory ? { inventoryPrice: toNullableNumber(product.inventory_price_rub ?? null) } : {}),
+      ...(isInventory
+        ? {
+            inventoryPrice: toNullableNumber(
+              (params.kind === 'markdown' ? product.markdown_price_rub : product.inventory_price_rub) ?? null,
+            ),
+          }
+        : {}),
       values,
       dashboardOverrides: dashboardOverridesByProduct.get(product.id),
     };
@@ -769,7 +783,7 @@ export const createInventorySubmission = async (
             jsonb_build_object(
               'productId', products.id,
               'name', products.name,
-              'inventoryPrice', products.inventory_price_rub,
+              'inventoryPrice', products.${priceColumnFor(kind)},
               'quantity', inventory_value.value
             )
             ORDER BY products.display_order ASC NULLS LAST, products.created_at ASC, products.name ASC
